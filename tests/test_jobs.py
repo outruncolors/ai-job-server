@@ -1,0 +1,206 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def patch_jobs_base(tmp_path, monkeypatch):
+    """Redirect all job storage to a temp directory for each test."""
+    import app.jobs as jobs_module
+    monkeypatch.setattr(jobs_module, "JOBS_BASE", tmp_path)
+    return tmp_path
+
+
+@pytest.fixture()
+def client():
+    from app.main import app
+    return TestClient(app)
+
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
+
+def test_health(client):
+    r = client.get("/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert "timestamp" in body
+
+
+# ---------------------------------------------------------------------------
+# Image job creation
+# ---------------------------------------------------------------------------
+
+def test_create_image_job(client):
+    payload = {"prompt": "a cat on the moon", "width": 512, "height": 512, "steps": 20}
+    r = client.post("/v1/jobs/image", json=payload)
+    assert r.status_code == 202
+    body = r.json()
+    assert body["status"] == "queued"
+    assert body["job_type"] == "image"
+    assert "job_id" in body
+    assert "created_at" in body
+
+
+def test_create_image_job_minimal(client):
+    r = client.post("/v1/jobs/image", json={"prompt": "hello"})
+    assert r.status_code == 202
+    assert r.json()["job_type"] == "image"
+
+
+def test_create_image_job_missing_prompt(client):
+    r = client.post("/v1/jobs/image", json={"width": 512})
+    assert r.status_code == 422
+
+
+def test_image_job_files_written(client, tmp_path):
+    r = client.post("/v1/jobs/image", json={"prompt": "test prompt"})
+    job_id = r.json()["job_id"]
+
+    # Find job directory
+    job_dirs = list(tmp_path.glob(f"*/{job_id}"))
+    assert len(job_dirs) == 1
+    job_dir = job_dirs[0]
+
+    assert (job_dir / "request.json").exists()
+    assert (job_dir / "input.txt").exists()
+    assert (job_dir / "status.json").exists()
+    assert (job_dir / "logs.txt").exists()
+    assert (job_dir / "artifacts.json").exists()
+
+    status = json.loads((job_dir / "status.json").read_text())
+    assert status["status"] == "queued"
+    assert status["job_type"] == "image"
+
+    input_text = (job_dir / "input.txt").read_text()
+    assert "test prompt" in input_text
+
+    artifacts = json.loads((job_dir / "artifacts.json").read_text())
+    assert artifacts == []
+
+    logs = (job_dir / "logs.txt").read_text()
+    assert logs == ""
+
+
+# ---------------------------------------------------------------------------
+# Voice job creation
+# ---------------------------------------------------------------------------
+
+def test_create_voice_job(client):
+    payload = {"text": "Hello world", "speed": 1.0}
+    r = client.post("/v1/jobs/voice", json=payload)
+    assert r.status_code == 202
+    body = r.json()
+    assert body["status"] == "queued"
+    assert body["job_type"] == "voice"
+
+
+def test_create_voice_job_with_options(client):
+    payload = {"text": "Hello", "voice": "en-US-1", "speed": 1.2, "language": "en"}
+    r = client.post("/v1/jobs/voice", json=payload)
+    assert r.status_code == 202
+
+
+def test_create_voice_job_missing_text(client):
+    r = client.post("/v1/jobs/voice", json={"speed": 1.0})
+    assert r.status_code == 422
+
+
+def test_voice_job_files_written(client, tmp_path):
+    r = client.post("/v1/jobs/voice", json={"text": "say this"})
+    job_id = r.json()["job_id"]
+
+    job_dirs = list(tmp_path.glob(f"*/{job_id}"))
+    assert len(job_dirs) == 1
+    job_dir = job_dirs[0]
+
+    request_data = json.loads((job_dir / "request.json").read_text())
+    assert request_data["job_type"] == "voice"
+    assert request_data["text"] == "say this"
+
+    input_text = (job_dir / "input.txt").read_text()
+    assert "say this" in input_text
+
+
+# ---------------------------------------------------------------------------
+# Job lookup
+# ---------------------------------------------------------------------------
+
+def test_get_job(client):
+    r = client.post("/v1/jobs/image", json={"prompt": "lookup test"})
+    job_id = r.json()["job_id"]
+
+    r2 = client.get(f"/v1/jobs/{job_id}")
+    assert r2.status_code == 200
+    body = r2.json()
+    assert body["job_id"] == job_id
+    assert body["status"] == "queued"
+    assert body["job_type"] == "image"
+
+
+def test_get_job_not_found(client):
+    r = client.get("/v1/jobs/00000000-0000-0000-0000-000000000000")
+    assert r.status_code == 404
+
+
+def test_list_jobs_empty(client):
+    r = client.get("/v1/jobs")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["jobs"] == []
+    assert body["total"] == 0
+
+
+def test_list_jobs(client):
+    client.post("/v1/jobs/image", json={"prompt": "first"})
+    client.post("/v1/jobs/voice", json={"text": "second"})
+    r = client.get("/v1/jobs")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 2
+    types = {j["job_type"] for j in body["jobs"]}
+    assert types == {"image", "voice"}
+
+
+# ---------------------------------------------------------------------------
+# File download
+# ---------------------------------------------------------------------------
+
+def test_get_job_file_status(client):
+    r = client.post("/v1/jobs/image", json={"prompt": "file test"})
+    job_id = r.json()["job_id"]
+
+    r2 = client.get(f"/v1/jobs/{job_id}/files/status.json")
+    assert r2.status_code == 200
+    data = json.loads(r2.content)
+    assert data["job_id"] == job_id
+
+
+def test_get_job_file_logs(client):
+    r = client.post("/v1/jobs/image", json={"prompt": "log test"})
+    job_id = r.json()["job_id"]
+
+    r2 = client.get(f"/v1/jobs/{job_id}/files/logs.txt")
+    assert r2.status_code == 200
+    assert r2.content == b""
+
+
+def test_get_job_file_not_found(client):
+    r = client.post("/v1/jobs/image", json={"prompt": "missing file"})
+    job_id = r.json()["job_id"]
+    r2 = client.get(f"/v1/jobs/{job_id}/files/output.png")
+    assert r2.status_code == 404
+
+
+def test_get_job_file_path_traversal(client):
+    r = client.post("/v1/jobs/image", json={"prompt": "evil"})
+    job_id = r.json()["job_id"]
+    r2 = client.get(f"/v1/jobs/{job_id}/files/../../etc/passwd")
+    # Either 404 (blocked) or 422 (FastAPI rejects the path param)
+    assert r2.status_code in (404, 422)

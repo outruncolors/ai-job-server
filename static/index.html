@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Job Server</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: #111; color: #ccc; padding: 24px; max-width: 900px; margin: 0 auto; }
+    h1 { color: #fff; margin-bottom: 24px; font-size: 1.4rem; }
+    h2 { color: #aaa; font-size: 1rem; margin-bottom: 12px; }
+    section { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 16px; margin-bottom: 20px; }
+    label { display: block; color: #888; font-size: 0.8rem; margin-bottom: 4px; margin-top: 10px; }
+    input, textarea, select {
+      width: 100%; padding: 6px 8px; background: #222; border: 1px solid #444;
+      color: #ccc; font-family: monospace; font-size: 0.85rem; border-radius: 3px;
+    }
+    textarea { resize: vertical; min-height: 60px; }
+    button {
+      margin-top: 12px; padding: 8px 20px; background: #2a6; color: #fff;
+      border: none; border-radius: 3px; cursor: pointer; font-family: monospace; font-size: 0.85rem;
+    }
+    button:hover { background: #3b7; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+    #jobs-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    #jobs-table th { text-align: left; color: #666; padding: 4px 8px; border-bottom: 1px solid #333; }
+    #jobs-table td { padding: 4px 8px; border-bottom: 1px solid #222; }
+    #jobs-table tr:hover td { background: #222; cursor: pointer; }
+    .status-queued { color: #aaa; }
+    .status-running { color: #fa0; }
+    .status-done { color: #2a6; }
+    .status-failed { color: #e44; }
+    #detail { display: none; }
+    #detail pre { background: #222; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 0.78rem; color: #bbb; }
+    .row { display: flex; gap: 12px; }
+    .row > * { flex: 1; }
+    #msg { margin-top: 8px; font-size: 0.8rem; color: #fa0; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <h1>AI Job Server</h1>
+
+  <section>
+    <h2>Submit Image Job</h2>
+    <label>Prompt</label>
+    <textarea id="img-prompt" placeholder="a photorealistic cat on the moon"></textarea>
+    <div class="row">
+      <div>
+        <label>Width</label>
+        <input id="img-width" type="number" value="512">
+      </div>
+      <div>
+        <label>Height</label>
+        <input id="img-height" type="number" value="512">
+      </div>
+      <div>
+        <label>Steps</label>
+        <input id="img-steps" type="number" value="20">
+      </div>
+    </div>
+    <label>Negative Prompt (optional)</label>
+    <input id="img-neg" type="text" placeholder="">
+    <label>Model (optional)</label>
+    <input id="img-model" type="text" placeholder="">
+    <button onclick="submitImage()">Submit</button>
+    <div id="img-msg" class="msg"></div>
+  </section>
+
+  <section>
+    <h2>Submit Voice Job</h2>
+    <label>Text</label>
+    <textarea id="voice-text" placeholder="Hello, world!"></textarea>
+    <div class="row">
+      <div>
+        <label>Voice (optional)</label>
+        <input id="voice-name" type="text" placeholder="">
+      </div>
+      <div>
+        <label>Speed</label>
+        <input id="voice-speed" type="number" step="0.1" value="1.0">
+      </div>
+      <div>
+        <label>Language (optional)</label>
+        <input id="voice-lang" type="text" placeholder="en">
+      </div>
+    </div>
+    <button onclick="submitVoice()">Submit</button>
+    <div id="voice-msg" class="msg"></div>
+  </section>
+
+  <section>
+    <h2>Jobs <button class="secondary" onclick="loadJobs()" style="margin-top:0;padding:4px 10px;font-size:0.75rem;">Refresh</button></h2>
+    <table id="jobs-table">
+      <thead>
+        <tr>
+          <th>Job ID</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody id="jobs-body">
+        <tr><td colspan="4" style="color:#555;padding:8px;">Loading...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="detail">
+    <h2>Job Detail</h2>
+    <div id="detail-content"></div>
+    <div style="margin-top:12px;">
+      <strong style="color:#888;font-size:0.8rem;">Files:</strong>
+      <div id="detail-files" style="margin-top:6px;font-size:0.8rem;"></div>
+    </div>
+  </section>
+
+  <script>
+    const FILES = ['status.json', 'request.json', 'input.txt', 'logs.txt', 'artifacts.json'];
+
+    async function api(path, method = 'GET', body = null) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const r = await fetch('/v1' + path, opts);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    function statusClass(s) { return 'status-' + s; }
+
+    async function loadJobs() {
+      const tbody = document.getElementById('jobs-body');
+      try {
+        const data = await api('/jobs');
+        if (data.jobs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" style="color:#555;padding:8px;">No jobs yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.jobs.map(j => `
+          <tr onclick="loadDetail('${j.job_id}')">
+            <td style="color:#999">${j.job_id.slice(0,8)}&hellip;</td>
+            <td>${j.job_type}</td>
+            <td class="${statusClass(j.status)}">${j.status}</td>
+            <td>${new Date(j.created_at).toLocaleString()}</td>
+          </tr>`).join('');
+      } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="4" style="color:#e44">Error: ${e.message}</td></tr>`;
+      }
+    }
+
+    async function loadDetail(jobId) {
+      const section = document.getElementById('detail');
+      const content = document.getElementById('detail-content');
+      const filesDiv = document.getElementById('detail-files');
+      section.style.display = 'block';
+      try {
+        const job = await api('/jobs/' + jobId);
+        content.innerHTML = `<pre>${JSON.stringify(job, null, 2)}</pre>`;
+        filesDiv.innerHTML = FILES.map(f =>
+          `<a href="/v1/jobs/${jobId}/files/${f}" target="_blank"
+              style="color:#57a;margin-right:12px;">${f}</a>`
+        ).join('');
+        section.scrollIntoView({ behavior: 'smooth' });
+      } catch(e) {
+        content.innerHTML = `<span style="color:#e44">Error: ${e.message}</span>`;
+      }
+    }
+
+    async function submitImage() {
+      const msg = document.getElementById('img-msg');
+      msg.textContent = '';
+      const body = {
+        prompt: document.getElementById('img-prompt').value,
+        width: parseInt(document.getElementById('img-width').value),
+        height: parseInt(document.getElementById('img-height').value),
+        steps: parseInt(document.getElementById('img-steps').value),
+      };
+      const neg = document.getElementById('img-neg').value;
+      const model = document.getElementById('img-model').value;
+      if (neg) body.negative_prompt = neg;
+      if (model) body.model = model;
+      try {
+        const job = await api('/jobs/image', 'POST', body);
+        msg.style.color = '#2a6';
+        msg.textContent = `Created job ${job.job_id}`;
+        loadJobs();
+      } catch(e) {
+        msg.style.color = '#e44';
+        msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function submitVoice() {
+      const msg = document.getElementById('voice-msg');
+      msg.textContent = '';
+      const body = {
+        text: document.getElementById('voice-text').value,
+        speed: parseFloat(document.getElementById('voice-speed').value),
+      };
+      const voice = document.getElementById('voice-name').value;
+      const lang = document.getElementById('voice-lang').value;
+      if (voice) body.voice = voice;
+      if (lang) body.language = lang;
+      try {
+        const job = await api('/jobs/voice', 'POST', body);
+        msg.style.color = '#2a6';
+        msg.textContent = `Created job ${job.job_id}`;
+        loadJobs();
+      } catch(e) {
+        msg.style.color = '#e44';
+        msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    loadJobs();
+  </script>
+</body>
+</html>
