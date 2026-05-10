@@ -25,6 +25,7 @@ class VoiceJobRequest(BaseModel):
     ref_text: Optional[str] = None
     num_step: Optional[int] = Field(default=None, ge=4, le=64)
     guidance_scale: Optional[float] = Field(default=None, ge=0.0, le=4.0)
+    voice_preset_id: Optional[str] = None
 
 
 class JobStatus(BaseModel):

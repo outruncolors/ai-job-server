@@ -22,6 +22,15 @@ def patch_omnivoice_config(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "_config", None)
 
 
+@pytest.fixture(autouse=True)
+def patch_voice_presets_dir(tmp_path, monkeypatch):
+    """Redirect voice preset storage to a temp directory for each test."""
+    import app.voice_presets as vp
+    d = tmp_path / "voice_presets"
+    monkeypatch.setattr(vp, "PRESETS_DIR", d)
+    monkeypatch.setattr(vp, "INDEX_PATH", d / "index.json")
+
+
 @pytest.fixture()
 def mock_execute_voice_job(monkeypatch):
     """Opt-in fixture: replaces execute_voice_job with a no-op AsyncMock.

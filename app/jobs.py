@@ -178,6 +178,7 @@ async def execute_voice_job(
         "response_format": config.response_format,
         "num_step": request.num_step,
         "guidance_scale": request.guidance_scale,
+        "voice_preset_id": request.voice_preset_id,
     }
     if mode == "persistent":
         effective["persistent_api_base"] = config.persistent_api_base
@@ -206,6 +207,28 @@ async def execute_voice_job(
                 language=request.language or config.language,
             )
         else:
+            if mode == "persistent" and request.voice_preset_id:
+                _append_log(job_dir, "[warn] voice_preset_id is ignored in persistent mode\n")
+
+            ref_audio_filename: Optional[str] = None
+            ref_text_resolved: Optional[str] = request.ref_text
+
+            if mode != "persistent" and request.voice_preset_id:
+                from .voice_presets import get_preset, resolve_preset_wav
+                preset = get_preset(request.voice_preset_id)
+                if preset is None:
+                    raise RuntimeError(
+                        f"Voice preset {request.voice_preset_id!r} not found"
+                    )
+                wav_path = resolve_preset_wav(request.voice_preset_id)
+                if wav_path is None:
+                    raise RuntimeError(
+                        f"Voice preset {preset['name']!r} wav file missing "
+                        f"(was {preset['wav_filename']}). Re-upload or remove the preset."
+                    )
+                ref_audio_filename = str(wav_path)
+                ref_text_resolved = preset["caption"]
+
             runner = OmniVoiceEphemeralRunner(config)
             await runner.run(
                 request.text,
@@ -213,7 +236,8 @@ async def execute_voice_job(
                 job_dir,
                 language=request.language,
                 instruct=request.instruct,
-                ref_text=request.ref_text,
+                ref_audio_filename=ref_audio_filename,
+                ref_text=ref_text_resolved,
                 num_step=request.num_step,
                 guidance_scale=request.guidance_scale,
             )

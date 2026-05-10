@@ -27,12 +27,14 @@ from .models import (
 from .omnivoice.config import get_config
 from .omnivoice.manager import get_manager
 from .omnivoice.router import router as omnivoice_router
+from .voice_presets_router import router as presets_router
 
 app = FastAPI(title="ai-job-server", version="0.1.0")
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
 app.include_router(omnivoice_router)
+app.include_router(presets_router)
 
 
 @app.get("/health", response_model=HealthResponse)

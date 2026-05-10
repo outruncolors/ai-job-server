@@ -47,6 +47,20 @@
     #ov-audio { margin-top: 10px; width: 100%; display: none; }
     input[type=range] { width: 100%; accent-color: #2a6; }
     details summary::-webkit-details-marker { color: #555; }
+    button[disabled] { opacity: 0.45; cursor: not-allowed; background: #444; }
+    .btn-wrap { position: relative; display: inline-block; margin-top: 12px; }
+    .btn-tip {
+      display: none; position: absolute; bottom: calc(100% + 4px);
+      left: 50%; transform: translateX(-50%); background: #333; color: #bbb;
+      font-size: 0.75rem; padding: 4px 8px; border-radius: 3px;
+      white-space: nowrap; pointer-events: none; border: 1px solid #555;
+    }
+    .btn-wrap:hover button[disabled] + .btn-tip { display: block; }
+    #ov-save-design-wrap {
+      display: none; margin-top: 12px; border: 1px solid #333;
+      border-radius: 3px; padding: 10px 12px;
+    }
+    #ov-save-design-wrap legend { color: #888; font-size: 0.8rem; padding: 0 4px; }
   </style>
 </head>
 <body>
@@ -121,8 +135,50 @@
       </div>
     </div>
 
-    <details style="margin-top:12px;">
-      <summary style="cursor:pointer;color:#888;font-size:0.82rem;user-select:none;">Voice Design</summary>
+    <details id="ov-clone-details" style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#888;font-size:0.82rem;user-select:none;display:flex;align-items:center;gap:8px;list-style:none;">
+        <input type="radio" name="ov-voice-mode" value="clone" id="ov-clone-radio" style="width:auto;margin:0;accent-color:#2a6;cursor:pointer;">
+        <label for="ov-clone-radio" style="display:inline;margin:0;color:inherit;font-size:inherit;cursor:pointer;">Voice Clone</label>
+      </summary>
+
+      <fieldset style="border:1px solid #333;border-radius:3px;padding:10px 12px;margin-top:10px;">
+        <legend style="color:#888;font-size:0.8rem;padding:0 4px;">Add Preset</legend>
+        <label>Voice Sample (.wav)</label>
+        <input type="file" id="ov-preset-file" accept=".wav" onchange="ovUpdateSavePresetBtn()" style="padding:4px 0;">
+        <label>Preset Name</label>
+        <input type="text" id="ov-preset-name" placeholder="e.g. Alice" oninput="ovUpdateSavePresetBtn()">
+        <label>Caption <span style="color:#555;font-size:0.75rem;">(transcript of the audio)</span></label>
+        <textarea id="ov-preset-caption" placeholder="Exact words spoken in the sample…" oninput="ovUpdateSavePresetBtn()"></textarea>
+        <div class="btn-wrap">
+          <button id="ov-preset-save-btn" onclick="ovSavePreset()" disabled>Save Preset</button>
+          <span class="btn-tip">Fill in sample, name, and caption first</span>
+        </div>
+        <div id="ov-preset-save-msg" class="ov-msg"></div>
+      </fieldset>
+
+      <div style="margin-top:10px;">
+        <label>Active Preset <span style="color:#555;font-size:0.75rem;">(used for synthesis)</span></label>
+        <select id="ov-preset-select">
+          <option value="">— none —</option>
+        </select>
+        <div id="ov-preset-empty-msg" style="display:none;color:#555;font-size:0.8rem;margin-top:4px;">No presets yet — add one above.</div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>Remove Preset</label>
+        <select id="ov-preset-remove-select">
+          <option value="">— select to remove —</option>
+        </select>
+      </div>
+
+      <div id="ov-clone-msg" class="ov-msg"></div>
+    </details>
+
+    <details id="ov-design-details" style="margin-top:8px;">
+      <summary style="cursor:pointer;color:#888;font-size:0.82rem;user-select:none;display:flex;align-items:center;gap:8px;list-style:none;">
+        <input type="radio" name="ov-voice-mode" value="design" id="ov-design-radio" checked style="width:auto;margin:0;accent-color:#2a6;cursor:pointer;">
+        <label for="ov-design-radio" style="display:inline;margin:0;color:inherit;font-size:inherit;cursor:pointer;">Voice Design</label>
+      </summary>
       <div class="row" style="margin-top:8px;">
         <div>
           <label>Gender / 性别</label>
@@ -223,6 +279,17 @@
     <button onclick="ovSubmitVoice()" style="margin-top:14px;">Synthesize</button>
     <div id="ov-job-msg" class="ov-msg"></div>
     <audio id="ov-audio" controls></audio>
+    <fieldset id="ov-save-design-wrap">
+      <legend>Save this voice as a preset</legend>
+      <label>Preset Name</label>
+      <input type="text" id="ov-save-design-name" placeholder="e.g. Warm Narrator"
+             oninput="ovUpdateSaveDesignBtn()">
+      <div class="btn-wrap">
+        <button id="ov-save-design-btn" onclick="ovSaveFromDesign()" disabled>Save Voice</button>
+        <span class="btn-tip">Enter a name first</span>
+      </div>
+      <div id="ov-save-design-msg" class="ov-msg"></div>
+    </fieldset>
   </section>
 
   <section>
@@ -301,6 +368,131 @@
 
   <script>
     const FILES = ['status.json', 'request.json', 'input.txt', 'logs.txt', 'artifacts.json'];
+
+    // Voice preset state
+    let _ovPresets = [];
+    let _ovCurrentJobId = null;
+
+    function _ovSetMode(which) {
+      const isClone = which === 'clone';
+      document.getElementById('ov-clone-details').open  = isClone;
+      document.getElementById('ov-design-details').open = !isClone;
+      document.getElementById('ov-clone-radio').checked  = isClone;
+      document.getElementById('ov-design-radio').checked = !isClone;
+    }
+
+    function _ovActiveMode() {
+      return document.getElementById('ov-clone-radio').checked ? 'clone' : 'design';
+    }
+
+    function _ovInitExclusiveDetails() {
+      ['clone', 'design'].forEach(mode => {
+        document.getElementById(`ov-${mode}-details`)
+          .querySelector('summary')
+          .addEventListener('click', e => { e.preventDefault(); _ovSetMode(mode); });
+        document.getElementById(`ov-${mode}-radio`)
+          .addEventListener('change', () => _ovSetMode(mode));
+      });
+    }
+
+    async function ovLoadPresets() {
+      try {
+        const r = await fetch('/v1/voice-presets');
+        if (!r.ok) throw new Error(await r.text());
+        _ovPresets = await r.json();
+      } catch (e) {
+        _ovPresets = [];
+      }
+      _ovRenderPresetSelects();
+    }
+
+    function _escHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function _ovRenderPresetSelects() {
+      const sel = document.getElementById('ov-preset-select');
+      const rem = document.getElementById('ov-preset-remove-select');
+      const emptyMsg = document.getElementById('ov-preset-empty-msg');
+      const currentVal = sel.value;
+      const opts = _ovPresets.map(p =>
+        `<option value="${p.id}">${_escHtml(p.name)}</option>`
+      ).join('');
+      sel.innerHTML = '<option value="">— none —</option>' + opts;
+      rem.innerHTML = '<option value="">— select to remove —</option>' + opts;
+      if (_ovPresets.some(p => p.id === currentVal)) sel.value = currentVal;
+      emptyMsg.style.display = _ovPresets.length === 0 ? 'block' : 'none';
+    }
+
+    function ovUpdateSavePresetBtn() {
+      const hasFile    = document.getElementById('ov-preset-file').files.length > 0;
+      const hasName    = document.getElementById('ov-preset-name').value.trim() !== '';
+      const hasCaption = document.getElementById('ov-preset-caption').value.trim() !== '';
+      document.getElementById('ov-preset-save-btn').disabled = !(hasFile && hasName && hasCaption);
+    }
+
+    async function ovSavePreset() {
+      const msg    = document.getElementById('ov-preset-save-msg');
+      const fileEl = document.getElementById('ov-preset-file');
+      const nameEl = document.getElementById('ov-preset-name');
+      const captEl = document.getElementById('ov-preset-caption');
+      msg.textContent = '';
+      const fd = new FormData();
+      fd.append('file', fileEl.files[0]);
+      fd.append('name', nameEl.value.trim());
+      fd.append('caption', captEl.value.trim());
+      try {
+        const r = await fetch('/v1/voice-presets', { method: 'POST', body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        const preset = await r.json();
+        msg.style.color = '#2a6';
+        msg.textContent = `Saved "${preset.name}"`;
+        fileEl.value = '';
+        nameEl.value = '';
+        captEl.value = '';
+        ovUpdateSavePresetBtn();
+        await ovLoadPresets();
+        _ovSetMode('clone');
+        document.getElementById('ov-preset-select').value = preset.id;
+      } catch (e) {
+        msg.style.color = '#e44';
+        msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function ovUpdateSaveDesignBtn() {
+      const hasName = document.getElementById('ov-save-design-name').value.trim() !== '';
+      document.getElementById('ov-save-design-btn').disabled = !hasName;
+    }
+
+    async function ovSaveFromDesign() {
+      if (!_ovCurrentJobId) return;
+      const msg     = document.getElementById('ov-save-design-msg');
+      const nameEl  = document.getElementById('ov-save-design-name');
+      const name    = nameEl.value.trim();
+      if (!name) return;
+      const caption = document.getElementById('ov-text').value.trim();
+      msg.style.color = '#fa0';
+      msg.textContent = 'Saving…';
+      try {
+        const r = await fetch('/v1/voice-presets/from-job', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: _ovCurrentJobId, name, caption }),
+        });
+        if (!r.ok) throw new Error(await r.text());
+        const preset = await r.json();
+        msg.style.color = '#2a6';
+        msg.textContent = `Saved as "${preset.name}"`;
+        await ovLoadPresets();
+        _ovSetMode('clone');
+        document.getElementById('ov-preset-select').value = preset.id;
+        document.getElementById('ov-save-design-wrap').style.display = 'none';
+      } catch (e) {
+        msg.style.color = '#e44';
+        msg.textContent = 'Error: ' + e.message;
+      }
+    }
 
     async function api(path, method = 'GET', body = null) {
       const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -490,20 +682,34 @@
     }
 
     async function ovSubmitVoice() {
-      const msg = document.getElementById('ov-job-msg');
+      const msg   = document.getElementById('ov-job-msg');
       const audio = document.getElementById('ov-audio');
       audio.style.display = 'none';
+      document.getElementById('ov-save-design-wrap').style.display = 'none';
+      _ovCurrentJobId = null;
       msg.textContent = '';
       const body = {
-        text: document.getElementById('ov-text').value,
-        speed: parseFloat(document.getElementById('ov-spd').value),
-        num_step: parseInt(document.getElementById('ov-steps').value),
+        text:           document.getElementById('ov-text').value,
+        speed:          parseFloat(document.getElementById('ov-spd').value),
+        num_step:       parseInt(document.getElementById('ov-steps').value),
         guidance_scale: parseFloat(document.getElementById('ov-cfg').value),
       };
       const lang = document.getElementById('ov-lang').value.trim();
       if (lang && lang !== 'Auto') body.language = lang;
-      const instruct = _buildInstruct();
-      if (instruct) body.instruct = instruct;
+
+      if (_ovActiveMode() === 'clone') {
+        const presetId = document.getElementById('ov-preset-select').value;
+        if (!presetId) {
+          msg.style.color = '#e44';
+          msg.textContent = 'Select a voice preset before synthesizing.';
+          return;
+        }
+        body.voice_preset_id = presetId;
+      } else {
+        const instruct = _buildInstruct();
+        if (instruct) body.instruct = instruct;
+      }
+
       try {
         const job = await api('/jobs/voice', 'POST', body);
         msg.style.color = '#fa0';
@@ -520,13 +726,14 @@
     async function _pollOvJob(jobId) {
       try {
         const job = await api('/jobs/' + jobId);
-        const msg = document.getElementById('ov-job-msg');
+        const msg   = document.getElementById('ov-job-msg');
         const audio = document.getElementById('ov-audio');
         if (job.status === 'done') {
           clearInterval(_ovJobPollTimer);
           _ovJobPollTimer = null;
           msg.style.color = '#2a6';
           msg.textContent = 'Done — playing output.wav';
+          _ovCurrentJobId = jobId;
           audio.src = '/v1/jobs/' + jobId + '/files/output.wav';
           audio.style.display = 'block';
           audio.load();
@@ -543,8 +750,50 @@
       } catch (e) { /* ignore transient poll errors */ }
     }
 
+    // Show "Save Voice" fieldset when a design-mode output is 3–10 seconds
+    document.getElementById('ov-audio').addEventListener('loadedmetadata', function() {
+      const dur  = this.duration;
+      const show = _ovActiveMode() === 'design' && isFinite(dur) && dur >= 3 && dur <= 10;
+      const wrap = document.getElementById('ov-save-design-wrap');
+      wrap.style.display = show ? 'block' : 'none';
+      if (show) {
+        document.getElementById('ov-save-design-name').value = '';
+        document.getElementById('ov-save-design-msg').textContent = '';
+        ovUpdateSaveDesignBtn();
+      }
+    });
+
+    // Remove-preset dropdown: selecting triggers confirm + DELETE
+    document.getElementById('ov-preset-remove-select').addEventListener('change', async function() {
+      const preset_id = this.value;
+      if (!preset_id) return;
+      const preset = _ovPresets.find(p => p.id === preset_id);
+      const name = preset ? preset.name : preset_id;
+      if (!window.confirm(`Remove voice preset "${name}"? This cannot be undone.`)) {
+        this.value = '';
+        return;
+      }
+      const msg = document.getElementById('ov-clone-msg');
+      try {
+        const r = await fetch(`/v1/voice-presets/${preset_id}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error(await r.text());
+        const activeSel = document.getElementById('ov-preset-select');
+        if (activeSel.value === preset_id) activeSel.value = '';
+        this.value = '';
+        msg.style.color = '#2a6';
+        msg.textContent = `Removed "${name}"`;
+        await ovLoadPresets();
+      } catch (e) {
+        msg.style.color = '#e44';
+        msg.textContent = 'Error: ' + e.message;
+        this.value = '';
+      }
+    });
+
     setInterval(loadOvStatus, 3000);
     loadOvStatus();
+    _ovInitExclusiveDetails();
+    ovLoadPresets();
   </script>
 </body>
 </html>
