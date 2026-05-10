@@ -39,6 +39,12 @@
     .row { display: flex; gap: 12px; }
     .row > * { flex: 1; }
     #msg { margin-top: 8px; font-size: 0.8rem; color: #fa0; min-height: 1.2em; }
+    .ov-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+    .ov-running { background: #2a6; }
+    .ov-stopped { background: #555; }
+    .ov-error   { background: #e44; }
+    .ov-msg { margin-top: 8px; font-size: 0.8rem; min-height: 1.2em; }
+    #ov-audio { margin-top: 10px; width: 100%; display: none; }
   </style>
 </head>
 <body>
@@ -46,6 +52,53 @@
     <h1>AI Job Server</h1>
     <button class="danger" onclick="clearQueue()">Clear Queue</button>
   </div>
+
+  <section id="ov-section">
+    <h2>OmniVoice</h2>
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;font-size:0.82rem;margin-bottom:10px;">
+      <span>Mode: <strong id="ov-mode">-</strong></span>
+      <span>Server: <span id="ov-proc-dot" class="ov-dot ov-stopped"></span><strong id="ov-proc-state">-</strong></span>
+      <span>Health: <strong id="ov-health">-</strong></span>
+      <span>Active jobs: <strong id="ov-active">0</strong></span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button onclick="ovAction('start')">Start Server</button>
+      <button class="secondary" onclick="ovAction('stop')">Stop Server</button>
+      <button class="secondary" onclick="ovAction('restart')">Restart Server</button>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;">
+      <div>
+        <label>Mode</label>
+        <select id="ov-mode-select" style="width:160px;">
+          <option value="ephemeral">ephemeral</option>
+          <option value="persistent">persistent</option>
+        </select>
+      </div>
+      <button onclick="saveOvConfig()" style="margin-top:0;">Save Config</button>
+    </div>
+    <div id="ov-ctrl-msg" class="ov-msg"></div>
+
+    <h2 style="margin-top:16px;">Quick Voice Test</h2>
+    <label>Text</label>
+    <textarea id="ov-text" placeholder="Hello from OmniVoice!"></textarea>
+    <div class="row">
+      <div>
+        <label>Voice</label>
+        <input id="ov-voice" type="text" placeholder="default">
+      </div>
+      <div>
+        <label>Speed</label>
+        <input id="ov-spd" type="number" step="0.1" min="0.25" max="4.0" value="1.0">
+      </div>
+      <div>
+        <label>Language</label>
+        <input id="ov-lang" type="text" placeholder="">
+      </div>
+    </div>
+    <button onclick="ovSubmitVoice()">Synthesize</button>
+    <div id="ov-job-msg" class="ov-msg"></div>
+    <audio id="ov-audio" controls></audio>
+  </section>
 
   <section>
     <h2>Submit Image Job</h2>
@@ -232,6 +285,122 @@
     }
 
     loadJobs();
+
+    // -----------------------------------------------------------------------
+    // OmniVoice panel
+    // -----------------------------------------------------------------------
+
+    let _ovJobPollTimer = null;
+
+    async function ovFetch(path, method = 'GET', body = null) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const r = await fetch('/v1/omnivoice' + path, opts);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    async function loadOvStatus() {
+      try {
+        const s = await ovFetch('/status');
+        document.getElementById('ov-mode').textContent = s.mode;
+        document.getElementById('ov-proc-state').textContent = s.persistent.process_state;
+        const dot = document.getElementById('ov-proc-dot');
+        dot.className = 'ov-dot ' + (
+          s.persistent.process_state === 'running' ? 'ov-running' : 'ov-stopped'
+        );
+        document.getElementById('ov-health').textContent = s.persistent.health;
+        document.getElementById('ov-active').textContent = s.active_voice_jobs;
+        document.getElementById('ov-mode-select').value = s.mode;
+      } catch (e) {
+        document.getElementById('ov-proc-state').textContent = 'unreachable';
+      }
+    }
+
+    async function ovAction(action) {
+      const msg = document.getElementById('ov-ctrl-msg');
+      msg.textContent = '';
+      try {
+        await ovFetch('/' + action, 'POST');
+        await loadOvStatus();
+        msg.style.color = '#2a6';
+        msg.textContent = action + ' OK';
+      } catch (e) {
+        msg.style.color = '#e44';
+        msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function saveOvConfig() {
+      const msg = document.getElementById('ov-ctrl-msg');
+      const mode = document.getElementById('ov-mode-select').value;
+      try {
+        const cfg = await ovFetch('/config');
+        cfg.mode = mode;
+        await ovFetch('/config', 'PUT', cfg);
+        await loadOvStatus();
+        msg.style.color = '#2a6';
+        msg.textContent = 'Config saved.';
+      } catch (e) {
+        msg.style.color = '#e44';
+        msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function ovSubmitVoice() {
+      const msg = document.getElementById('ov-job-msg');
+      const audio = document.getElementById('ov-audio');
+      audio.style.display = 'none';
+      msg.textContent = '';
+      const body = {
+        text: document.getElementById('ov-text').value,
+        speed: parseFloat(document.getElementById('ov-spd').value),
+      };
+      const voice = document.getElementById('ov-voice').value;
+      const lang = document.getElementById('ov-lang').value;
+      if (voice) body.voice = voice;
+      if (lang) body.language = lang;
+      try {
+        const job = await api('/jobs/voice', 'POST', body);
+        msg.style.color = '#fa0';
+        msg.textContent = 'Job ' + job.job_id.slice(0, 8) + '... - synthesizing';
+        if (_ovJobPollTimer) clearInterval(_ovJobPollTimer);
+        _ovJobPollTimer = setInterval(() => _pollOvJob(job.job_id), 3000);
+        loadJobs();
+      } catch (e) {
+        msg.style.color = '#e44';
+        msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function _pollOvJob(jobId) {
+      try {
+        const job = await api('/jobs/' + jobId);
+        const msg = document.getElementById('ov-job-msg');
+        const audio = document.getElementById('ov-audio');
+        if (job.status === 'done') {
+          clearInterval(_ovJobPollTimer);
+          _ovJobPollTimer = null;
+          msg.style.color = '#2a6';
+          msg.textContent = 'Done — playing output.wav';
+          audio.src = '/v1/jobs/' + jobId + '/files/output.wav';
+          audio.style.display = 'block';
+          audio.load();
+          loadJobs();
+        } else if (job.status === 'error') {
+          clearInterval(_ovJobPollTimer);
+          _ovJobPollTimer = null;
+          msg.style.color = '#e44';
+          msg.textContent = 'Error: ' + (job.error || 'unknown');
+          loadJobs();
+        } else {
+          msg.textContent = 'Job ' + jobId.slice(0, 8) + '... - ' + job.status;
+        }
+      } catch (e) { /* ignore transient poll errors */ }
+    }
+
+    setInterval(loadOvStatus, 3000);
+    loadOvStatus();
   </script>
 </body>
 </html>

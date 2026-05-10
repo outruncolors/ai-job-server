@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
-from pydantic import BaseModel
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, Field
 
 
 class ImageJobRequest(BaseModel):
@@ -16,9 +17,12 @@ class ImageJobRequest(BaseModel):
 
 class VoiceJobRequest(BaseModel):
     text: str
-    voice: Optional[str] = None
-    speed: float = 1.0
+    voice: str = "default"
+    speed: float = Field(default=1.0, ge=0.25, le=4.0)
     language: Optional[str] = None
+    mode: Optional[Literal["persistent", "ephemeral"]] = None
+    instruct: Optional[str] = None
+    ref_text: Optional[str] = None
 
 
 class JobStatus(BaseModel):
@@ -51,3 +55,26 @@ class ArtifactEntry(BaseModel):
     filename: str
     size: int
     created_at: datetime
+
+
+class OmniVoicePersistentStatus(BaseModel):
+    desired_state: str
+    process_state: str
+    pid: Optional[int] = None
+    api_base: str
+    health: str
+    last_error: Optional[str] = None
+
+
+class OmniVoiceEphemeralStatus(BaseModel):
+    available: Optional[bool] = None
+    last_check: Optional[str] = None
+
+
+class OmniVoiceStatusResponse(BaseModel):
+    mode: str
+    configured: bool
+    persistent: OmniVoicePersistentStatus
+    ephemeral: OmniVoiceEphemeralStatus
+    active_voice_jobs: int
+    updated_at: str

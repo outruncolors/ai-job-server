@@ -4,21 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
-
-@pytest.fixture(autouse=True)
-def patch_jobs_base(tmp_path, monkeypatch):
-    """Redirect all job storage to a temp directory for each test."""
-    import app.jobs as jobs_module
-    monkeypatch.setattr(jobs_module, "JOBS_BASE", tmp_path)
-    return tmp_path
-
-
-@pytest.fixture()
-def client():
-    from app.main import app
-    return TestClient(app)
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +107,7 @@ def test_voice_job_files_written(client, tmp_path):
 
     request_data = json.loads((job_dir / "request.json").read_text())
     assert request_data["job_type"] == "voice"
-    assert request_data["text"] == "say this"
+    assert request_data["requested"]["text"] == "say this"
 
     input_text = (job_dir / "input.txt").read_text()
     assert "say this" in input_text
