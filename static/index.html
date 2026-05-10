@@ -5,455 +5,647 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Job Server</title>
   <style>
+    /* ── Reset ───────────────────────────────────────────────── */
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: monospace; background: #111; color: #ccc; padding: 24px; max-width: 900px; margin: 0 auto; }
-    h1 { color: #fff; font-size: 1.4rem; }
-    #header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-    button.danger { background: #922; margin-top: 0; }
-    button.danger:hover { background: #b33; }
-    h2 { color: #aaa; font-size: 1rem; margin-bottom: 12px; }
-    section { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 16px; margin-bottom: 20px; }
-    label { display: block; color: #888; font-size: 0.8rem; margin-bottom: 4px; margin-top: 10px; }
-    input, textarea, select {
-      width: 100%; padding: 6px 8px; background: #222; border: 1px solid #444;
-      color: #ccc; font-family: monospace; font-size: 0.85rem; border-radius: 3px;
+    html, body { height: 100%; overflow: hidden; font-family: monospace; background: #111; color: #ccc; }
+
+    /* ── Form basics ──────────────────────────────────────────── */
+    label {
+      display: block; color: #777; font-size: 0.76rem;
+      margin-bottom: 3px; margin-top: 10px;
     }
-    textarea { resize: vertical; min-height: 60px; }
+    input, textarea, select {
+      width: 100%; padding: 6px 8px; background: #181818; border: 1px solid #2e2e2e;
+      color: #ccc; font-family: monospace; font-size: 0.82rem; border-radius: 3px;
+    }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: #4a4a4a; }
+    textarea { resize: vertical; min-height: 54px; }
     button {
-      margin-top: 12px; padding: 8px 20px; background: #2a6; color: #fff;
-      border: none; border-radius: 3px; cursor: pointer; font-family: monospace; font-size: 0.85rem;
+      padding: 7px 18px; background: #2a6; color: #fff; border: none;
+      border-radius: 3px; cursor: pointer; font-family: monospace;
+      font-size: 0.82rem; margin-top: 10px;
     }
     button:hover { background: #3b7; }
-    button.secondary { background: #444; }
-    button.secondary:hover { background: #555; }
-    #jobs-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    #jobs-table th { text-align: left; color: #666; padding: 4px 8px; border-bottom: 1px solid #333; }
-    #jobs-table td { padding: 4px 8px; border-bottom: 1px solid #222; }
-    #jobs-table tr:hover td { background: #222; cursor: pointer; }
-    .status-queued { color: #aaa; }
+    button.secondary { background: #333; }
+    button.secondary:hover { background: #424242; }
+    button.danger { background: #7a2222; }
+    button.danger:hover { background: #992828; }
+    button[disabled] { opacity: 0.38; cursor: not-allowed; background: #2a2a2a; }
+    input[type=range] { width: 100%; accent-color: #2a6; padding: 0; background: none; border: none; }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; min-width: 0; }
+    .msg { font-size: 0.76rem; min-height: 1.1em; margin-top: 6px; }
+    .status-queued  { color: #777; }
     .status-running { color: #fa0; }
-    .status-done { color: #2a6; }
-    .status-failed { color: #e44; }
-    #detail { display: none; }
-    #detail pre { background: #222; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 0.78rem; color: #bbb; }
-    .row { display: flex; gap: 12px; }
-    .row > * { flex: 1; }
-    #msg { margin-top: 8px; font-size: 0.8rem; color: #fa0; min-height: 1.2em; }
-    .ov-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
-    .ov-running { background: #2a6; }
-    .ov-stopped { background: #555; }
-    .ov-error   { background: #e44; }
-    .ov-msg { margin-top: 8px; font-size: 0.8rem; min-height: 1.2em; }
-    #ov-audio { margin-top: 10px; width: 100%; display: none; }
-    input[type=range] { width: 100%; accent-color: #2a6; }
-    details summary::-webkit-details-marker { color: #555; }
-    button[disabled] { opacity: 0.45; cursor: not-allowed; background: #444; }
-    .btn-wrap { position: relative; display: inline-block; margin-top: 12px; }
+    .status-done    { color: #2a6; }
+    .status-failed, .status-error { color: #e44; }
+    details > summary {
+      cursor: pointer; color: #555; font-size: 0.76rem;
+      user-select: none; list-style: none;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before { content: '▸ '; }
+    details[open] > summary::before { content: '▾ '; }
+    fieldset { border: 1px solid #252525; border-radius: 3px; padding: 10px 12px; margin-top: 8px; }
+    legend { color: #555; font-size: 0.73rem; padding: 0 4px; }
+    .btn-wrap { position: relative; display: inline-block; margin-top: 10px; }
     .btn-tip {
-      display: none; position: absolute; bottom: calc(100% + 4px);
-      left: 50%; transform: translateX(-50%); background: #333; color: #bbb;
-      font-size: 0.75rem; padding: 4px 8px; border-radius: 3px;
-      white-space: nowrap; pointer-events: none; border: 1px solid #555;
+      display: none; position: absolute; bottom: calc(100% + 4px); left: 50%;
+      transform: translateX(-50%); background: #222; color: #aaa;
+      font-size: 0.7rem; padding: 3px 7px; border-radius: 3px;
+      white-space: nowrap; pointer-events: none; border: 1px solid #383838;
     }
     .btn-wrap:hover button[disabled] + .btn-tip { display: block; }
-    #ov-save-design-wrap {
-      display: none; margin-top: 12px; border: 1px solid #333;
-      border-radius: 3px; padding: 10px 12px;
+
+    /* ── OmniVoice ────────────────────────────────────────────── */
+    .ov-dot {
+      display: inline-block; width: 7px; height: 7px;
+      border-radius: 50%; margin-right: 4px; vertical-align: middle;
     }
-    #ov-save-design-wrap legend { color: #888; font-size: 0.8rem; padding: 0 4px; }
+    .ov-running { background: #2a6; }
+    .ov-stopped { background: #3a3a3a; }
+    .ov-error   { background: #e44; }
+    #ov-audio { margin-top: 10px; width: 100%; display: none; }
+    #ov-save-design-wrap { display: none; }
+
+    /* ── Slides ──────────────────────────────────────────────── */
+    #slides-wrap {
+      position: fixed; top: 0; left: 0; width: 100%;
+      transition: transform 0.62s cubic-bezier(0.77, 0, 0.175, 1);
+      will-change: transform;
+    }
+    .slide { height: 100vh; width: 100%; position: relative; overflow: hidden; }
+    .slide-body {
+      height: 100%; overflow-y: auto;
+      padding: 62px 40px 54px;
+      max-width: 920px; margin: 0 auto;
+    }
+    .slide-label {
+      position: absolute; top: 22px; left: 28px; z-index: 2; pointer-events: none;
+      font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase; color: #333;
+    }
+    .slide-desc {
+      position: absolute; bottom: 20px; right: 28px; z-index: 2; pointer-events: none;
+      font-size: 0.68rem; color: #2e2e2e; text-align: right; line-height: 1.7;
+    }
+
+    /* ── Navigation arrows ────────────────────────────────────── */
+    .nav-arr {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      font-size: 1.3rem; color: #2e2e2e; cursor: pointer; z-index: 50;
+      transition: color 0.18s ease, opacity 0.3s ease;
+      user-select: none; line-height: 1;
+    }
+    .nav-arr:hover { color: #666; }
+    .nav-arr.hidden { opacity: 0; pointer-events: none; }
+    #nav-up   { top: 7px; }
+    #nav-down { bottom: 7px; }
+
+    /* ── Jobs trigger ─────────────────────────────────────────── */
+    #jobs-btn {
+      position: fixed; top: 20px; right: 24px; z-index: 200;
+      font-size: 0.65rem; color: #383838; cursor: pointer;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      transition: color 0.18s;
+    }
+    #jobs-btn:hover { color: #777; }
+
+    /* ── Jobs drawer ─────────────────────────────────────────── */
+    #jobs-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); z-index: 150;
+      backdrop-filter: blur(4px);
+    }
+    #jobs-drawer {
+      position: fixed; top: 0; right: 0; height: 100vh;
+      width: min(500px, 96vw);
+      background: #131313; border-left: 1px solid #222;
+      transform: translateX(100%);
+      transition: transform 0.36s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 200; overflow-y: auto; padding: 20px 22px;
+    }
+    #jobs-drawer.open { transform: translateX(0); }
+    #jobs-drawer-head {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+    }
+    #jobs-drawer-head h2 {
+      flex: 1; color: #555; font-size: 0.7rem;
+      letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    #jobs-drawer-head button { margin-top: 0; padding: 4px 10px; font-size: 0.72rem; }
+    #jobs-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+    #jobs-table th {
+      text-align: left; color: #484848; padding: 3px 6px;
+      border-bottom: 1px solid #222;
+    }
+    #jobs-table td { padding: 4px 6px; border-bottom: 1px solid #1a1a1a; }
+    #jobs-table tr:hover td { background: #1a1a1a; cursor: pointer; }
+    #detail { margin-top: 18px; }
+    #detail h3 { color: #484848; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+    #detail pre { background: #181818; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 0.71rem; color: #999; }
+    #detail-files { margin-top: 8px; font-size: 0.74rem; }
+    #detail-files a { color: #446; margin-right: 10px; }
+
+    /* ── Chain slide ─────────────────────────────────────────── */
+    .chain-step-card {
+      border: 1px solid #222; border-radius: 3px;
+      padding: 10px 12px; margin-bottom: 8px; background: #111;
+    }
+    .chain-step-card-head {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;
+    }
+    .chain-step-card-head span { color: #484848; font-size: 0.72rem; }
+    .chain-step-card-head button { margin-top: 0; padding: 2px 8px; font-size: 0.7rem; }
+
+    /* ── Voice slide ─────────────────────────────────────────── */
+    #ov-status-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      font-size: 0.74rem; padding-bottom: 12px; margin-bottom: 12px;
+      border-bottom: 1px solid #1e1e1e;
+    }
+    #ov-status-bar button  { margin-top: 0; padding: 4px 10px; font-size: 0.7rem; }
+    #ov-status-bar select  { width: auto; font-size: 0.7rem; padding: 3px 6px; }
+    #ov-ctrl-msg { font-size: 0.74rem; min-height: 1.1em; }
+    .ov-cols { display: flex; gap: 22px; }
+    .ov-col-l { flex: 1.1; min-width: 0; }
+    .ov-col-r { flex: 0.9; min-width: 0; border-left: 1px solid #1e1e1e; padding-left: 22px; }
+    /* summary inside details inside ov-col-r keeps custom radio style */
+    .ov-col-r details > summary {
+      display: flex; align-items: center; gap: 8px; list-style: none;
+    }
+    .ov-col-r details > summary::before { content: ''; }
+    .ov-col-r details > summary input[type=radio] { width: auto; margin: 0; accent-color: #2a6; cursor: pointer; }
+    .ov-col-r details > summary label { display: inline; margin: 0; cursor: pointer; font-size: 0.76rem; color: #666; }
   </style>
 </head>
 <body>
-  <div id="header">
-    <h1>AI Job Server</h1>
-    <button class="danger" onclick="clearQueue()">Clear Queue</button>
-  </div>
 
-  <section id="ov-section">
-    <h2>OmniVoice</h2>
-    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;font-size:0.82rem;margin-bottom:10px;">
-      <span>Mode: <strong id="ov-mode">-</strong></span>
-      <span>Server: <span id="ov-proc-dot" class="ov-dot ov-stopped"></span><strong id="ov-proc-state">-</strong></span>
-      <span>Health: <strong id="ov-health">-</strong></span>
-      <span>Active jobs: <strong id="ov-active">0</strong></span>
+  <!-- Navigation arrows -->
+  <div id="nav-up"   class="nav-arr hidden" onclick="goToSlide(currentSlide-1)">&#8679;</div>
+  <div id="nav-down" class="nav-arr"        onclick="goToSlide(currentSlide+1)">&#8681;</div>
+
+  <!-- Jobs trigger -->
+  <div id="jobs-btn" onclick="openJobsDrawer()">Jobs</div>
+
+  <!-- Jobs overlay -->
+  <div id="jobs-overlay" onclick="closeJobsDrawer()"></div>
+
+  <!-- Jobs drawer -->
+  <div id="jobs-drawer">
+    <div id="jobs-drawer-head">
+      <h2>Jobs</h2>
+      <button class="secondary" onclick="loadJobs()">Refresh</button>
+      <button class="danger"    onclick="clearQueue()">Clear Queue</button>
+      <button class="secondary" onclick="closeJobsDrawer()">&#10005;</button>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button onclick="ovAction('start')">Start Server</button>
-      <button class="secondary" onclick="ovAction('stop')">Stop Server</button>
-      <button class="secondary" onclick="ovAction('restart')">Restart Server</button>
-    </div>
-    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;">
-      <div>
-        <label>Mode</label>
-        <select id="ov-mode-select" style="width:160px;">
-          <option value="ephemeral">ephemeral</option>
-          <option value="persistent">persistent</option>
-        </select>
-      </div>
-      <button onclick="saveOvConfig()" style="margin-top:0;">Save Config</button>
-    </div>
-    <div id="ov-ctrl-msg" class="ov-msg"></div>
-
-    <h2 style="margin-top:16px;">Quick Voice Test</h2>
-    <label>Text</label>
-    <textarea id="ov-text" placeholder="Hello from OmniVoice!"></textarea>
-
-    <div class="row">
-      <div>
-        <label>Language</label>
-        <input id="ov-lang" type="text" list="ov-lang-list" placeholder="Auto">
-        <datalist id="ov-lang-list">
-          <option value="Auto">
-          <option value="English">
-          <option value="Chinese">
-          <option value="Spanish">
-          <option value="French">
-          <option value="German">
-          <option value="Japanese">
-          <option value="Korean">
-          <option value="Portuguese">
-          <option value="Russian">
-          <option value="Italian">
-          <option value="Dutch">
-          <option value="Arabic">
-          <option value="Hindi">
-          <option value="Turkish">
-          <option value="Polish">
-          <option value="Swedish">
-          <option value="Vietnamese">
-          <option value="Thai">
-          <option value="Indonesian">
-          <option value="Ukrainian">
-          <option value="Greek">
-          <option value="Hebrew">
-          <option value="Persian">
-        </datalist>
-      </div>
-      <div>
-        <label>Speed</label>
-        <input id="ov-spd" type="number" step="0.05" min="0.5" max="1.5" value="1.0">
-      </div>
-    </div>
-
-    <details id="ov-clone-details" style="margin-top:12px;">
-      <summary style="cursor:pointer;color:#888;font-size:0.82rem;user-select:none;display:flex;align-items:center;gap:8px;list-style:none;">
-        <input type="radio" name="ov-voice-mode" value="clone" id="ov-clone-radio" style="width:auto;margin:0;accent-color:#2a6;cursor:pointer;">
-        <label for="ov-clone-radio" style="display:inline;margin:0;color:inherit;font-size:inherit;cursor:pointer;">Voice Clone</label>
-      </summary>
-
-      <fieldset style="border:1px solid #333;border-radius:3px;padding:10px 12px;margin-top:10px;">
-        <legend style="color:#888;font-size:0.8rem;padding:0 4px;">Add Preset</legend>
-        <label>Voice Sample (.wav)</label>
-        <input type="file" id="ov-preset-file" accept=".wav" onchange="ovUpdateSavePresetBtn()" style="padding:4px 0;">
-        <label>Preset Name</label>
-        <input type="text" id="ov-preset-name" placeholder="e.g. Alice" oninput="ovUpdateSavePresetBtn()">
-        <label>Caption <span style="color:#555;font-size:0.75rem;">(transcript of the audio)</span></label>
-        <textarea id="ov-preset-caption" placeholder="Exact words spoken in the sample…" oninput="ovUpdateSavePresetBtn()"></textarea>
-        <div class="btn-wrap">
-          <button id="ov-preset-save-btn" onclick="ovSavePreset()" disabled>Save Preset</button>
-          <span class="btn-tip">Fill in sample, name, and caption first</span>
-        </div>
-        <div id="ov-preset-save-msg" class="ov-msg"></div>
-      </fieldset>
-
-      <div style="margin-top:10px;">
-        <label>Active Preset <span style="color:#555;font-size:0.75rem;">(used for synthesis)</span></label>
-        <select id="ov-preset-select">
-          <option value="">— none —</option>
-        </select>
-        <div id="ov-preset-empty-msg" style="display:none;color:#555;font-size:0.8rem;margin-top:4px;">No presets yet — add one above.</div>
-      </div>
-
-      <div style="margin-top:10px;">
-        <label>Remove Preset</label>
-        <select id="ov-preset-remove-select">
-          <option value="">— select to remove —</option>
-        </select>
-      </div>
-
-      <div id="ov-clone-msg" class="ov-msg"></div>
-    </details>
-
-    <details id="ov-design-details" style="margin-top:8px;">
-      <summary style="cursor:pointer;color:#888;font-size:0.82rem;user-select:none;display:flex;align-items:center;gap:8px;list-style:none;">
-        <input type="radio" name="ov-voice-mode" value="design" id="ov-design-radio" checked style="width:auto;margin:0;accent-color:#2a6;cursor:pointer;">
-        <label for="ov-design-radio" style="display:inline;margin:0;color:inherit;font-size:inherit;cursor:pointer;">Voice Design</label>
-      </summary>
-      <div class="row" style="margin-top:8px;">
-        <div>
-          <label>Gender / 性别</label>
-          <select id="ov-gender">
-            <option value="Auto">Auto</option>
-            <option value="Male / 男">Male</option>
-            <option value="Female / 女">Female</option>
-          </select>
-        </div>
-        <div>
-          <label>Age / 年龄</label>
-          <select id="ov-age">
-            <option value="Auto">Auto</option>
-            <option value="Child / 儿童">Child</option>
-            <option value="Teenager / 少年">Teenager</option>
-            <option value="Young Adult / 青年">Young Adult</option>
-            <option value="Middle-aged / 中年">Middle-aged</option>
-            <option value="Elderly / 老年">Elderly</option>
-          </select>
-        </div>
-        <div>
-          <label>Pitch / 音调</label>
-          <select id="ov-pitch">
-            <option value="Auto">Auto</option>
-            <option value="Very Low Pitch / 极低音调">Very Low</option>
-            <option value="Low Pitch / 低音调">Low</option>
-            <option value="Moderate Pitch / 中音调">Moderate</option>
-            <option value="High Pitch / 高音调">High</option>
-            <option value="Very High Pitch / 极高音调">Very High</option>
-          </select>
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Style / 风格</label>
-          <select id="ov-style">
-            <option value="Auto">Auto</option>
-            <option value="Whisper / 耳语">Whisper</option>
-          </select>
-        </div>
-        <div>
-          <label>English Accent <span style="color:#555;font-size:0.75rem;">(EN only)</span></label>
-          <select id="ov-accent">
-            <option value="Auto">Auto</option>
-            <option value="American Accent / 美式口音">American</option>
-            <option value="Australian Accent / 澳大利亚口音">Australian</option>
-            <option value="British Accent / 英国口音">British</option>
-            <option value="Canadian Accent / 加拿大口音">Canadian</option>
-            <option value="Chinese Accent / 中国口音">Chinese</option>
-            <option value="Indian Accent / 印度口音">Indian</option>
-            <option value="Japanese Accent / 日本口音">Japanese</option>
-            <option value="Korean Accent / 韩国口音">Korean</option>
-            <option value="Portuguese Accent / 葡萄牙口音">Portuguese</option>
-            <option value="Russian Accent / 俄罗斯口音">Russian</option>
-          </select>
-        </div>
-        <div>
-          <label>Chinese Dialect <span style="color:#555;font-size:0.75rem;">(ZH only)</span></label>
-          <select id="ov-dialect">
-            <option value="Auto">Auto</option>
-            <option value="Northeast Dialect / 东北话">Northeast (东北话)</option>
-            <option value="Sichuan Dialect / 四川话">Sichuan (四川话)</option>
-            <option value="Henan Dialect / 河南话">Henan (河南话)</option>
-            <option value="Shaanxi Dialect / 陕西话">Shaanxi (陕西话)</option>
-            <option value="Guizhou Dialect / 贵州话">Guizhou (贵州话)</option>
-            <option value="Yunnan Dialect / 云南话">Yunnan (云南话)</option>
-            <option value="Guilin Dialect / 桂林话">Guilin (桂林话)</option>
-            <option value="Jinan Dialect / 济南话">Jinan (济南话)</option>
-            <option value="Shijiazhuang Dialect / 石家庄话">Shijiazhuang (石家庄话)</option>
-            <option value="Gansu Dialect / 甘肃话">Gansu (甘肃话)</option>
-            <option value="Ningxia Dialect / 宁夏话">Ningxia (宁夏话)</option>
-            <option value="Qingdao Dialect / 青岛话">Qingdao (青岛话)</option>
-          </select>
-        </div>
-      </div>
-    </details>
-
-    <details style="margin-top:8px;">
-      <summary style="cursor:pointer;color:#888;font-size:0.82rem;user-select:none;">Generation Settings</summary>
-      <div style="margin-top:10px;">
-        <label>Inference Steps: <strong id="ov-steps-val">32</strong>
-          <span style="color:#555;font-size:0.75rem;"> (4–64 · lower=faster · higher=quality)</span>
-        </label>
-        <input id="ov-steps" type="range" min="4" max="64" step="1" value="32"
-               oninput="document.getElementById('ov-steps-val').textContent=this.value"
-               style="margin-top:4px;">
-      </div>
-      <div style="margin-top:10px;">
-        <label>Guidance Scale (CFG): <strong id="ov-cfg-val">2.0</strong>
-          <span style="color:#555;font-size:0.75rem;"> (0–4 · default 2.0)</span>
-        </label>
-        <input id="ov-cfg" type="range" min="0" max="4" step="0.1" value="2.0"
-               oninput="document.getElementById('ov-cfg-val').textContent=parseFloat(this.value).toFixed(1)"
-               style="margin-top:4px;">
-      </div>
-    </details>
-
-    <button onclick="ovSubmitVoice()" style="margin-top:14px;">Synthesize</button>
-    <div id="ov-job-msg" class="ov-msg"></div>
-    <audio id="ov-audio" controls></audio>
-    <fieldset id="ov-save-design-wrap">
-      <legend>Save this voice as a preset</legend>
-      <label>Preset Name</label>
-      <input type="text" id="ov-save-design-name" placeholder="e.g. Warm Narrator"
-             oninput="ovUpdateSaveDesignBtn()">
-      <div class="btn-wrap">
-        <button id="ov-save-design-btn" onclick="ovSaveFromDesign()" disabled>Save Voice</button>
-        <span class="btn-tip">Enter a name first</span>
-      </div>
-      <div id="ov-save-design-msg" class="ov-msg"></div>
-    </fieldset>
-  </section>
-
-  <section>
-    <h2>Submit Image Job</h2>
-    <label>Prompt</label>
-    <textarea id="img-prompt" placeholder="a photorealistic cat on the moon"></textarea>
-    <div class="row">
-      <div>
-        <label>Width</label>
-        <input id="img-width" type="number" value="512">
-      </div>
-      <div>
-        <label>Height</label>
-        <input id="img-height" type="number" value="512">
-      </div>
-      <div>
-        <label>Steps</label>
-        <input id="img-steps" type="number" value="20">
-      </div>
-    </div>
-    <label>Negative Prompt (optional)</label>
-    <input id="img-neg" type="text" placeholder="">
-    <label>Model (optional)</label>
-    <input id="img-model" type="text" placeholder="">
-    <button onclick="submitImage()">Submit</button>
-    <div id="img-msg" class="msg"></div>
-  </section>
-
-  <section>
-    <h2>Submit Voice Job</h2>
-    <label>Text</label>
-    <textarea id="voice-text" placeholder="Hello, world!"></textarea>
-    <div class="row">
-      <div>
-        <label>Voice (optional)</label>
-        <input id="voice-name" type="text" placeholder="">
-      </div>
-      <div>
-        <label>Speed</label>
-        <input id="voice-speed" type="number" step="0.1" value="1.0">
-      </div>
-      <div>
-        <label>Language (optional)</label>
-        <input id="voice-lang" type="text" placeholder="en">
-      </div>
-    </div>
-    <button onclick="submitVoice()">Submit</button>
-    <div id="voice-msg" class="msg"></div>
-  </section>
-
-  <section id="chain-section">
-    <h2>Chain Jobs</h2>
-    <label>Title (optional)</label>
-    <input id="chain-title" type="text" placeholder="My chain job">
-    <label>Initial Input</label>
-    <textarea id="chain-input" placeholder="What should the chain work on?" style="min-height:80px;"></textarea>
-
-    <details style="margin-top:12px;">
-      <summary style="cursor:pointer;color:#888;font-size:0.82rem;user-select:none;">LLM Settings</summary>
-      <div class="row" style="margin-top:8px;">
-        <div>
-          <label>API Base URL</label>
-          <input id="chain-api-base" type="text" value="http://debian1.local:11434/v1" placeholder="http://host:port/v1">
-        </div>
-        <div>
-          <label>Model</label>
-          <input id="chain-model" type="text" placeholder="gemma4">
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Temperature (0.0–2.0)</label>
-          <input id="chain-temp" type="number" step="0.1" min="0" max="2" value="0.7">
-        </div>
-        <div>
-          <label>Max Tokens</label>
-          <input id="chain-max-tokens" type="number" min="1" value="2048">
-        </div>
-      </div>
-    </details>
-
-    <div style="margin-top:14px;">
-      <strong style="color:#888;font-size:0.82rem;">Steps</strong>
-      <div id="chain-steps-list" style="margin-top:8px;"></div>
-      <button class="secondary" onclick="addChainStep()" style="margin-top:8px;">+ Add Step</button>
-    </div>
-
-    <button onclick="submitChain()" style="margin-top:14px;">Run Chain</button>
-    <div id="chain-msg" class="ov-msg"></div>
-    <div id="chain-step-status" style="margin-top:10px;font-size:0.8rem;"></div>
-    <div id="chain-output" style="display:none;margin-top:12px;">
-      <strong style="color:#888;font-size:0.82rem;">Final Output:</strong>
-      <pre id="chain-output-pre" style="margin-top:6px;background:#222;padding:10px;border-radius:3px;overflow-x:auto;font-size:0.78rem;color:#bbb;white-space:pre-wrap;word-break:break-word;"></pre>
-    </div>
-  </section>
-
-  <section>
-    <h2>Jobs <button class="secondary" onclick="loadJobs()" style="margin-top:0;padding:4px 10px;font-size:0.75rem;">Refresh</button></h2>
     <table id="jobs-table">
       <thead>
-        <tr>
-          <th>Job ID</th>
-          <th>Type</th>
-          <th>Status</th>
-          <th>Created</th>
-        </tr>
+        <tr><th>Job ID</th><th>Type</th><th>Status</th><th>Created</th></tr>
       </thead>
       <tbody id="jobs-body">
-        <tr><td colspan="4" style="color:#555;padding:8px;">Loading...</td></tr>
+        <tr><td colspan="4" style="color:#333;padding:8px;">Loading…</td></tr>
       </tbody>
     </table>
-  </section>
-
-  <section id="detail">
-    <h2>Job Detail</h2>
-    <div id="detail-content"></div>
-    <div style="margin-top:12px;">
-      <strong style="color:#888;font-size:0.8rem;">Files:</strong>
-      <div id="detail-files" style="margin-top:6px;font-size:0.8rem;"></div>
+    <div id="detail" style="display:none;">
+      <h3>Job Detail</h3>
+      <div id="detail-content"></div>
+      <div id="detail-files"></div>
     </div>
-  </section>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- SLIDES                                                      -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div id="slides-wrap">
+
+    <!-- ── 1 · CHAIN ──────────────────────────────────────────── -->
+    <div class="slide" id="slide-chain">
+      <div class="slide-label">Chain Jobs</div>
+      <div class="slide-body">
+
+        <label>Title <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>
+        <input id="chain-title" type="text" placeholder="My chain job">
+
+        <label>Initial Input</label>
+        <textarea id="chain-input" style="min-height:80px;" placeholder="What should the chain work on?"></textarea>
+
+        <details style="margin-top:12px;">
+          <summary>LLM Settings</summary>
+          <div style="margin-top:10px;">
+            <div class="row">
+              <div>
+                <label>API Base URL</label>
+                <input id="chain-api-base" type="text" value="http://debian1.local:11434/v1">
+              </div>
+              <div>
+                <label>Model</label>
+                <input id="chain-model" type="text" placeholder="gemma4">
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label>Temperature (0–2)</label>
+                <input id="chain-temp" type="number" step="0.1" min="0" max="2" value="0.7">
+              </div>
+              <div>
+                <label>Max Tokens</label>
+                <input id="chain-max-tokens" type="number" min="1" value="2048">
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px;">
+          <span style="color:#383838;font-size:0.68rem;letter-spacing:0.1em;">STEPS</span>
+          <button class="secondary" onclick="addChainStep()"
+                  style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ Add Step</button>
+        </div>
+        <div id="chain-steps-list"></div>
+
+        <button onclick="submitChain()" style="margin-top:12px;">Run Chain</button>
+        <div id="chain-msg" class="msg"></div>
+        <div id="chain-step-status" style="margin-top:8px;font-size:0.74rem;"></div>
+        <div id="chain-output" style="display:none;margin-top:12px;">
+          <div style="color:#383838;font-size:0.68rem;letter-spacing:0.08em;margin-bottom:4px;">FINAL OUTPUT</div>
+          <pre id="chain-output-pre"
+               style="background:#0e0e0e;padding:12px;border-radius:3px;font-size:0.75rem;
+                      color:#bbb;white-space:pre-wrap;word-break:break-word;
+                      max-height:200px;overflow-y:auto;border:1px solid #222;"></pre>
+        </div>
+
+      </div>
+      <div class="slide-desc">Sequential LLM pipelines.<br>Each step feeds the next.</div>
+    </div>
+
+    <!-- ── 2 · VOICE ──────────────────────────────────────────── -->
+    <div class="slide" id="slide-voice">
+      <div class="slide-label">Voice</div>
+      <div class="slide-body">
+
+        <!-- Server status bar -->
+        <div id="ov-status-bar">
+          <span>
+            <span id="ov-proc-dot" class="ov-dot ov-stopped"></span>
+            <strong id="ov-proc-state" style="color:#666;">-</strong>
+          </span>
+          <span style="color:#444;">Mode: <strong id="ov-mode" style="color:#555;">-</strong></span>
+          <span style="color:#444;">Health: <strong id="ov-health" style="color:#555;">-</strong></span>
+          <span style="color:#444;">Active: <strong id="ov-active" style="color:#555;">0</strong></span>
+          <button onclick="ovAction('start')">Start</button>
+          <button class="secondary" onclick="ovAction('stop')">Stop</button>
+          <button class="secondary" onclick="ovAction('restart')">Restart</button>
+          <select id="ov-mode-select">
+            <option value="ephemeral">ephemeral</option>
+            <option value="persistent">persistent</option>
+          </select>
+          <button class="secondary" onclick="saveOvConfig()">Save</button>
+          <div id="ov-ctrl-msg" style="flex:1;"></div>
+        </div>
+
+        <!-- Two-column layout -->
+        <div class="ov-cols">
+
+          <!-- Left: text form + output -->
+          <div class="ov-col-l">
+            <label>Text</label>
+            <textarea id="ov-text" style="min-height:100px;" placeholder="Hello from OmniVoice!"></textarea>
+
+            <div class="row">
+              <div>
+                <label>Language</label>
+                <input id="ov-lang" type="text" list="ov-lang-list" placeholder="Auto">
+                <datalist id="ov-lang-list">
+                  <option value="Auto"><option value="English"><option value="Chinese">
+                  <option value="Spanish"><option value="French"><option value="German">
+                  <option value="Japanese"><option value="Korean"><option value="Portuguese">
+                  <option value="Russian"><option value="Italian"><option value="Dutch">
+                  <option value="Arabic"><option value="Hindi"><option value="Turkish">
+                  <option value="Polish"><option value="Swedish"><option value="Vietnamese">
+                  <option value="Thai"><option value="Indonesian"><option value="Ukrainian">
+                  <option value="Greek"><option value="Hebrew"><option value="Persian">
+                </datalist>
+              </div>
+              <div>
+                <label>Speed</label>
+                <input id="ov-spd" type="number" step="0.05" min="0.5" max="1.5" value="1.0">
+              </div>
+            </div>
+
+            <button onclick="ovSubmitVoice()" style="margin-top:14px;">Synthesize</button>
+            <div id="ov-job-msg" class="msg"></div>
+            <audio id="ov-audio" controls></audio>
+
+            <fieldset id="ov-save-design-wrap" style="margin-top:12px;">
+              <legend>Save as preset</legend>
+              <label>Name</label>
+              <input type="text" id="ov-save-design-name" placeholder="e.g. Warm Narrator"
+                     oninput="ovUpdateSaveDesignBtn()">
+              <div class="btn-wrap">
+                <button id="ov-save-design-btn" onclick="ovSaveFromDesign()" disabled>Save Voice</button>
+                <span class="btn-tip">Enter a name first</span>
+              </div>
+              <div id="ov-save-design-msg" class="msg"></div>
+            </fieldset>
+          </div>
+
+          <!-- Right: voice mode options -->
+          <div class="ov-col-r">
+
+            <details id="ov-clone-details" style="margin-bottom:10px;">
+              <summary style="color:#666;">
+                <input type="radio" name="ov-voice-mode" value="clone" id="ov-clone-radio">
+                <label for="ov-clone-radio">Voice Clone</label>
+              </summary>
+              <fieldset>
+                <legend>Add Preset</legend>
+                <label>Sample (.wav)</label>
+                <input type="file" id="ov-preset-file" accept=".wav"
+                       onchange="ovUpdateSavePresetBtn()" style="padding:3px 0;">
+                <label>Name</label>
+                <input type="text" id="ov-preset-name" placeholder="e.g. Alice"
+                       oninput="ovUpdateSavePresetBtn()">
+                <label>Caption</label>
+                <textarea id="ov-preset-caption" style="min-height:40px;"
+                          placeholder="Exact words spoken in the sample…"
+                          oninput="ovUpdateSavePresetBtn()"></textarea>
+                <div class="btn-wrap">
+                  <button id="ov-preset-save-btn" onclick="ovSavePreset()" disabled>Save Preset</button>
+                  <span class="btn-tip">Fill in sample, name, and caption first</span>
+                </div>
+                <div id="ov-preset-save-msg" class="msg"></div>
+              </fieldset>
+
+              <div style="margin-top:10px;">
+                <label>Active Preset</label>
+                <select id="ov-preset-select"><option value="">— none —</option></select>
+                <div id="ov-preset-empty-msg"
+                     style="display:none;color:#444;font-size:0.74rem;margin-top:4px;">
+                  No presets yet.
+                </div>
+              </div>
+              <div style="margin-top:8px;">
+                <label>Remove Preset</label>
+                <select id="ov-preset-remove-select"><option value="">— select to remove —</option></select>
+              </div>
+              <div id="ov-clone-msg" class="msg"></div>
+            </details>
+
+            <details id="ov-design-details" open style="margin-bottom:10px;">
+              <summary style="color:#666;">
+                <input type="radio" name="ov-voice-mode" value="design" id="ov-design-radio" checked>
+                <label for="ov-design-radio">Voice Design</label>
+              </summary>
+              <div style="margin-top:8px;">
+                <div class="row">
+                  <div>
+                    <label>Gender</label>
+                    <select id="ov-gender">
+                      <option value="Auto">Auto</option>
+                      <option value="Male / 男">Male</option>
+                      <option value="Female / 女">Female</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Age</label>
+                    <select id="ov-age">
+                      <option value="Auto">Auto</option>
+                      <option value="Child / 儿童">Child</option>
+                      <option value="Teenager / 少年">Teenager</option>
+                      <option value="Young Adult / 青年">Young Adult</option>
+                      <option value="Middle-aged / 中年">Middle-aged</option>
+                      <option value="Elderly / 老年">Elderly</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row">
+                  <div>
+                    <label>Pitch</label>
+                    <select id="ov-pitch">
+                      <option value="Auto">Auto</option>
+                      <option value="Very Low Pitch / 极低音调">Very Low</option>
+                      <option value="Low Pitch / 低音调">Low</option>
+                      <option value="Moderate Pitch / 中音调">Moderate</option>
+                      <option value="High Pitch / 高音调">High</option>
+                      <option value="Very High Pitch / 极高音调">Very High</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Style</label>
+                    <select id="ov-style">
+                      <option value="Auto">Auto</option>
+                      <option value="Whisper / 耳语">Whisper</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row">
+                  <div>
+                    <label>EN Accent</label>
+                    <select id="ov-accent">
+                      <option value="Auto">Auto</option>
+                      <option value="American Accent / 美式口音">American</option>
+                      <option value="Australian Accent / 澳大利亚口音">Australian</option>
+                      <option value="British Accent / 英国口音">British</option>
+                      <option value="Canadian Accent / 加拿大口音">Canadian</option>
+                      <option value="Chinese Accent / 中国口音">Chinese</option>
+                      <option value="Indian Accent / 印度口音">Indian</option>
+                      <option value="Japanese Accent / 日本口音">Japanese</option>
+                      <option value="Korean Accent / 韩国口音">Korean</option>
+                      <option value="Portuguese Accent / 葡萄牙口音">Portuguese</option>
+                      <option value="Russian Accent / 俄罗斯口音">Russian</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>ZH Dialect</label>
+                    <select id="ov-dialect">
+                      <option value="Auto">Auto</option>
+                      <option value="Northeast Dialect / 东北话">Northeast</option>
+                      <option value="Sichuan Dialect / 四川话">Sichuan</option>
+                      <option value="Henan Dialect / 河南话">Henan</option>
+                      <option value="Shaanxi Dialect / 陕西话">Shaanxi</option>
+                      <option value="Guizhou Dialect / 贵州话">Guizhou</option>
+                      <option value="Yunnan Dialect / 云南话">Yunnan</option>
+                      <option value="Guilin Dialect / 桂林话">Guilin</option>
+                      <option value="Jinan Dialect / 济南话">Jinan</option>
+                      <option value="Shijiazhuang Dialect / 石家庄话">Shijiazhuang</option>
+                      <option value="Gansu Dialect / 甘肃话">Gansu</option>
+                      <option value="Ningxia Dialect / 宁夏话">Ningxia</option>
+                      <option value="Qingdao Dialect / 青岛话">Qingdao</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details style="margin-bottom:10px;">
+              <summary>Generation Settings</summary>
+              <div style="margin-top:10px;">
+                <label>
+                  Inference Steps: <strong id="ov-steps-val">32</strong>
+                  <span style="color:#383838;font-size:0.7rem;"> (4–64)</span>
+                </label>
+                <input id="ov-steps" type="range" min="4" max="64" step="1" value="32"
+                       oninput="document.getElementById('ov-steps-val').textContent=this.value"
+                       style="margin-top:4px;">
+                <label style="margin-top:10px;">
+                  Guidance Scale: <strong id="ov-cfg-val">2.0</strong>
+                  <span style="color:#383838;font-size:0.7rem;"> (0–4)</span>
+                </label>
+                <input id="ov-cfg" type="range" min="0" max="4" step="0.1" value="2.0"
+                       oninput="document.getElementById('ov-cfg-val').textContent=parseFloat(this.value).toFixed(1)"
+                       style="margin-top:4px;">
+              </div>
+            </details>
+
+          </div>
+        </div><!-- /ov-cols -->
+
+      </div>
+      <div class="slide-desc">Neural speech synthesis.<br>Design or clone a voice.</div>
+    </div>
+
+    <!-- ── 3 · IMAGE ───────────────────────────────────────────── -->
+    <div class="slide" id="slide-image">
+      <div class="slide-label">Image</div>
+      <div class="slide-body" style="display:flex;flex-direction:column;justify-content:center;">
+
+        <label>Prompt</label>
+        <textarea id="img-prompt" style="min-height:100px;"
+                  placeholder="a photorealistic cat on the moon"></textarea>
+
+        <div class="row" style="margin-top:0;">
+          <div>
+            <label>Width</label>
+            <input id="img-width" type="number" value="512">
+          </div>
+          <div>
+            <label>Height</label>
+            <input id="img-height" type="number" value="512">
+          </div>
+          <div>
+            <label>Steps</label>
+            <input id="img-steps" type="number" value="20">
+          </div>
+          <div>
+            <label>Negative Prompt</label>
+            <input id="img-neg" type="text" placeholder="">
+          </div>
+          <div>
+            <label>Model</label>
+            <input id="img-model" type="text" placeholder="">
+          </div>
+        </div>
+
+        <button onclick="submitImage()">Submit</button>
+        <div id="img-msg" class="msg"></div>
+
+      </div>
+      <div class="slide-desc">AI image generation.<br>ComfyUI on the local network.</div>
+    </div>
+
+  </div><!-- /slides-wrap -->
 
   <script>
-    const FILES = ['status.json', 'request.json', 'input.txt', 'logs.txt', 'artifacts.json'];
+    // ── Constants & state ──────────────────────────────────────────
+    const FILES = ['status.json','request.json','input.txt','logs.txt','artifacts.json'];
+    let _ovPresets       = [];
+    let _ovCurrentJobId  = null;
+    let _ovJobPollTimer  = null;
+    let _chainStepCounter = 0;
+    let _chainJobPollTimer = null;
+    const _CHAIN_DEFAULT_PROMPT =
+      'Using the previous output, continue the task.\n\nPrevious:\n{{previous}}\n\nContext:\n{{context}}';
 
-    // Voice preset state
-    let _ovPresets = [];
-    let _ovCurrentJobId = null;
+    // ── Slide navigation ───────────────────────────────────────────
+    let currentSlide = 0;
+    const SLIDE_COUNT = 3;
+    let isAnimating   = false;
+    const navUp   = document.getElementById('nav-up');
+    const navDown = document.getElementById('nav-down');
 
-    function _ovSetMode(which) {
-      const isClone = which === 'clone';
-      document.getElementById('ov-clone-details').open  = isClone;
-      document.getElementById('ov-design-details').open = !isClone;
-      document.getElementById('ov-clone-radio').checked  = isClone;
-      document.getElementById('ov-design-radio').checked = !isClone;
+    function goToSlide(idx) {
+      if (idx < 0 || idx >= SLIDE_COUNT || isAnimating) return;
+      isAnimating = true;
+      currentSlide = idx;
+      document.getElementById('slides-wrap').style.transform =
+        `translateY(-${idx * 100}vh)`;
+      updateNav();
+      setTimeout(() => { isAnimating = false; }, 700);
     }
 
-    function _ovActiveMode() {
-      return document.getElementById('ov-clone-radio').checked ? 'clone' : 'design';
+    function updateNav() {
+      navUp.classList.toggle('hidden', currentSlide === 0);
+      navDown.classList.toggle('hidden', currentSlide === SLIDE_COUNT - 1);
     }
 
-    function _ovInitExclusiveDetails() {
-      ['clone', 'design'].forEach(mode => {
-        document.getElementById(`ov-${mode}-details`)
-          .querySelector('summary')
-          .addEventListener('click', e => { e.preventDefault(); _ovSetMode(mode); });
-        document.getElementById(`ov-${mode}-radio`)
-          .addEventListener('change', () => _ovSetMode(mode));
-      });
+    // Wheel — pass through when inside a scrollable area not at its edge
+    window.addEventListener('wheel', (e) => {
+      let el = e.target;
+      while (el && el !== document.body) {
+        const ov = window.getComputedStyle(el).overflowY;
+        if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight) {
+          const atTop    = el.scrollTop <= 0;
+          const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+          if (e.deltaY < 0 && !atTop)    return;
+          if (e.deltaY > 0 && !atBottom) return;
+          break;
+        }
+        el = el.parentElement;
+      }
+      e.preventDefault();
+      if (isAnimating) return;
+      if (e.deltaY >  5) goToSlide(currentSlide + 1);
+      if (e.deltaY < -5) goToSlide(currentSlide - 1);
+    }, { passive: false });
+
+    // Keyboard
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') goToSlide(currentSlide + 1);
+      if (e.key === 'ArrowUp'   || e.key === 'PageUp'  ) goToSlide(currentSlide - 1);
+    });
+
+    // Touch
+    let _touchY = 0;
+    window.addEventListener('touchstart', (e) => { _touchY = e.touches[0].clientY; },
+      { passive: true });
+    window.addEventListener('touchend', (e) => {
+      const dy = _touchY - e.changedTouches[0].clientY;
+      if (Math.abs(dy) > 60) goToSlide(dy > 0 ? currentSlide + 1 : currentSlide - 1);
+    });
+
+    // ── Jobs drawer ────────────────────────────────────────────────
+    function openJobsDrawer() {
+      document.getElementById('jobs-overlay').style.display = 'block';
+      document.getElementById('jobs-drawer').classList.add('open');
+      loadJobs();
+    }
+    function closeJobsDrawer() {
+      document.getElementById('jobs-overlay').style.display = 'none';
+      document.getElementById('jobs-drawer').classList.remove('open');
     }
 
+    // ── Utilities ──────────────────────────────────────────────────
+    async function api(path, method = 'GET', body = null) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const r = await fetch('/v1' + path, opts);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    function _escHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function statusClass(s) { return 'status-' + s; }
+
+    // ── Voice presets ──────────────────────────────────────────────
     async function ovLoadPresets() {
       try {
         const r = await fetch('/v1/voice-presets');
         if (!r.ok) throw new Error(await r.text());
         _ovPresets = await r.json();
-      } catch (e) {
-        _ovPresets = [];
-      }
+      } catch (e) { _ovPresets = []; }
       _ovRenderPresetSelects();
-    }
-
-    function _escHtml(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function _ovRenderPresetSelects() {
@@ -493,9 +685,7 @@
         const preset = await r.json();
         msg.style.color = '#2a6';
         msg.textContent = `Saved "${preset.name}"`;
-        fileEl.value = '';
-        nameEl.value = '';
-        captEl.value = '';
+        fileEl.value = ''; nameEl.value = ''; captEl.value = '';
         ovUpdateSavePresetBtn();
         await ovLoadPresets();
         _ovSetMode('clone');
@@ -513,13 +703,12 @@
 
     async function ovSaveFromDesign() {
       if (!_ovCurrentJobId) return;
-      const msg     = document.getElementById('ov-save-design-msg');
-      const nameEl  = document.getElementById('ov-save-design-name');
-      const name    = nameEl.value.trim();
+      const msg    = document.getElementById('ov-save-design-msg');
+      const nameEl = document.getElementById('ov-save-design-name');
+      const name   = nameEl.value.trim();
       if (!name) return;
       const caption = document.getElementById('ov-text').value.trim();
-      msg.style.color = '#fa0';
-      msg.textContent = 'Saving…';
+      msg.style.color = '#fa0'; msg.textContent = 'Saving…';
       try {
         const r = await fetch('/v1/voice-presets/from-job', {
           method: 'POST',
@@ -535,125 +724,32 @@
         document.getElementById('ov-preset-select').value = preset.id;
         document.getElementById('ov-save-design-wrap').style.display = 'none';
       } catch (e) {
-        msg.style.color = '#e44';
-        msg.textContent = 'Error: ' + e.message;
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
     }
 
-    async function api(path, method = 'GET', body = null) {
-      const opts = { method, headers: { 'Content-Type': 'application/json' } };
-      if (body) opts.body = JSON.stringify(body);
-      const r = await fetch('/v1' + path, opts);
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
+    // ── OmniVoice control ──────────────────────────────────────────
+    function _ovSetMode(which) {
+      const isClone = which === 'clone';
+      document.getElementById('ov-clone-details').open  = isClone;
+      document.getElementById('ov-design-details').open = !isClone;
+      document.getElementById('ov-clone-radio').checked  = isClone;
+      document.getElementById('ov-design-radio').checked = !isClone;
     }
 
-    function statusClass(s) { return 'status-' + s; }
-
-    async function loadJobs() {
-      const tbody = document.getElementById('jobs-body');
-      try {
-        const data = await api('/jobs');
-        if (data.jobs.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="4" style="color:#555;padding:8px;">No jobs yet.</td></tr>';
-          return;
-        }
-        tbody.innerHTML = data.jobs.map(j => `
-          <tr onclick="loadDetail('${j.job_id}')">
-            <td style="color:#999">${j.job_id.slice(0,8)}&hellip;</td>
-            <td>${j.job_type}</td>
-            <td class="${statusClass(j.status)}">${j.status}</td>
-            <td>${new Date(j.created_at).toLocaleString()}</td>
-          </tr>`).join('');
-      } catch(e) {
-        tbody.innerHTML = `<tr><td colspan="4" style="color:#e44">Error: ${e.message}</td></tr>`;
-      }
+    function _ovActiveMode() {
+      return document.getElementById('ov-clone-radio').checked ? 'clone' : 'design';
     }
 
-    async function loadDetail(jobId) {
-      const section = document.getElementById('detail');
-      const content = document.getElementById('detail-content');
-      const filesDiv = document.getElementById('detail-files');
-      section.style.display = 'block';
-      try {
-        const job = await api('/jobs/' + jobId);
-        content.innerHTML = `<pre>${JSON.stringify(job, null, 2)}</pre>`;
-        filesDiv.innerHTML = FILES.map(f =>
-          `<a href="/v1/jobs/${jobId}/files/${f}" target="_blank"
-              style="color:#57a;margin-right:12px;">${f}</a>`
-        ).join('');
-        section.scrollIntoView({ behavior: 'smooth' });
-      } catch(e) {
-        content.innerHTML = `<span style="color:#e44">Error: ${e.message}</span>`;
-      }
+    function _ovInitExclusiveDetails() {
+      ['clone', 'design'].forEach(mode => {
+        document.getElementById(`ov-${mode}-details`)
+          .querySelector('summary')
+          .addEventListener('click', e => { e.preventDefault(); _ovSetMode(mode); });
+        document.getElementById(`ov-${mode}-radio`)
+          .addEventListener('change', () => _ovSetMode(mode));
+      });
     }
-
-    async function submitImage() {
-      const msg = document.getElementById('img-msg');
-      msg.textContent = '';
-      const body = {
-        prompt: document.getElementById('img-prompt').value,
-        width: parseInt(document.getElementById('img-width').value),
-        height: parseInt(document.getElementById('img-height').value),
-        steps: parseInt(document.getElementById('img-steps').value),
-      };
-      const neg = document.getElementById('img-neg').value;
-      const model = document.getElementById('img-model').value;
-      if (neg) body.negative_prompt = neg;
-      if (model) body.model = model;
-      try {
-        const job = await api('/jobs/image', 'POST', body);
-        msg.style.color = '#2a6';
-        msg.textContent = `Created job ${job.job_id}`;
-        loadJobs();
-      } catch(e) {
-        msg.style.color = '#e44';
-        msg.textContent = 'Error: ' + e.message;
-      }
-    }
-
-    async function submitVoice() {
-      const msg = document.getElementById('voice-msg');
-      msg.textContent = '';
-      const body = {
-        text: document.getElementById('voice-text').value,
-        speed: parseFloat(document.getElementById('voice-speed').value),
-      };
-      const voice = document.getElementById('voice-name').value;
-      const lang = document.getElementById('voice-lang').value;
-      if (voice) body.voice = voice;
-      if (lang) body.language = lang;
-      try {
-        const job = await api('/jobs/voice', 'POST', body);
-        msg.style.color = '#2a6';
-        msg.textContent = `Created job ${job.job_id}`;
-        loadJobs();
-      } catch(e) {
-        msg.style.color = '#e44';
-        msg.textContent = 'Error: ' + e.message;
-      }
-    }
-
-    async function clearQueue() {
-      if (!confirm('Delete all queued jobs? This cannot be undone.')) return;
-      try {
-        const r = await fetch('/v1/jobs', { method: 'DELETE' });
-        if (!r.ok) throw new Error(await r.text());
-        const data = await r.json();
-        alert(`Removed ${data.removed} queued job${data.removed === 1 ? '' : 's'}.`);
-        location.reload();
-      } catch(e) {
-        alert('Error: ' + e.message);
-      }
-    }
-
-    loadJobs();
-
-    // -----------------------------------------------------------------------
-    // OmniVoice panel
-    // -----------------------------------------------------------------------
-
-    let _ovJobPollTimer = null;
 
     async function ovFetch(path, method = 'GET', body = null) {
       const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -669,9 +765,8 @@
         document.getElementById('ov-mode').textContent = s.mode;
         document.getElementById('ov-proc-state').textContent = s.persistent.process_state;
         const dot = document.getElementById('ov-proc-dot');
-        dot.className = 'ov-dot ' + (
-          s.persistent.process_state === 'running' ? 'ov-running' : 'ov-stopped'
-        );
+        dot.className = 'ov-dot ' +
+          (s.persistent.process_state === 'running' ? 'ov-running' : 'ov-stopped');
         document.getElementById('ov-health').textContent = s.persistent.health;
         document.getElementById('ov-active').textContent = s.active_voice_jobs;
         document.getElementById('ov-mode-select').value = s.mode;
@@ -686,32 +781,28 @@
       try {
         await ovFetch('/' + action, 'POST');
         await loadOvStatus();
-        msg.style.color = '#2a6';
-        msg.textContent = action + ' OK';
+        msg.style.color = '#2a6'; msg.textContent = action + ' OK';
       } catch (e) {
-        msg.style.color = '#e44';
-        msg.textContent = 'Error: ' + e.message;
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
     }
 
     async function saveOvConfig() {
-      const msg = document.getElementById('ov-ctrl-msg');
+      const msg  = document.getElementById('ov-ctrl-msg');
       const mode = document.getElementById('ov-mode-select').value;
       try {
         const cfg = await ovFetch('/config');
         cfg.mode = mode;
         await ovFetch('/config', 'PUT', cfg);
         await loadOvStatus();
-        msg.style.color = '#2a6';
-        msg.textContent = 'Config saved.';
+        msg.style.color = '#2a6'; msg.textContent = 'Config saved.';
       } catch (e) {
-        msg.style.color = '#e44';
-        msg.textContent = 'Error: ' + e.message;
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
     }
 
     function _buildInstruct() {
-      const ids = ['ov-gender', 'ov-age', 'ov-pitch', 'ov-style', 'ov-accent', 'ov-dialect'];
+      const ids = ['ov-gender','ov-age','ov-pitch','ov-style','ov-accent','ov-dialect'];
       const parts = [];
       for (const id of ids) {
         const v = document.getElementById(id).value;
@@ -720,9 +811,7 @@
           const en = v.split(' / ')[0];
           const zh = v.split(' / ')[1];
           parts.push(en.includes('Dialect') ? zh.trim() : en.trim());
-        } else {
-          parts.push(v);
-        }
+        } else { parts.push(v); }
       }
       return parts.join(', ');
     }
@@ -759,117 +848,135 @@
       try {
         const job = await api('/jobs/voice', 'POST', body);
         msg.style.color = '#fa0';
-        msg.textContent = 'Job ' + job.job_id.slice(0, 8) + '... - synthesizing';
+        msg.textContent = 'Job ' + job.job_id.slice(0, 8) + '… synthesizing';
         if (_ovJobPollTimer) clearInterval(_ovJobPollTimer);
         _ovJobPollTimer = setInterval(() => _pollOvJob(job.job_id), 3000);
-        loadJobs();
       } catch (e) {
-        msg.style.color = '#e44';
-        msg.textContent = 'Error: ' + e.message;
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
     }
 
     async function _pollOvJob(jobId) {
       try {
-        const job = await api('/jobs/' + jobId);
+        const job   = await api('/jobs/' + jobId);
         const msg   = document.getElementById('ov-job-msg');
         const audio = document.getElementById('ov-audio');
         if (job.status === 'done') {
-          clearInterval(_ovJobPollTimer);
-          _ovJobPollTimer = null;
-          msg.style.color = '#2a6';
-          msg.textContent = 'Done — playing output.wav';
+          clearInterval(_ovJobPollTimer); _ovJobPollTimer = null;
+          msg.style.color = '#2a6'; msg.textContent = 'Done — playing output.wav';
           _ovCurrentJobId = jobId;
           audio.src = '/v1/jobs/' + jobId + '/files/output.wav';
-          audio.style.display = 'block';
-          audio.load();
-          loadJobs();
+          audio.style.display = 'block'; audio.load();
         } else if (job.status === 'error') {
-          clearInterval(_ovJobPollTimer);
-          _ovJobPollTimer = null;
-          msg.style.color = '#e44';
-          msg.textContent = 'Error: ' + (job.error || 'unknown');
-          loadJobs();
+          clearInterval(_ovJobPollTimer); _ovJobPollTimer = null;
+          msg.style.color = '#e44'; msg.textContent = 'Error: ' + (job.error || 'unknown');
         } else {
-          msg.textContent = 'Job ' + jobId.slice(0, 8) + '... - ' + job.status;
+          msg.textContent = 'Job ' + jobId.slice(0, 8) + '… ' + job.status;
         }
       } catch (e) { /* ignore transient poll errors */ }
     }
 
-    // Show "Save Voice" fieldset when a design-mode output is 3–10 seconds
-    document.getElementById('ov-audio').addEventListener('loadedmetadata', function() {
-      const dur  = this.duration;
-      const show = _ovActiveMode() === 'design' && isFinite(dur) && dur >= 3 && dur <= 10;
-      const wrap = document.getElementById('ov-save-design-wrap');
-      wrap.style.display = show ? 'block' : 'none';
-      if (show) {
-        document.getElementById('ov-save-design-name').value = '';
-        document.getElementById('ov-save-design-msg').textContent = '';
-        ovUpdateSaveDesignBtn();
-      }
-    });
-
-    // Remove-preset dropdown: selecting triggers confirm + DELETE
-    document.getElementById('ov-preset-remove-select').addEventListener('change', async function() {
-      const preset_id = this.value;
-      if (!preset_id) return;
-      const preset = _ovPresets.find(p => p.id === preset_id);
-      const name = preset ? preset.name : preset_id;
-      if (!window.confirm(`Remove voice preset "${name}"? This cannot be undone.`)) {
-        this.value = '';
-        return;
-      }
-      const msg = document.getElementById('ov-clone-msg');
+    // ── Image / Voice job submission ───────────────────────────────
+    async function submitImage() {
+      const msg = document.getElementById('img-msg');
+      msg.textContent = '';
+      const body = {
+        prompt: document.getElementById('img-prompt').value,
+        width:  parseInt(document.getElementById('img-width').value),
+        height: parseInt(document.getElementById('img-height').value),
+        steps:  parseInt(document.getElementById('img-steps').value),
+      };
+      const neg   = document.getElementById('img-neg').value;
+      const model = document.getElementById('img-model').value;
+      if (neg)   body.negative_prompt = neg;
+      if (model) body.model = model;
       try {
-        const r = await fetch(`/v1/voice-presets/${preset_id}`, { method: 'DELETE' });
-        if (!r.ok) throw new Error(await r.text());
-        const activeSel = document.getElementById('ov-preset-select');
-        if (activeSel.value === preset_id) activeSel.value = '';
-        this.value = '';
-        msg.style.color = '#2a6';
-        msg.textContent = `Removed "${name}"`;
-        await ovLoadPresets();
+        const job = await api('/jobs/image', 'POST', body);
+        msg.style.color = '#2a6'; msg.textContent = 'Created job ' + job.job_id;
       } catch (e) {
-        msg.style.color = '#e44';
-        msg.textContent = 'Error: ' + e.message;
-        this.value = '';
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
-    });
+    }
 
-    setInterval(loadOvStatus, 3000);
-    loadOvStatus();
-    _ovInitExclusiveDetails();
-    ovLoadPresets();
+    // ── Jobs table ─────────────────────────────────────────────────
+    async function clearQueue() {
+      if (!confirm('Delete all queued jobs? This cannot be undone.')) return;
+      try {
+        const r = await fetch('/v1/jobs', { method: 'DELETE' });
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+        alert(`Removed ${data.removed} queued job${data.removed === 1 ? '' : 's'}.`);
+        location.reload();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
 
-    // -----------------------------------------------------------------------
-    // Chain Jobs panel
-    // -----------------------------------------------------------------------
+    async function loadJobs() {
+      const tbody = document.getElementById('jobs-body');
+      try {
+        const data = await api('/jobs');
+        if (data.jobs.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="4" style="color:#333;padding:8px;">No jobs yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.jobs.map(j => `
+          <tr onclick="loadDetail('${j.job_id}')">
+            <td style="color:#555">${j.job_id.slice(0,8)}&hellip;</td>
+            <td style="color:#666">${j.job_type}</td>
+            <td class="${statusClass(j.status)}">${j.status}</td>
+            <td style="color:#555">${new Date(j.created_at).toLocaleString()}</td>
+          </tr>`).join('');
+      } catch(e) {
+        tbody.innerHTML =
+          `<tr><td colspan="4" style="color:#e44">Error: ${e.message}</td></tr>`;
+      }
+    }
 
-    let _chainStepCounter = 0;
-    let _chainJobPollTimer = null;
-    const _CHAIN_DEFAULT_PROMPT =
-      'Using the previous output, continue the task.\n\nPrevious:\n{{previous}}\n\nContext:\n{{context}}';
+    async function loadDetail(jobId) {
+      const detail  = document.getElementById('detail');
+      const content = document.getElementById('detail-content');
+      const filesDiv = document.getElementById('detail-files');
+      openJobsDrawer();
+      detail.style.display = 'block';
+      try {
+        const job = await api('/jobs/' + jobId);
+        content.innerHTML = `<pre>${JSON.stringify(job, null, 2)}</pre>`;
+        filesDiv.innerHTML = FILES.map(f =>
+          `<a href="/v1/jobs/${jobId}/files/${f}" target="_blank">${f}</a>`
+        ).join('');
+        detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch(e) {
+        content.innerHTML = `<span style="color:#e44">Error: ${e.message}</span>`;
+      }
+    }
 
+    // ── Chain jobs ─────────────────────────────────────────────────
     function addChainStep(name = '', prompt = _CHAIN_DEFAULT_PROMPT, contextFiles = '') {
       const idx = _chainStepCounter++;
-      const id = `chain-step-${idx}`;
-      const container = document.createElement('div');
-      container.id = id;
-      container.style.cssText =
-        'border:1px solid #333;border-radius:3px;padding:10px 12px;margin-bottom:8px;';
-      container.innerHTML =
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
-          '<span style="color:#888;font-size:0.8rem;">Step</span>' +
+      const id  = `chain-step-${idx}`;
+      const el  = document.createElement('div');
+      el.id = id;
+      el.className = 'chain-step-card';
+      el.innerHTML =
+        '<div class="chain-step-card-head">' +
+          '<span>Step</span>' +
           '<button class="secondary" onclick="removeChainStep(\'' + id + '\')" ' +
-            'style="margin-top:0;padding:2px 8px;font-size:0.75rem;">Remove</button>' +
+            'style="margin-top:0;padding:2px 8px;font-size:0.7rem;">Remove</button>' +
         '</div>' +
-        '<label>Step Name</label>' +
-        '<input type="text" value="' + _escHtml(name) + '" placeholder="e.g. Create outline" class="chain-step-name">' +
+        '<label>Name</label>' +
+        '<input type="text" value="' + _escHtml(name) + '" ' +
+          'placeholder="e.g. Create outline" class="chain-step-name">' +
         '<label>Prompt</label>' +
-        '<textarea class="chain-step-prompt" style="min-height:80px;">' + _escHtml(prompt) + '</textarea>' +
-        '<label>Context Files <span style="color:#555;font-size:0.75rem;">(one relative path per line)</span></label>' +
-        '<textarea class="chain-step-context" style="min-height:36px;">' + _escHtml(contextFiles) + '</textarea>';
-      document.getElementById('chain-steps-list').appendChild(container);
+        '<textarea class="chain-step-prompt" style="min-height:72px;">' +
+          _escHtml(prompt) +
+        '</textarea>' +
+        '<label>Context Files ' +
+          '<span style="color:#383838;font-size:0.7rem;">(one relative path per line)</span>' +
+        '</label>' +
+        '<textarea class="chain-step-context" style="min-height:34px;">' +
+          _escHtml(contextFiles) +
+        '</textarea>';
+      document.getElementById('chain-steps-list').appendChild(el);
     }
 
     function removeChainStep(id) {
@@ -878,17 +985,16 @@
     }
 
     async function submitChain() {
-      const msg = document.getElementById('chain-msg');
+      const msg          = document.getElementById('chain-msg');
       const stepStatusDiv = document.getElementById('chain-step-status');
-      const outputDiv = document.getElementById('chain-output');
-      msg.textContent = '';
-      stepStatusDiv.innerHTML = '';
+      const outputDiv    = document.getElementById('chain-output');
+      msg.textContent = ''; stepStatusDiv.innerHTML = '';
       outputDiv.style.display = 'none';
 
-      const stepEls = document.querySelectorAll('#chain-steps-list > [id^=chain-step-]');
+      const stepEls = document.querySelectorAll('#chain-steps-list > .chain-step-card');
       const steps = [];
       for (const el of stepEls) {
-        const name = el.querySelector('.chain-step-name').value.trim() || 'Step';
+        const name   = el.querySelector('.chain-step-name').value.trim() || 'Step';
         const prompt = el.querySelector('.chain-step-prompt').value;
         const ctxRaw = el.querySelector('.chain-step-context').value.trim();
         const context_files = ctxRaw
@@ -898,18 +1004,17 @@
       }
 
       if (steps.length === 0) {
-        msg.style.color = '#e44';
-        msg.textContent = 'Add at least one step.';
+        msg.style.color = '#e44'; msg.textContent = 'Add at least one step.';
         return;
       }
 
       const body = {
         input: document.getElementById('chain-input').value,
         llm: {
-          api_base: document.getElementById('chain-api-base').value.trim(),
-          model: document.getElementById('chain-model').value.trim(),
+          api_base:    document.getElementById('chain-api-base').value.trim(),
+          model:       document.getElementById('chain-model').value.trim(),
           temperature: parseFloat(document.getElementById('chain-temp').value),
-          max_tokens: parseInt(document.getElementById('chain-max-tokens').value),
+          max_tokens:  parseInt(document.getElementById('chain-max-tokens').value),
         },
         steps,
       };
@@ -922,37 +1027,33 @@
         msg.textContent = 'Job ' + job.job_id.slice(0, 8) + '… running';
         if (_chainJobPollTimer) clearInterval(_chainJobPollTimer);
         _chainJobPollTimer = setInterval(() => _pollChainJob(job.job_id), 3000);
-        loadJobs();
       } catch (e) {
-        msg.style.color = '#e44';
-        msg.textContent = 'Error: ' + e.message;
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
     }
 
     async function _pollChainJob(jobId) {
       try {
-        const msg = document.getElementById('chain-msg');
+        const msg          = document.getElementById('chain-msg');
         const stepStatusDiv = document.getElementById('chain-step-status');
-        const outputDiv = document.getElementById('chain-output');
+        const outputDiv    = document.getElementById('chain-output');
 
         const r = await fetch('/v1/jobs/' + jobId + '/files/status.json');
         if (!r.ok) return;
         const job = await r.json();
 
         if (job.status === 'done') {
-          clearInterval(_chainJobPollTimer);
-          _chainJobPollTimer = null;
-          msg.style.color = '#2a6';
-          msg.textContent = 'Done!';
+          clearInterval(_chainJobPollTimer); _chainJobPollTimer = null;
+          msg.style.color = '#2a6'; msg.textContent = 'Done.';
 
           try {
             const sr = await fetch('/v1/jobs/' + jobId + '/steps');
             if (sr.ok) {
               const sd = await sr.json();
               stepStatusDiv.innerHTML = sd.steps.map(s =>
-                '<div style="margin-bottom:4px;">' +
+                '<div style="margin-bottom:3px;">' +
                   '<span class="status-' + s.status + '">' + s.status + '</span>' +
-                  ' — ' + _escHtml(s.name) +
+                  ' <span style="color:#444;">—</span> ' + _escHtml(s.name) +
                 '</div>'
               ).join('');
             }
@@ -965,11 +1066,9 @@
               outputDiv.style.display = 'block';
             }
           } catch (e) {}
-          loadJobs();
 
         } else if (job.status === 'error') {
-          clearInterval(_chainJobPollTimer);
-          _chainJobPollTimer = null;
+          clearInterval(_chainJobPollTimer); _chainJobPollTimer = null;
           msg.style.color = '#e44';
           msg.textContent = 'Error: ' + (job.error || 'unknown');
 
@@ -979,12 +1078,12 @@
               const sd = await sr.json();
               stepStatusDiv.innerHTML = sd.steps.map(s => {
                 const cls = s.status === 'error' ? 'status-failed' : 'status-' + s.status;
-                return '<div style="margin-bottom:4px;"><span class="' + cls + '">' +
-                  s.status + '</span> — ' + _escHtml(s.name) + '</div>';
+                return '<div style="margin-bottom:3px;"><span class="' + cls + '">' +
+                  s.status + '</span> <span style="color:#444;">—</span> ' +
+                  _escHtml(s.name) + '</div>';
               }).join('');
             }
           } catch (e) {}
-          loadJobs();
 
         } else {
           const stepInfo = job.current_step_name
@@ -996,11 +1095,52 @@
       } catch (e) { /* ignore transient poll errors */ }
     }
 
-    // Seed one step on load
-    addChainStep(
-      'Create outline',
-      'Create five bullet points for the following task.\n\nInput:\n{{input}}',
-      ''
+    // ── Initialization ─────────────────────────────────────────────
+    loadJobs();
+    setInterval(loadOvStatus, 3000);
+    loadOvStatus();
+    _ovInitExclusiveDetails();
+    ovLoadPresets();
+    addChainStep('Create outline',
+      'Create five bullet points for the following task.\n\nInput:\n{{input}}', '');
+
+    // Save-design fieldset: show only for design-mode output between 3–10s
+    document.getElementById('ov-audio').addEventListener('loadedmetadata', function() {
+      const dur  = this.duration;
+      const show = _ovActiveMode() === 'design' && isFinite(dur) && dur >= 3 && dur <= 10;
+      const wrap = document.getElementById('ov-save-design-wrap');
+      wrap.style.display = show ? 'block' : 'none';
+      if (show) {
+        document.getElementById('ov-save-design-name').value = '';
+        document.getElementById('ov-save-design-msg').textContent = '';
+        ovUpdateSaveDesignBtn();
+      }
+    });
+
+    // Preset remove dropdown: confirm then DELETE
+    document.getElementById('ov-preset-remove-select').addEventListener('change',
+      async function() {
+        const preset_id = this.value;
+        if (!preset_id) return;
+        const preset = _ovPresets.find(p => p.id === preset_id);
+        const name   = preset ? preset.name : preset_id;
+        if (!window.confirm(`Remove voice preset "${name}"? This cannot be undone.`)) {
+          this.value = ''; return;
+        }
+        const msg = document.getElementById('ov-clone-msg');
+        try {
+          const r = await fetch(`/v1/voice-presets/${preset_id}`, { method: 'DELETE' });
+          if (!r.ok) throw new Error(await r.text());
+          const activeSel = document.getElementById('ov-preset-select');
+          if (activeSel.value === preset_id) activeSel.value = '';
+          this.value = '';
+          msg.style.color = '#2a6'; msg.textContent = `Removed "${name}"`;
+          await ovLoadPresets();
+        } catch (e) {
+          msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
+          this.value = '';
+        }
+      }
     );
   </script>
 </body>
