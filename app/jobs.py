@@ -79,6 +79,27 @@ def list_jobs() -> list[dict[str, Any]]:
     return jobs
 
 
+def clear_pending_jobs() -> int:
+    import shutil
+    if not JOBS_BASE.exists():
+        return 0
+    removed = 0
+    for date_dir in JOBS_BASE.iterdir():
+        if not date_dir.is_dir():
+            continue
+        for job_dir in date_dir.iterdir():
+            if not job_dir.is_dir():
+                continue
+            status_file = job_dir / "status.json"
+            if not status_file.exists():
+                continue
+            status = json.loads(status_file.read_text(encoding="utf-8"))
+            if status.get("status") == "queued":
+                shutil.rmtree(job_dir)
+                removed += 1
+    return removed
+
+
 def get_job_file(job_id: str, filename: str) -> Optional[Path]:
     job_dir = _find_job_dir(job_id)
     if job_dir is None:

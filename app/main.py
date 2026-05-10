@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .jobs import create_job, get_job, get_job_file, list_jobs
+from .jobs import clear_pending_jobs, create_job, get_job, get_job_file, list_jobs
 from .models import (
     HealthResponse,
     ImageJobRequest,
@@ -45,6 +45,12 @@ def create_voice_job(req: VoiceJobRequest):
 def get_jobs():
     jobs = list_jobs()
     return JobListResponse(jobs=[JobStatus(**j) for j in jobs], total=len(jobs))
+
+
+@app.delete("/v1/jobs", status_code=200)
+def clear_queue():
+    removed = clear_pending_jobs()
+    return {"removed": removed}
 
 
 @app.get("/v1/jobs/{job_id}", response_model=JobStatus)

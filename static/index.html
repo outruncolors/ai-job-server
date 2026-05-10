@@ -7,7 +7,10 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: monospace; background: #111; color: #ccc; padding: 24px; max-width: 900px; margin: 0 auto; }
-    h1 { color: #fff; margin-bottom: 24px; font-size: 1.4rem; }
+    h1 { color: #fff; font-size: 1.4rem; }
+    #header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    button.danger { background: #922; margin-top: 0; }
+    button.danger:hover { background: #b33; }
     h2 { color: #aaa; font-size: 1rem; margin-bottom: 12px; }
     section { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 16px; margin-bottom: 20px; }
     label { display: block; color: #888; font-size: 0.8rem; margin-bottom: 4px; margin-top: 10px; }
@@ -39,7 +42,10 @@
   </style>
 </head>
 <body>
-  <h1>AI Job Server</h1>
+  <div id="header">
+    <h1>AI Job Server</h1>
+    <button class="danger" onclick="clearQueue()">Clear Queue</button>
+  </div>
 
   <section>
     <h2>Submit Image Job</h2>
@@ -209,6 +215,19 @@
       } catch(e) {
         msg.style.color = '#e44';
         msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function clearQueue() {
+      if (!confirm('Delete all queued jobs? This cannot be undone.')) return;
+      try {
+        const r = await fetch('/v1/jobs', { method: 'DELETE' });
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+        alert(`Removed ${data.removed} queued job${data.removed === 1 ? '' : 's'}.`);
+        location.reload();
+      } catch(e) {
+        alert('Error: ' + e.message);
       }
     }
 
