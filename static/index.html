@@ -45,6 +45,8 @@
     .ov-error   { background: #e44; }
     .ov-msg { margin-top: 8px; font-size: 0.8rem; min-height: 1.2em; }
     #ov-audio { margin-top: 10px; width: 100%; display: none; }
+    input[type=range] { width: 100%; accent-color: #2a6; }
+    details summary::-webkit-details-marker { color: #555; }
   </style>
 </head>
 <body>
@@ -81,21 +83,144 @@
     <h2 style="margin-top:16px;">Quick Voice Test</h2>
     <label>Text</label>
     <textarea id="ov-text" placeholder="Hello from OmniVoice!"></textarea>
+
     <div class="row">
       <div>
-        <label>Voice</label>
-        <input id="ov-voice" type="text" placeholder="default">
+        <label>Language</label>
+        <input id="ov-lang" type="text" list="ov-lang-list" placeholder="Auto">
+        <datalist id="ov-lang-list">
+          <option value="Auto">
+          <option value="English">
+          <option value="Chinese">
+          <option value="Spanish">
+          <option value="French">
+          <option value="German">
+          <option value="Japanese">
+          <option value="Korean">
+          <option value="Portuguese">
+          <option value="Russian">
+          <option value="Italian">
+          <option value="Dutch">
+          <option value="Arabic">
+          <option value="Hindi">
+          <option value="Turkish">
+          <option value="Polish">
+          <option value="Swedish">
+          <option value="Vietnamese">
+          <option value="Thai">
+          <option value="Indonesian">
+          <option value="Ukrainian">
+          <option value="Greek">
+          <option value="Hebrew">
+          <option value="Persian">
+        </datalist>
       </div>
       <div>
         <label>Speed</label>
-        <input id="ov-spd" type="number" step="0.1" min="0.25" max="4.0" value="1.0">
-      </div>
-      <div>
-        <label>Language</label>
-        <input id="ov-lang" type="text" placeholder="">
+        <input id="ov-spd" type="number" step="0.05" min="0.5" max="1.5" value="1.0">
       </div>
     </div>
-    <button onclick="ovSubmitVoice()">Synthesize</button>
+
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#888;font-size:0.82rem;user-select:none;">Voice Design</summary>
+      <div class="row" style="margin-top:8px;">
+        <div>
+          <label>Gender / 性别</label>
+          <select id="ov-gender">
+            <option value="Auto">Auto</option>
+            <option value="Male / 男">Male</option>
+            <option value="Female / 女">Female</option>
+          </select>
+        </div>
+        <div>
+          <label>Age / 年龄</label>
+          <select id="ov-age">
+            <option value="Auto">Auto</option>
+            <option value="Child / 儿童">Child</option>
+            <option value="Teenager / 少年">Teenager</option>
+            <option value="Young Adult / 青年">Young Adult</option>
+            <option value="Middle-aged / 中年">Middle-aged</option>
+            <option value="Elderly / 老年">Elderly</option>
+          </select>
+        </div>
+        <div>
+          <label>Pitch / 音调</label>
+          <select id="ov-pitch">
+            <option value="Auto">Auto</option>
+            <option value="Very Low Pitch / 极低音调">Very Low</option>
+            <option value="Low Pitch / 低音调">Low</option>
+            <option value="Moderate Pitch / 中音调">Moderate</option>
+            <option value="High Pitch / 高音调">High</option>
+            <option value="Very High Pitch / 极高音调">Very High</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Style / 风格</label>
+          <select id="ov-style">
+            <option value="Auto">Auto</option>
+            <option value="Whisper / 耳语">Whisper</option>
+          </select>
+        </div>
+        <div>
+          <label>English Accent <span style="color:#555;font-size:0.75rem;">(EN only)</span></label>
+          <select id="ov-accent">
+            <option value="Auto">Auto</option>
+            <option value="American Accent / 美式口音">American</option>
+            <option value="Australian Accent / 澳大利亚口音">Australian</option>
+            <option value="British Accent / 英国口音">British</option>
+            <option value="Canadian Accent / 加拿大口音">Canadian</option>
+            <option value="Chinese Accent / 中国口音">Chinese</option>
+            <option value="Indian Accent / 印度口音">Indian</option>
+            <option value="Japanese Accent / 日本口音">Japanese</option>
+            <option value="Korean Accent / 韩国口音">Korean</option>
+            <option value="Portuguese Accent / 葡萄牙口音">Portuguese</option>
+            <option value="Russian Accent / 俄罗斯口音">Russian</option>
+          </select>
+        </div>
+        <div>
+          <label>Chinese Dialect <span style="color:#555;font-size:0.75rem;">(ZH only)</span></label>
+          <select id="ov-dialect">
+            <option value="Auto">Auto</option>
+            <option value="Northeast Dialect / 东北话">Northeast (东北话)</option>
+            <option value="Sichuan Dialect / 四川话">Sichuan (四川话)</option>
+            <option value="Henan Dialect / 河南话">Henan (河南话)</option>
+            <option value="Shaanxi Dialect / 陕西话">Shaanxi (陕西话)</option>
+            <option value="Guizhou Dialect / 贵州话">Guizhou (贵州话)</option>
+            <option value="Yunnan Dialect / 云南话">Yunnan (云南话)</option>
+            <option value="Guilin Dialect / 桂林话">Guilin (桂林话)</option>
+            <option value="Jinan Dialect / 济南话">Jinan (济南话)</option>
+            <option value="Shijiazhuang Dialect / 石家庄话">Shijiazhuang (石家庄话)</option>
+            <option value="Gansu Dialect / 甘肃话">Gansu (甘肃话)</option>
+            <option value="Ningxia Dialect / 宁夏话">Ningxia (宁夏话)</option>
+            <option value="Qingdao Dialect / 青岛话">Qingdao (青岛话)</option>
+          </select>
+        </div>
+      </div>
+    </details>
+
+    <details style="margin-top:8px;">
+      <summary style="cursor:pointer;color:#888;font-size:0.82rem;user-select:none;">Generation Settings</summary>
+      <div style="margin-top:10px;">
+        <label>Inference Steps: <strong id="ov-steps-val">32</strong>
+          <span style="color:#555;font-size:0.75rem;"> (4–64 · lower=faster · higher=quality)</span>
+        </label>
+        <input id="ov-steps" type="range" min="4" max="64" step="1" value="32"
+               oninput="document.getElementById('ov-steps-val').textContent=this.value"
+               style="margin-top:4px;">
+      </div>
+      <div style="margin-top:10px;">
+        <label>Guidance Scale (CFG): <strong id="ov-cfg-val">2.0</strong>
+          <span style="color:#555;font-size:0.75rem;"> (0–4 · default 2.0)</span>
+        </label>
+        <input id="ov-cfg" type="range" min="0" max="4" step="0.1" value="2.0"
+               oninput="document.getElementById('ov-cfg-val').textContent=parseFloat(this.value).toFixed(1)"
+               style="margin-top:4px;">
+      </div>
+    </details>
+
+    <button onclick="ovSubmitVoice()" style="margin-top:14px;">Synthesize</button>
     <div id="ov-job-msg" class="ov-msg"></div>
     <audio id="ov-audio" controls></audio>
   </section>
@@ -347,6 +472,23 @@
       }
     }
 
+    function _buildInstruct() {
+      const ids = ['ov-gender', 'ov-age', 'ov-pitch', 'ov-style', 'ov-accent', 'ov-dialect'];
+      const parts = [];
+      for (const id of ids) {
+        const v = document.getElementById(id).value;
+        if (!v || v === 'Auto') continue;
+        if (v.includes(' / ')) {
+          const en = v.split(' / ')[0];
+          const zh = v.split(' / ')[1];
+          parts.push(en.includes('Dialect') ? zh.trim() : en.trim());
+        } else {
+          parts.push(v);
+        }
+      }
+      return parts.join(', ');
+    }
+
     async function ovSubmitVoice() {
       const msg = document.getElementById('ov-job-msg');
       const audio = document.getElementById('ov-audio');
@@ -355,11 +497,13 @@
       const body = {
         text: document.getElementById('ov-text').value,
         speed: parseFloat(document.getElementById('ov-spd').value),
+        num_step: parseInt(document.getElementById('ov-steps').value),
+        guidance_scale: parseFloat(document.getElementById('ov-cfg').value),
       };
-      const voice = document.getElementById('ov-voice').value;
-      const lang = document.getElementById('ov-lang').value;
-      if (voice) body.voice = voice;
-      if (lang) body.language = lang;
+      const lang = document.getElementById('ov-lang').value.trim();
+      if (lang && lang !== 'Auto') body.language = lang;
+      const instruct = _buildInstruct();
+      if (instruct) body.instruct = instruct;
       try {
         const job = await api('/jobs/voice', 'POST', body);
         msg.style.color = '#fa0';

@@ -176,6 +176,8 @@ async def execute_voice_job(
         "speed": request.speed,
         "language": request.language or config.language,
         "response_format": config.response_format,
+        "num_step": request.num_step,
+        "guidance_scale": request.guidance_scale,
     }
     if mode == "persistent":
         effective["persistent_api_base"] = config.persistent_api_base
@@ -212,6 +214,8 @@ async def execute_voice_job(
                 language=request.language,
                 instruct=request.instruct,
                 ref_text=request.ref_text,
+                num_step=request.num_step,
+                guidance_scale=request.guidance_scale,
             )
         _update_artifacts(job_dir, output_path)
         _write_status(job_dir, "done")

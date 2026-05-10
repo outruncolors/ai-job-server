@@ -23,6 +23,8 @@ class VoiceJobRequest(BaseModel):
     mode: Optional[Literal["persistent", "ephemeral"]] = None
     instruct: Optional[str] = None
     ref_text: Optional[str] = None
+    num_step: Optional[int] = Field(default=None, ge=4, le=64)
+    guidance_scale: Optional[float] = Field(default=None, ge=0.0, le=4.0)
 
 
 class JobStatus(BaseModel):
