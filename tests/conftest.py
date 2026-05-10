@@ -31,6 +31,16 @@ def patch_voice_presets_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(vp, "INDEX_PATH", d / "index.json")
 
 
+@pytest.fixture(autouse=True)
+def patch_context_base(tmp_path, monkeypatch):
+    """Redirect context file root to a temp directory for each test."""
+    import app.chain.context as ctx
+    ctx_dir = tmp_path / "context"
+    ctx_dir.mkdir(exist_ok=True)
+    monkeypatch.setattr(ctx, "CONTEXT_BASE", ctx_dir)
+    return ctx_dir
+
+
 @pytest.fixture()
 def mock_execute_voice_job(monkeypatch):
     """Opt-in fixture: replaces execute_voice_job with a no-op AsyncMock.
@@ -38,6 +48,16 @@ def mock_execute_voice_job(monkeypatch):
     import app.main as m
     mock = AsyncMock()
     monkeypatch.setattr(m, "execute_voice_job", mock)
+    return mock
+
+
+@pytest.fixture()
+def mock_execute_chain_job(monkeypatch):
+    """Opt-in fixture: replaces execute_chain_job with a no-op AsyncMock.
+    Request this in tests that only verify job creation, not execution."""
+    import app.main as m
+    mock = AsyncMock()
+    monkeypatch.setattr(m, "execute_chain_job", mock)
     return mock
 
 

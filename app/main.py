@@ -7,6 +7,8 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .chain.executor import execute_chain_job, list_chain_steps, patch_initial_chain_status
+from .chain.models import ChainJobRequest
 from .jobs import (
     clear_pending_jobs,
     create_job,
@@ -65,6 +67,16 @@ def create_voice_job(req: VoiceJobRequest, background_tasks: BackgroundTasks):
     return JobCreatedResponse(**data)
 
 
+@app.post("/v1/jobs/chain", response_model=JobCreatedResponse, status_code=202)
+async def create_chain_job(req: ChainJobRequest, background_tasks: BackgroundTasks):
+    data = create_job("chain", req.model_dump(), req.input)
+    job_id = data["job_id"]
+    job_dir = find_job_dir(job_id)
+    patch_initial_chain_status(job_dir, len(req.steps))
+    background_tasks.add_task(execute_chain_job, job_id, job_dir, req)
+    return JobCreatedResponse(**data)
+
+
 @app.get("/v1/jobs", response_model=JobListResponse)
 def get_jobs():
     jobs = list_jobs()
@@ -85,7 +97,15 @@ def get_job_detail(job_id: str):
     return JobStatus(**data)
 
 
-@app.get("/v1/jobs/{job_id}/files/{filename}")
+@app.get("/v1/jobs/{job_id}/steps")
+def get_job_steps(job_id: str):
+    job_dir = find_job_dir(job_id)
+    if job_dir is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"steps": list_chain_steps(job_dir)}
+
+
+@app.get("/v1/jobs/{job_id}/files/{filename:path}")
 def get_job_file_endpoint(job_id: str, filename: str):
     path = get_job_file(job_id, filename)
     if path is None:
