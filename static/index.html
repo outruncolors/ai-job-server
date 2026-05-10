@@ -81,12 +81,12 @@
       max-width: 920px; margin: 0 auto;
     }
     .slide-label {
-      position: absolute; top: 22px; left: 28px; z-index: 2; pointer-events: none;
-      font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase; color: #333;
+      position: absolute; top: 18px; left: 28px; z-index: 2; pointer-events: none;
+      font-size: 2rem; letter-spacing: 0.04em; color: #2a6; font-weight: 700;
     }
     .slide-desc {
-      position: absolute; bottom: 20px; right: 28px; z-index: 2; pointer-events: none;
-      font-size: 0.68rem; color: #2e2e2e; text-align: right; line-height: 1.7;
+      position: absolute; bottom: 18px; right: 28px; z-index: 2; pointer-events: none;
+      font-size: 1.25rem; color: #ccc; text-align: right; line-height: 1.5;
     }
 
     /* ── Navigation arrows ────────────────────────────────────── */
@@ -140,6 +140,12 @@
     }
     #jobs-table td { padding: 4px 6px; border-bottom: 1px solid #1a1a1a; }
     #jobs-table tr:hover td { background: #1a1a1a; cursor: pointer; }
+    #jobs-pagination {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 4px; font-size: 0.72rem; color: #555;
+    }
+    #jobs-pagination button { padding: 3px 10px; font-size: 0.72rem; }
+    #jobs-pagination .page-info { flex: 1; text-align: center; }
     #detail { margin-top: 18px; }
     #detail h3 { color: #484848; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
     #detail pre { background: #181818; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 0.71rem; color: #999; }
@@ -206,6 +212,7 @@
         <tr><td colspan="4" style="color:#333;padding:8px;">Loading…</td></tr>
       </tbody>
     </table>
+    <div id="jobs-pagination"></div>
     <div id="detail" style="display:none;">
       <h3>Job Detail</h3>
       <div id="detail-content"></div>
@@ -910,22 +917,52 @@
       } catch(e) { alert('Error: ' + e.message); }
     }
 
+    const JOBS_PAGE_SIZE = 25;
+    let _jobsPage = 0;
+    let _allJobs = [];
+
+    function _renderJobsPage() {
+      const tbody = document.getElementById('jobs-body');
+      const pager = document.getElementById('jobs-pagination');
+      const totalPages = Math.max(1, Math.ceil(_allJobs.length / JOBS_PAGE_SIZE));
+      const start = _jobsPage * JOBS_PAGE_SIZE;
+      const page  = _allJobs.slice(start, start + JOBS_PAGE_SIZE);
+
+      if (page.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="color:#333;padding:8px;">No jobs yet.</td></tr>';
+        pager.innerHTML = '';
+        return;
+      }
+
+      tbody.innerHTML = page.map(j => `
+        <tr onclick="loadDetail('${j.job_id}')">
+          <td style="color:#555">${j.job_id.slice(0,8)}&hellip;</td>
+          <td style="color:#666">${j.job_type}</td>
+          <td class="${statusClass(j.status)}">${j.status}</td>
+          <td style="color:#555">${new Date(j.created_at).toLocaleString()}</td>
+        </tr>`).join('');
+
+      pager.innerHTML = totalPages <= 1 ? '' : `
+        <button class="secondary" onclick="_jobsGo(-1)" ${_jobsPage === 0 ? 'disabled' : ''}>&#8592; Prev</button>
+        <span class="page-info">${_jobsPage + 1} / ${totalPages}</span>
+        <button class="secondary" onclick="_jobsGo(1)" ${_jobsPage >= totalPages - 1 ? 'disabled' : ''}>Next &#8594;</button>`;
+    }
+
+    function _jobsGo(delta) {
+      const totalPages = Math.ceil(_allJobs.length / JOBS_PAGE_SIZE);
+      _jobsPage = Math.max(0, Math.min(_jobsPage + delta, totalPages - 1));
+      _renderJobsPage();
+    }
+
     async function loadJobs() {
       const tbody = document.getElementById('jobs-body');
       try {
         const data = await api('/jobs');
-        if (data.jobs.length === 0) {
-          tbody.innerHTML =
-            '<tr><td colspan="4" style="color:#333;padding:8px;">No jobs yet.</td></tr>';
-          return;
-        }
-        tbody.innerHTML = data.jobs.map(j => `
-          <tr onclick="loadDetail('${j.job_id}')">
-            <td style="color:#555">${j.job_id.slice(0,8)}&hellip;</td>
-            <td style="color:#666">${j.job_type}</td>
-            <td class="${statusClass(j.status)}">${j.status}</td>
-            <td style="color:#555">${new Date(j.created_at).toLocaleString()}</td>
-          </tr>`).join('');
+        _allJobs = (data.jobs || []).slice().sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        );
+        _jobsPage = 0;
+        _renderJobsPage();
       } catch(e) {
         tbody.innerHTML =
           `<tr><td colspan="4" style="color:#e44">Error: ${e.message}</td></tr>`;
