@@ -363,7 +363,7 @@ async def test_execute_chain_job_step2_error(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_ui_contains_chain_jobs():
-    ui_path = Path(__file__).parent.parent / "static" / "index.html"
+    ui_path = Path(__file__).parent.parent / "static" / "chain" / "index.html"
     content = ui_path.read_text(encoding="utf-8")
     assert "Chain Jobs" in content
 
