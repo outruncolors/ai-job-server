@@ -492,7 +492,7 @@
       document.getElementById('chain-steps-list').innerHTML = '';
       _chainStepCounter = 0;
       for (const s of steps) {
-        addChainStep(s.name || '', s.prompt || '', (s.context_files || []).join('\n'));
+        addChainStep(s.prompt || '', (s.context_files || []).join('\n'));
       }
     }
 
@@ -502,7 +502,7 @@
     let _chainStepCounter  = 0;
     let _chainJobPollTimer = null;
 
-    function addChainStep(name = '', prompt = _CHAIN_DEFAULT_PROMPT, contextFiles = '') {
+    function addChainStep(prompt = _CHAIN_DEFAULT_PROMPT, contextFiles = '') {
       const idx = _chainStepCounter++;
       const id  = `chain-step-${idx}`;
       const el  = document.createElement('div');
@@ -513,8 +513,6 @@
           '<button class="secondary" onclick="removeChainStep(\'' + id + '\')" ' +
             'style="margin-top:0;padding:2px 8px;font-size:0.7rem;">Remove</button>' +
         '</div>' +
-        '<label>Name</label>' +
-        '<input type="text" value="' + _escHtml(name) + '" placeholder="e.g. Create outline" class="chain-step-name">' +
         '<label>Prompt</label>' +
         '<textarea class="chain-step-prompt" style="min-height:72px;">' + _escHtml(prompt) + '</textarea>' +
         '<label>Context Files <span style="color:#383838;font-size:0.7rem;">(one relative path per line)</span></label>' +
@@ -530,12 +528,12 @@
     function _collectSteps() {
       const stepEls = document.querySelectorAll('#chain-steps-list > .chain-step-card');
       const steps = [];
+      let i = 0;
       for (const el of stepEls) {
-        const name   = el.querySelector('.chain-step-name').value.trim() || 'Step';
         const prompt = el.querySelector('.chain-step-prompt').value;
         const ctxRaw = el.querySelector('.chain-step-context').value.trim();
         const context_files = ctxRaw ? ctxRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
-        steps.push({ name, type: 'llm', prompt, context_files });
+        steps.push({ name: 'Step ' + (++i), type: 'llm', prompt, context_files });
       }
       return steps;
     }
@@ -695,7 +693,7 @@
 
     // ── Init ─────────────────────────────────────────────────────────
     _loadChainPresets();
-    addChainStep('Step 1', 'Create five bullet points for the following task:\n\n', '');
+    addChainStep('Create five bullet points for the following task:\n\n', '');
   </script>
 </body>
 </html>
