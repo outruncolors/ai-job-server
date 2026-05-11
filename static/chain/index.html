@@ -99,8 +99,25 @@
       font-size: 0.75rem; color: #bbb; white-space: pre-wrap; word-break: break-word;
       border: 1px solid #1e1e1e;
     }
-    .step-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; font-size: 0.74rem; }
-    .step-row .step-name { color: #555; }
+
+    /* ── Step collapse sections (output panel) ── */
+    .step-collapse { border: 1px solid #1e1e1e; border-radius: 3px; margin-bottom: 6px; background: #0f0f0f; }
+    .step-collapse > summary {
+      padding: 7px 10px; display: flex; align-items: baseline; gap: 8px;
+      cursor: pointer; user-select: none; list-style: none;
+    }
+    .step-collapse > summary::-webkit-details-marker { display: none; }
+    .step-collapse > summary::before { content: '▸ '; color: #444; font-size: 0.72rem; }
+    .step-collapse[open] > summary::before { content: '▾ '; }
+    .step-num { color: #555; font-size: 0.72rem; white-space: nowrap; }
+    .step-sep { color: #2a2a2a; }
+    .step-col-name { color: #666; font-size: 0.72rem; flex: 1; }
+    .step-collapse-body { padding: 0 10px 10px; }
+
+    /* ── Preset row ── */
+    .preset-save-row { display: flex; gap: 8px; margin-top: 6px; align-items: flex-end; }
+    .preset-save-row input { flex: 1; }
+    .preset-save-row button { flex: 0 0 auto; margin-top: 0; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -135,16 +152,22 @@
 
     <!-- ── Left: Controls ── -->
     <div id="panel-left">
-      <label>Title <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>
-      <input id="chain-title" type="text" placeholder="My chain job">
 
-      <label>Initial Input</label>
-      <textarea id="chain-input" style="min-height:120px;" placeholder="What should the chain work on?"></textarea>
-
-      <details style="margin-top:14px;">
+      <!-- LLM Settings at top, open by default -->
+      <details open>
         <summary>LLM Settings</summary>
         <div style="margin-top:10px;">
-          <div class="row">
+
+          <label>Preset</label>
+          <select id="chain-preset-select" onchange="applyChainPreset()">
+            <option value="">— select preset —</option>
+          </select>
+          <div class="preset-save-row">
+            <input id="chain-preset-name" type="text" placeholder="Preset name…">
+            <button class="secondary" onclick="saveChainPreset()">Save preset</button>
+          </div>
+
+          <div class="row" style="margin-top:10px;">
             <div>
               <label>API Base URL</label>
               <input id="chain-api-base" type="text" value="http://debian1.local:11434/v1">
@@ -164,8 +187,15 @@
               <input id="chain-max-tokens" type="number" min="1" value="2048">
             </div>
           </div>
+
         </div>
       </details>
+
+      <label style="margin-top:18px;">Title <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>
+      <input id="chain-title" type="text" placeholder="My chain job">
+
+      <label>Initial Input</label>
+      <textarea id="chain-input" style="min-height:120px;" placeholder="What should the chain work on?"></textarea>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:20px;margin-bottom:8px;">
         <span class="section-label">STEPS</span>
@@ -182,7 +212,7 @@
       <p class="section-label" style="margin-bottom:14px;">OUTPUT</p>
       <div id="chain-msg" class="msg" style="margin-top:0;"></div>
       <div id="chain-step-status" style="margin-top:14px;"></div>
-      <div id="chain-output" style="display:none;margin-top:24px;">
+      <div id="chain-output" style="display:none;margin-top:16px;">
         <p class="section-label" style="margin-bottom:6px;">FINAL OUTPUT</p>
         <pre id="chain-output-pre" class="output-pre"></pre>
       </div>
@@ -287,6 +317,57 @@
       }
     }
 
+    // ── Chain Presets ────────────────────────────────────────────────
+    const _PRESETS_KEY = 'chain_llm_presets';
+
+    function _loadChainPresets() {
+      const sel = document.getElementById('chain-preset-select');
+      const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
+      const current = sel.value;
+      while (sel.options.length > 1) sel.remove(1);
+      for (const p of presets) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        sel.appendChild(opt);
+      }
+      if (current) sel.value = current;
+    }
+
+    function applyChainPreset() {
+      const id = document.getElementById('chain-preset-select').value;
+      if (!id) return;
+      const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
+      const p = presets.find(x => x.id === id);
+      if (!p) return;
+      document.getElementById('chain-api-base').value   = p.api_base;
+      document.getElementById('chain-model').value      = p.model;
+      document.getElementById('chain-temp').value       = p.temperature;
+      document.getElementById('chain-max-tokens').value = p.max_tokens;
+    }
+
+    function saveChainPreset() {
+      const name = document.getElementById('chain-preset-name').value.trim();
+      if (!name) { alert('Enter a preset name first.'); return; }
+      const entry = {
+        api_base:    document.getElementById('chain-api-base').value.trim(),
+        model:       document.getElementById('chain-model').value.trim(),
+        temperature: parseFloat(document.getElementById('chain-temp').value),
+        max_tokens:  parseInt(document.getElementById('chain-max-tokens').value),
+      };
+      const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
+      const existing = presets.find(x => x.name === name);
+      if (existing) {
+        Object.assign(existing, entry);
+      } else {
+        presets.push({ id: crypto.randomUUID(), name, ...entry });
+      }
+      localStorage.setItem(_PRESETS_KEY, JSON.stringify(presets));
+      _loadChainPresets();
+      const saved = JSON.parse(localStorage.getItem(_PRESETS_KEY)).find(x => x.name === name);
+      if (saved) document.getElementById('chain-preset-select').value = saved.id;
+    }
+
     // ── Chain ────────────────────────────────────────────────────────
     const _CHAIN_DEFAULT_PROMPT =
       'Using the previous output, continue the task.\n\nPrevious:\n{{previous}}\n\nContext:\n{{context}}';
@@ -363,6 +444,43 @@
       }
     }
 
+    function _stepCollapseHtml(step, stepIndex, promptText, outputText) {
+      const cls = step.status === 'error' ? 'status-failed' : statusClass(step.status);
+      let bodyHtml = '';
+      if (promptText != null) {
+        bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">PROMPT</p>' +
+          '<pre class="output-pre">' + _escHtml(promptText) + '</pre>';
+      }
+      if (outputText != null) {
+        bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">OUTPUT</p>' +
+          '<pre class="output-pre">' + _escHtml(outputText) + '</pre>';
+      } else if (step.error) {
+        bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
+          '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
+      }
+      return '<details class="step-collapse">' +
+        '<summary>' +
+          '<span class="step-num">Step ' + stepIndex + '</span>' +
+          '<span class="step-sep">·</span>' +
+          '<span class="step-col-name">' + _escHtml(step.name) + '</span>' +
+          '<span class="' + cls + '">' + step.status + '</span>' +
+        '</summary>' +
+        '<div class="step-collapse-body">' + bodyHtml + '</div>' +
+        '</details>';
+    }
+
+    async function _fetchStepFiles(jobId, step, arrayIndex) {
+      const dirName = String(arrayIndex + 1).padStart(3, '0') + '_' + step.id;
+      const base = '/v1/jobs/' + jobId + '/files/steps/' + dirName + '/';
+      const [pr, or] = await Promise.allSettled([
+        fetch(base + 'prompt.txt'),
+        fetch(base + 'output.txt'),
+      ]);
+      const promptText = pr.status === 'fulfilled' && pr.value.ok ? await pr.value.text() : null;
+      const outputText = or.status === 'fulfilled' && or.value.ok ? await or.value.text() : null;
+      return { promptText, outputText };
+    }
+
     async function _pollChainJob(jobId) {
       try {
         const msg           = document.getElementById('chain-msg');
@@ -376,16 +494,24 @@
         if (job.status === 'done') {
           clearInterval(_chainJobPollTimer); _chainJobPollTimer = null;
           msg.style.color = '#2a6'; msg.textContent = 'Done.';
+
           try {
             const sr = await fetch('/v1/jobs/' + jobId + '/steps');
             if (sr.ok) {
               const sd = await sr.json();
-              stepStatusDiv.innerHTML = sd.steps.map(s =>
-                '<div class="step-row"><span class="' + statusClass(s.status) + '">' + s.status +
-                '</span><span class="step-name">— ' + _escHtml(s.name) + '</span></div>'
-              ).join('');
+              const steps = sd.steps || [];
+              // Fetch files for all intermediate (non-final) steps in parallel
+              const intermediateSteps = steps.slice(0, -1);
+              const fileResults = await Promise.allSettled(
+                intermediateSteps.map((step, i) => _fetchStepFiles(jobId, step, i))
+              );
+              stepStatusDiv.innerHTML = intermediateSteps.map((step, i) => {
+                const files = fileResults[i].status === 'fulfilled' ? fileResults[i].value : {};
+                return _stepCollapseHtml(step, i + 1, files.promptText ?? null, files.outputText ?? null);
+              }).join('');
             }
           } catch (e) {}
+
           try {
             const or = await fetch('/v1/jobs/' + jobId + '/files/final_output.txt');
             if (or.ok) {
@@ -398,21 +524,26 @@
           clearInterval(_chainJobPollTimer); _chainJobPollTimer = null;
           msg.style.color = '#e44';
           msg.textContent = 'Error: ' + (job.error || 'unknown');
+
           try {
             const sr = await fetch('/v1/jobs/' + jobId + '/steps');
             if (sr.ok) {
               const sd = await sr.json();
-              stepStatusDiv.innerHTML = sd.steps.map(s => {
-                const cls = s.status === 'error' ? 'status-failed' : statusClass(s.status);
-                return '<div class="step-row"><span class="' + cls + '">' + s.status +
-                  '</span><span class="step-name">— ' + _escHtml(s.name) + '</span></div>';
+              const steps = sd.steps || [];
+              // Show all steps that ran (no final output to display separately)
+              const fileResults = await Promise.allSettled(
+                steps.map((step, i) => _fetchStepFiles(jobId, step, i))
+              );
+              stepStatusDiv.innerHTML = steps.map((step, i) => {
+                const files = fileResults[i].status === 'fulfilled' ? fileResults[i].value : {};
+                return _stepCollapseHtml(step, i + 1, files.promptText ?? null, files.outputText ?? null);
               }).join('');
             }
           } catch (e) {}
 
         } else {
           const stepInfo = job.current_step_name
-            ? ' · step ' + job.current_step_index + '/' + job.step_count + ': ' + _escHtml(job.current_step_name)
+            ? ' · step ' + job.current_step_index + '/' + job.step_count + ': ' + job.current_step_name
             : '';
           msg.textContent = 'Job ' + jobId.slice(0, 8) + '… ' + job.status + stepInfo;
         }
@@ -420,6 +551,7 @@
     }
 
     // ── Init ─────────────────────────────────────────────────────────
+    _loadChainPresets();
     addChainStep('Create outline', 'Create five bullet points for the following task.\n\nInput:\n{{input}}', '');
   </script>
 </body>
