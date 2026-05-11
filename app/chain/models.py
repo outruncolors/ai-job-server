@@ -23,7 +23,7 @@ class ChainStep(BaseModel):
 
 class ChainJobRequest(BaseModel):
     title: Optional[str] = None
-    input: str = Field(min_length=1)
+    input: str = Field(default="")
     llm: ChainLLMConfig
     steps: list[ChainStep] = Field(min_length=1)
 

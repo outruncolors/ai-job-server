@@ -47,30 +47,32 @@
     #topbar a { color: #444; text-decoration: none; font-size: 0.72rem; letter-spacing: 0.06em; transition: color 0.15s; }
     #topbar a:hover { color: #888; }
     .page-title { color: #2a6; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.06em; flex: 1; }
-    #jobs-btn { font-size: 0.65rem; color: #444; cursor: pointer; letter-spacing: 0.14em; text-transform: uppercase; transition: color 0.18s; }
-    #jobs-btn:hover { color: #888; }
+    .topbar-btn { font-size: 0.65rem; color: #444; cursor: pointer; letter-spacing: 0.14em; text-transform: uppercase; transition: color 0.18s; }
+    .topbar-btn:hover { color: #888; }
 
     /* ── Panels ── */
     #panels { display: flex; height: 100vh; padding-top: 44px; }
     #panel-left  { flex: 1; overflow-y: auto; padding: 24px 28px; border-right: 1px solid #1a1a1a; }
     #panel-right { flex: 1; overflow-y: auto; padding: 24px 28px; }
 
-    /* ── Jobs drawer ── */
-    #jobs-overlay {
+    /* ── Drawers (shared overlay) ── */
+    #drawer-overlay {
       display: none; position: fixed; inset: 0;
       background: rgba(0,0,0,0.6); z-index: 150; backdrop-filter: blur(4px);
     }
-    #jobs-drawer {
+    .drawer {
       position: fixed; top: 0; right: 0; height: 100vh; width: min(500px, 96vw);
       background: #131313; border-left: 1px solid #222;
       transform: translateX(100%);
       transition: transform 0.36s cubic-bezier(0.4, 0, 0.2, 1);
       z-index: 200; overflow-y: auto; padding: 20px 22px;
     }
-    #jobs-drawer.open { transform: translateX(0); }
-    #jobs-drawer-head { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-    #jobs-drawer-head h2 { flex: 1; color: #555; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
-    #jobs-drawer-head button { margin-top: 0; padding: 4px 10px; font-size: 0.72rem; }
+    .drawer.open { transform: translateX(0); }
+    .drawer-head { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .drawer-head h2 { flex: 1; color: #555; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
+    .drawer-head button { margin-top: 0; padding: 4px 10px; font-size: 0.72rem; }
+
+    /* ── Jobs drawer ── */
     #jobs-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
     #jobs-table th { text-align: left; color: #484848; padding: 3px 6px; border-bottom: 1px solid #222; }
     #jobs-table td { padding: 4px 6px; border-bottom: 1px solid #1a1a1a; }
@@ -83,6 +85,18 @@
     #detail pre { background: #181818; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 0.71rem; color: #999; }
     #detail-files { margin-top: 8px; font-size: 0.74rem; }
     #detail-files a { color: #446; margin-right: 10px; }
+
+    /* ── Sequences drawer ── */
+    #seq-save-section { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #1a1a1a; }
+    #seq-save-section label { margin-top: 0; }
+    #seq-save-row { display: flex; gap: 8px; margin-top: 6px; align-items: flex-end; }
+    #seq-save-row input { flex: 1; }
+    #seq-save-row button { flex: 0 0 auto; margin-top: 0; }
+    #seq-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+    #seq-table th { text-align: left; color: #484848; padding: 3px 6px; border-bottom: 1px solid #222; }
+    #seq-table td { padding: 5px 6px; border-bottom: 1px solid #1a1a1a; vertical-align: middle; }
+    #seq-table .seq-actions { display: flex; gap: 4px; justify-content: flex-end; }
+    #seq-table .seq-actions button { margin-top: 0; padding: 2px 8px; font-size: 0.7rem; }
 
     /* ── Chain-specific ── */
     .chain-step-card {
@@ -125,16 +139,19 @@
   <div id="topbar">
     <a href="/">&#8592; AI Jobs</a>
     <span class="page-title">Chain Jobs</span>
-    <div id="jobs-btn" onclick="openJobsDrawer()">Jobs</div>
+    <div class="topbar-btn" onclick="openSeqDrawer()" style="margin-right:4px;">Sequences</div>
+    <div class="topbar-btn" onclick="openJobsDrawer()">Jobs</div>
   </div>
 
-  <div id="jobs-overlay" onclick="closeJobsDrawer()"></div>
-  <div id="jobs-drawer">
-    <div id="jobs-drawer-head">
+  <div id="drawer-overlay" onclick="closeAllDrawers()"></div>
+
+  <!-- ── Jobs drawer ── -->
+  <div id="jobs-drawer" class="drawer">
+    <div class="drawer-head">
       <h2>Jobs</h2>
       <button class="secondary" onclick="loadJobs()">Refresh</button>
       <button class="danger"    onclick="clearQueue()">Clear Queue</button>
-      <button class="secondary" onclick="closeJobsDrawer()">&#10005;</button>
+      <button class="secondary" onclick="closeAllDrawers()">&#10005;</button>
     </div>
     <table id="jobs-table">
       <thead><tr><th>Job ID</th><th>Type</th><th>Status</th><th>Created</th></tr></thead>
@@ -146,6 +163,25 @@
       <div id="detail-content"></div>
       <div id="detail-files"></div>
     </div>
+  </div>
+
+  <!-- ── Sequences drawer ── -->
+  <div id="seq-drawer" class="drawer">
+    <div class="drawer-head">
+      <h2>Sequences</h2>
+      <button class="secondary" onclick="closeAllDrawers()">&#10005;</button>
+    </div>
+    <div id="seq-save-section">
+      <label>Save current steps as</label>
+      <div id="seq-save-row">
+        <input id="seq-save-name" type="text" placeholder="Chain name…">
+        <button onclick="saveSeq()">Save</button>
+      </div>
+    </div>
+    <table id="seq-table">
+      <thead><tr><th>Name</th><th>Updated</th><th></th></tr></thead>
+      <tbody id="seq-body"><tr><td colspan="3" style="color:#333;padding:8px;">No sequences saved.</td></tr></tbody>
+    </table>
   </div>
 
   <div id="panels">
@@ -191,12 +227,6 @@
         </div>
       </details>
 
-      <label style="margin-top:18px;">Title <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>
-      <input id="chain-title" type="text" placeholder="My chain job">
-
-      <label>Initial Input</label>
-      <textarea id="chain-input" style="min-height:120px;" placeholder="What should the chain work on?"></textarea>
-
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:20px;margin-bottom:8px;">
         <span class="section-label">STEPS</span>
         <button class="secondary" onclick="addChainStep()"
@@ -238,16 +268,28 @@
     }
     function statusClass(s) { return 'status-' + s; }
 
+    // ── Drawers ─────────────────────────────────────────────────────
+    let _openDrawer = null;
+
+    function _openDrawerById(id, onOpen) {
+      if (_openDrawer && _openDrawer !== id) {
+        document.getElementById(_openDrawer).classList.remove('open');
+      }
+      _openDrawer = id;
+      document.getElementById('drawer-overlay').style.display = 'block';
+      document.getElementById(id).classList.add('open');
+      if (onOpen) onOpen();
+    }
+    function closeAllDrawers() {
+      document.getElementById('drawer-overlay').style.display = 'none';
+      document.querySelectorAll('.drawer').forEach(d => d.classList.remove('open'));
+      _openDrawer = null;
+    }
+
+    function openJobsDrawer() { _openDrawerById('jobs-drawer', loadJobs); }
+    function openSeqDrawer()  { _openDrawerById('seq-drawer', loadSeqs); }
+
     // ── Jobs drawer ─────────────────────────────────────────────────
-    function openJobsDrawer() {
-      document.getElementById('jobs-overlay').style.display = 'block';
-      document.getElementById('jobs-drawer').classList.add('open');
-      loadJobs();
-    }
-    function closeJobsDrawer() {
-      document.getElementById('jobs-overlay').style.display = 'none';
-      document.getElementById('jobs-drawer').classList.remove('open');
-    }
     async function clearQueue() {
       if (!confirm('Delete all queued jobs? This cannot be undone.')) return;
       try {
@@ -317,7 +359,7 @@
       }
     }
 
-    // ── Chain Presets ────────────────────────────────────────────────
+    // ── Chain Presets (localStorage) ─────────────────────────────────
     const _PRESETS_KEY = 'chain_llm_presets';
 
     function _loadChainPresets() {
@@ -372,6 +414,84 @@
       if (saved) document.getElementById('chain-preset-select').value = saved.id;
     }
 
+    // ── Sequences drawer ─────────────────────────────────────────────
+    let _allSeqs = [];
+
+    function _renderSeqs() {
+      const tbody = document.getElementById('seq-body');
+      if (_allSeqs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="color:#333;padding:8px;">No sequences saved.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = _allSeqs.map(s => `
+        <tr>
+          <td style="color:#aaa;">${_escHtml(s.name)}</td>
+          <td style="color:#555;">${new Date(s.updated_at).toLocaleDateString()}</td>
+          <td>
+            <div class="seq-actions">
+              <button class="secondary" onclick="editSeq('${s.id}')">Edit</button>
+              <button class="secondary" onclick="dupSeq('${s.id}')">Dup</button>
+              <button class="danger"    onclick="delSeq('${s.id}')">Del</button>
+            </div>
+          </td>
+        </tr>`).join('');
+    }
+
+    async function loadSeqs() {
+      try {
+        const data = await api('/chain-sequences');
+        _allSeqs = (data.sequences || []).slice().sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
+        _renderSeqs();
+      } catch(e) {
+        document.getElementById('seq-body').innerHTML =
+          `<tr><td colspan="3" style="color:#e44">Error: ${e.message}</td></tr>`;
+      }
+    }
+
+    async function saveSeq() {
+      const name = document.getElementById('seq-save-name').value.trim();
+      if (!name) { alert('Enter a sequence name.'); return; }
+      const steps = _collectSteps();
+      if (steps.length === 0) { alert('Add at least one step.'); return; }
+      try {
+        await api('/chain-sequences', 'POST', { name, steps });
+        await loadSeqs();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    function editSeq(id) {
+      const seq = _allSeqs.find(s => s.id === id);
+      if (!seq) return;
+      loadStepsIntoForm(seq.steps);
+      document.getElementById('seq-save-name').value = seq.name;
+      closeAllDrawers();
+    }
+
+    async function dupSeq(id) {
+      try {
+        await api('/chain-sequences/' + id + '/duplicate', 'POST');
+        await loadSeqs();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function delSeq(id) {
+      const seq = _allSeqs.find(s => s.id === id);
+      if (!seq) return;
+      if (!confirm('Delete sequence "' + seq.name + '"?')) return;
+      try {
+        await api('/chain-sequences/' + id, 'DELETE');
+        await loadSeqs();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    function loadStepsIntoForm(steps) {
+      document.getElementById('chain-steps-list').innerHTML = '';
+      _chainStepCounter = 0;
+      for (const s of steps) {
+        addChainStep(s.name || '', s.prompt || '', (s.context_files || []).join('\n'));
+      }
+    }
+
     // ── Chain ────────────────────────────────────────────────────────
     const _CHAIN_DEFAULT_PROMPT =
       'Using the previous output, continue the task.\n\nPrevious:\n{{previous}}\n\nContext:\n{{context}}';
@@ -403,13 +523,7 @@
       if (el) el.remove();
     }
 
-    async function submitChain() {
-      const msg           = document.getElementById('chain-msg');
-      const stepStatusDiv = document.getElementById('chain-step-status');
-      const outputDiv     = document.getElementById('chain-output');
-      const hint          = document.getElementById('chain-right-hint');
-      msg.textContent = ''; stepStatusDiv.innerHTML = ''; outputDiv.style.display = 'none';
-
+    function _collectSteps() {
       const stepEls = document.querySelectorAll('#chain-steps-list > .chain-step-card');
       const steps = [];
       for (const el of stepEls) {
@@ -419,12 +533,23 @@
         const context_files = ctxRaw ? ctxRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
         steps.push({ name, type: 'llm', prompt, context_files });
       }
+      return steps;
+    }
+
+    async function submitChain() {
+      const msg           = document.getElementById('chain-msg');
+      const stepStatusDiv = document.getElementById('chain-step-status');
+      const outputDiv     = document.getElementById('chain-output');
+      const hint          = document.getElementById('chain-right-hint');
+      msg.textContent = ''; stepStatusDiv.innerHTML = ''; outputDiv.style.display = 'none';
+
+      const steps = _collectSteps();
       if (steps.length === 0) {
         msg.style.color = '#e44'; msg.textContent = 'Add at least one step.'; return;
       }
 
       const body = {
-        input: document.getElementById('chain-input').value,
+        input: '',
         llm: {
           api_base:    document.getElementById('chain-api-base').value.trim(),
           model:       document.getElementById('chain-model').value.trim(),
@@ -433,8 +558,6 @@
         },
         steps,
       };
-      const title = document.getElementById('chain-title').value.trim();
-      if (title) body.title = title;
 
       try {
         hint.style.display = 'none';
@@ -504,7 +627,6 @@
             if (sr.ok) {
               const sd = await sr.json();
               const steps = sd.steps || [];
-              // Fetch files for all intermediate (non-final) steps in parallel
               const intermediateSteps = steps.slice(0, -1);
               const fileResults = await Promise.allSettled(
                 intermediateSteps.map((step, i) => _fetchStepFiles(jobId, step, i))
@@ -534,7 +656,6 @@
             if (sr.ok) {
               const sd = await sr.json();
               const steps = sd.steps || [];
-              // Show all steps that ran (no final output to display separately)
               const fileResults = await Promise.allSettled(
                 steps.map((step, i) => _fetchStepFiles(jobId, step, i))
               );
@@ -556,7 +677,7 @@
 
     // ── Init ─────────────────────────────────────────────────────────
     _loadChainPresets();
-    addChainStep('Create outline', 'Create five bullet points for the following task.\n\nInput:\n{{input}}', '');
+    addChainStep('Step 1', 'Create five bullet points for the following task:\n\n', '');
   </script>
 </body>
 </html>

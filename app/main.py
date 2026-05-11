@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .chain.executor import execute_chain_job, list_chain_steps, patch_initial_chain_status
 from .chain.models import ChainJobRequest
+from .chain.sequences import delete_sequence, duplicate_sequence, list_sequences, save_sequence
 from .jobs import (
     clear_pending_jobs,
     create_job,
@@ -111,6 +112,31 @@ def get_job_file_endpoint(job_id: str, filename: str):
     if path is None:
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(path)
+
+
+@app.get("/v1/chain-sequences")
+def get_chain_sequences():
+    return {"sequences": list_sequences()}
+
+
+@app.post("/v1/chain-sequences", status_code=200)
+async def upsert_chain_sequence(body: dict):
+    return save_sequence(body["name"], body["steps"])
+
+
+@app.delete("/v1/chain-sequences/{seq_id}", status_code=200)
+def remove_chain_sequence(seq_id: str):
+    if not delete_sequence(seq_id):
+        raise HTTPException(status_code=404, detail="Sequence not found")
+    return {"ok": True}
+
+
+@app.post("/v1/chain-sequences/{seq_id}/duplicate", status_code=200)
+def dup_chain_sequence(seq_id: str):
+    result = duplicate_sequence(seq_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Sequence not found")
+    return result
 
 
 # Serve static UI from /
