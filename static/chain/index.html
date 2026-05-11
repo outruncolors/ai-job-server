@@ -360,7 +360,11 @@
       if (existing) {
         Object.assign(existing, entry);
       } else {
-        presets.push({ id: crypto.randomUUID(), name, ...entry });
+        const id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const r = Math.random() * 16 | 0;
+          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+        presets.push({ id, name, ...entry });
       }
       localStorage.setItem(_PRESETS_KEY, JSON.stringify(presets));
       _loadChainPresets();
