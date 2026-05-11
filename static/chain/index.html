@@ -242,6 +242,10 @@
       <p class="section-label" style="margin-bottom:14px;">OUTPUT</p>
       <div id="chain-msg" class="msg" style="margin-top:0;"></div>
       <div id="chain-step-status" style="margin-top:14px;"></div>
+      <div id="chain-final-input" style="display:none;margin-top:16px;">
+        <p class="section-label" style="margin-bottom:6px;">FINAL INPUT</p>
+        <pre id="chain-final-input-pre" class="output-pre"></pre>
+      </div>
       <div id="chain-output" style="display:none;margin-top:16px;">
         <p class="section-label" style="margin-bottom:6px;">FINAL OUTPUT</p>
         <pre id="chain-output-pre" class="output-pre"></pre>
@@ -542,6 +546,7 @@
       const outputDiv     = document.getElementById('chain-output');
       const hint          = document.getElementById('chain-right-hint');
       msg.textContent = ''; stepStatusDiv.innerHTML = ''; outputDiv.style.display = 'none';
+      document.getElementById('chain-final-input').style.display = 'none';
 
       const steps = _collectSteps();
       if (steps.length === 0) {
@@ -635,6 +640,19 @@
                 const files = fileResults[i].status === 'fulfilled' ? fileResults[i].value : {};
                 return _stepCollapseHtml(step, i + 1, files.promptText ?? null, files.outputText ?? null);
               }).join('');
+
+              // Fetch final step's rendered prompt
+              if (steps.length > 0) {
+                const finalStep = steps[steps.length - 1];
+                const finalDir = String(steps.length).padStart(3, '0') + '_' + finalStep.id;
+                try {
+                  const fp = await fetch('/v1/jobs/' + jobId + '/files/steps/' + finalDir + '/prompt.txt');
+                  if (fp.ok) {
+                    document.getElementById('chain-final-input-pre').textContent = await fp.text();
+                    document.getElementById('chain-final-input').style.display = 'block';
+                  }
+                } catch (e) {}
+              }
             }
           } catch (e) {}
 
