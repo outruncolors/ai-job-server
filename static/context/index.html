@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Library · AI Job Server</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: monospace; background: #111; color: #ccc; overflow: hidden; }
+
+    label { display: block; color: #777; font-size: 0.76rem; margin-bottom: 3px; margin-top: 10px; }
+    input, textarea, select {
+      width: 100%; padding: 6px 8px; background: #181818; border: 1px solid #2e2e2e;
+      color: #ccc; font-family: monospace; font-size: 0.82rem; border-radius: 3px;
+    }
+    input:focus, textarea:focus { outline: none; border-color: #4a4a4a; }
+    textarea { resize: vertical; min-height: 54px; }
+    button {
+      padding: 7px 18px; background: #2a6; color: #fff; border: none;
+      border-radius: 3px; cursor: pointer; font-family: monospace; font-size: 0.82rem; margin-top: 10px;
+    }
+    button:hover { background: #3b7; }
+    button.secondary { background: #333; }
+    button.secondary:hover { background: #424242; }
+    button.danger { background: #7a2222; }
+    button.danger:hover { background: #992828; }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; min-width: 0; }
+    .msg { font-size: 0.76rem; min-height: 1.1em; margin-top: 6px; }
+
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 44px;
+      display: flex; align-items: center; padding: 0 20px; gap: 14px;
+      background: #111; border-bottom: 1px solid #1a1a1a; z-index: 100;
+    }
+    #topbar a { color: #444; text-decoration: none; font-size: 0.72rem; letter-spacing: 0.06em; transition: color 0.15s; }
+    #topbar a:hover { color: #888; }
+    .page-title { color: #2a6; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.06em; flex: 1; }
+
+    #panels { display: flex; height: 100vh; padding-top: 44px; }
+    #panel-left  { width: 340px; flex-shrink: 0; overflow-y: auto; padding: 20px 22px; border-right: 1px solid #1a1a1a; }
+    #panel-right { flex: 1; overflow-y: auto; padding: 24px 32px; }
+
+    .section-label { color: #383838; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; }
+
+    /* Item list */
+    .ctx-item {
+      border: 1px solid #1e1e1e; border-radius: 3px; padding: 10px 12px; margin-bottom: 6px;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s;
+    }
+    .ctx-item:hover { border-color: #333; background: #141414; }
+    .ctx-item.selected { border-color: #2a6; background: #101810; }
+    .ctx-item-title { color: #bbb; font-size: 0.82rem; margin-bottom: 4px; }
+    .ctx-item-desc  { color: #555; font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ctx-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+    .ctx-tag {
+      font-size: 0.66rem; padding: 1px 6px; border-radius: 2px;
+      background: #1a2a1a; color: #4a8; border: 1px solid #243; letter-spacing: 0.04em;
+    }
+
+    /* Form */
+    #form-title-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    #form-title-bar h2 { color: #555; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
+    #form-content { min-height: 160px; }
+    #form-actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+    #form-actions button { margin-top: 0; }
+    #form-msg { font-size: 0.75rem; flex: 1; }
+    #empty-state { color: #2a2a2a; font-size: 0.82rem; padding: 20px 0; }
+  </style>
+</head>
+<body>
+
+  <div id="topbar">
+    <a href="/">&#8592; AI Jobs</a>
+    <span class="page-title">Context Library</span>
+  </div>
+
+  <div id="panels">
+
+    <!-- Left: item list -->
+    <div id="panel-left">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span class="section-label">ITEMS</span>
+        <button class="secondary" onclick="newItem()"
+                style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
+      </div>
+      <div id="item-list">
+        <div id="empty-state">No context items yet. Click + New to create one.</div>
+      </div>
+    </div>
+
+    <!-- Right: form -->
+    <div id="panel-right">
+      <div id="form-title-bar">
+        <h2 id="form-heading">New Item</h2>
+      </div>
+
+      <label>Title</label>
+      <input id="f-title" type="text" placeholder="Item title…">
+
+      <label>Tags <span style="color:#383838;font-size:0.7rem;">(comma-separated)</span></label>
+      <input id="f-tags" type="text" placeholder="api, reference, docs…">
+
+      <label>Description</label>
+      <textarea id="f-desc" style="min-height:48px;" placeholder="Short description…"></textarea>
+
+      <label>Content</label>
+      <textarea id="f-content" id="form-content" style="min-height:220px;" placeholder="Paste or type the context text…"></textarea>
+
+      <div id="form-actions">
+        <button onclick="saveItem()">Save</button>
+        <button class="secondary" onclick="cancelForm()">Cancel</button>
+        <button class="danger" id="btn-delete" style="display:none;" onclick="deleteItem()">Delete</button>
+        <span id="form-msg" class="msg"></span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let _items = [];
+    let _editingId = null;
+
+    async function api(path, method = 'GET', body = null) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body !== null) opts.body = JSON.stringify(body);
+      const r = await fetch('/v1' + path, opts);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    function _escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function _parseTags(raw) {
+      return raw.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    async function loadItems() {
+      try {
+        const data = await api('/context-items');
+        _items = (data.items || []).slice().sort((a, b) => a.title.localeCompare(b.title));
+        renderList();
+      } catch(e) {
+        document.getElementById('item-list').innerHTML =
+          `<div style="color:#e44;font-size:0.75rem;">Error: ${_escHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderList() {
+      const el = document.getElementById('item-list');
+      if (_items.length === 0) {
+        el.innerHTML = '<div id="empty-state">No context items yet. Click + New to create one.</div>';
+        return;
+      }
+      el.innerHTML = _items.map(item => {
+        const tagsHtml = item.tags.length
+          ? `<div class="ctx-tags">${item.tags.map(t => `<span class="ctx-tag">${_escHtml(t)}</span>`).join('')}</div>`
+          : '';
+        const sel = _editingId === item.id ? ' selected' : '';
+        return `<div class="ctx-item${sel}" onclick="editItem('${item.id}')">
+          <div class="ctx-item-title">${_escHtml(item.title || '(untitled)')}</div>
+          ${item.description ? `<div class="ctx-item-desc">${_escHtml(item.description)}</div>` : ''}
+          ${tagsHtml}
+        </div>`;
+      }).join('');
+    }
+
+    function newItem() {
+      _editingId = null;
+      document.getElementById('form-heading').textContent = 'New Item';
+      document.getElementById('f-title').value = '';
+      document.getElementById('f-tags').value = '';
+      document.getElementById('f-desc').value = '';
+      document.getElementById('f-content').value = '';
+      document.getElementById('btn-delete').style.display = 'none';
+      document.getElementById('form-msg').textContent = '';
+      renderList();
+      document.getElementById('f-title').focus();
+    }
+
+    function editItem(id) {
+      const item = _items.find(i => i.id === id);
+      if (!item) return;
+      _editingId = id;
+      document.getElementById('form-heading').textContent = 'Edit Item';
+      document.getElementById('f-title').value = item.title || '';
+      document.getElementById('f-tags').value = (item.tags || []).join(', ');
+      document.getElementById('f-desc').value = item.description || '';
+      document.getElementById('f-content').value = item.content || '';
+      document.getElementById('btn-delete').style.display = 'inline-block';
+      document.getElementById('form-msg').textContent = '';
+      renderList();
+    }
+
+    function cancelForm() {
+      _editingId = null;
+      newItem();
+    }
+
+    async function saveItem() {
+      const msg = document.getElementById('form-msg');
+      msg.style.color = '#777'; msg.textContent = 'Saving…';
+      const body = {
+        title:       document.getElementById('f-title').value.trim(),
+        tags:        _parseTags(document.getElementById('f-tags').value),
+        description: document.getElementById('f-desc').value.trim(),
+        content:     document.getElementById('f-content').value,
+      };
+      if (!body.title) { msg.style.color = '#e44'; msg.textContent = 'Title is required.'; return; }
+      try {
+        if (_editingId) {
+          await api('/context-items/' + _editingId, 'PUT', body);
+        } else {
+          const created = await api('/context-items', 'POST', body);
+          _editingId = created.id;
+        }
+        msg.style.color = '#2a6'; msg.textContent = 'Saved.';
+        await loadItems();
+        renderList();
+        document.getElementById('btn-delete').style.display = 'inline-block';
+        document.getElementById('form-heading').textContent = 'Edit Item';
+      } catch(e) {
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function deleteItem() {
+      if (!_editingId) return;
+      const item = _items.find(i => i.id === _editingId);
+      const name = item ? `"${item.title}"` : 'this item';
+      if (!confirm(`Delete ${name}? This cannot be undone.`)) return;
+      try {
+        await api('/context-items/' + _editingId, 'DELETE');
+        _editingId = null;
+        await loadItems();
+        newItem();
+      } catch(e) {
+        document.getElementById('form-msg').style.color = '#e44';
+        document.getElementById('form-msg').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    loadItems();
+  </script>
+</body>
+</html>

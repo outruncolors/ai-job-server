@@ -28,3 +28,15 @@ def resolve_context_files(paths: list[str]) -> str:
             raise FileNotFoundError(f"Context file not found: {rel_path!r}")
         parts.append(candidate.read_text(encoding="utf-8"))
     return "\n\n".join(parts)
+
+
+def resolve_context_ids(ids: list[str]) -> str:
+    if not ids:
+        return ""
+    from .context_library import get_item
+    parts: list[str] = []
+    for item_id in ids:
+        item = get_item(item_id)
+        if item is not None:
+            parts.append(item["content"])
+    return "\n\n".join(parts)

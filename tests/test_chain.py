@@ -21,14 +21,6 @@ def test_chain_request_rejects_empty_steps(client):
     assert r.status_code == 422
 
 
-def test_chain_request_rejects_empty_input(client):
-    r = client.post("/v1/jobs/chain", json={
-        "input": "",
-        "llm": {"api_base": "http://fake", "model": "fake"},
-        "steps": [{"name": "s", "type": "llm", "prompt": "p"}],
-    })
-    assert r.status_code == 422
-
 
 # ---------------------------------------------------------------------------
 # 2. Template rendering

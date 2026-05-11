@@ -18,7 +18,7 @@ class ChainStep(BaseModel):
     name: str
     type: Literal["llm"] = "llm"
     prompt: str
-    context_files: list[str] = []
+    context_ids: list[str] = []
 
 
 class ChainJobRequest(BaseModel):

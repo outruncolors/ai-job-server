@@ -1,0 +1,20 @@
+[
+  {
+    "id": "fa6dc0f2-a6ba-4d7b-9516-11647f4e4d3d",
+    "title": "John Smith",
+    "tags": [],
+    "description": "The character \"John Smith\"",
+    "content": "John Smith is a 42 year old man with blonde hair.",
+    "created_at": "2026-05-11T04:57:24.146323+00:00",
+    "updated_at": "2026-05-11T04:57:24.146323+00:00"
+  },
+  {
+    "id": "71cb3239-8f4f-4cfa-889f-46319be9fa27",
+    "title": "John Smith",
+    "tags": [],
+    "description": "A person",
+    "content": "John Smith is a 45-year-old software engineer from Austin, Texas.",
+    "created_at": "2026-05-11T05:22:12.436783+00:00",
+    "updated_at": "2026-05-11T05:22:12.436783+00:00"
+  }
+]

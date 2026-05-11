@@ -52,6 +52,11 @@
       <div class="slide-desc">Sequential LLM pipelines.<br>Each step feeds the next.</div>
       <div class="slide-arrow">&#8594;</div>
     </div>
+    <div class="slide" onclick="location.href='/context/'">
+      <div class="slide-label">Context</div>
+      <div class="slide-desc">Manage context documents.<br>Attach them to chain steps.</div>
+      <div class="slide-arrow">&#8594;</div>
+    </div>
     <div class="slide" onclick="location.href='/voice'">
       <div class="slide-label">Voice</div>
       <div class="slide-desc">Neural speech synthesis.<br>Design or clone a voice.</div>
@@ -66,7 +71,7 @@
 
   <script>
     let currentSlide = 0;
-    const SLIDE_COUNT = 3;
+    const SLIDE_COUNT = 4;
     let isAnimating   = false;
     const navUp   = document.getElementById('nav-up');
     const navDown = document.getElementById('nav-down');

@@ -15,6 +15,7 @@
       color: #ccc; font-family: monospace; font-size: 0.82rem; border-radius: 3px;
     }
     input:focus, textarea:focus, select:focus { outline: none; border-color: #4a4a4a; }
+    input[type="checkbox"] { width: auto; padding: 0; background: none; border: none; border-radius: 0; }
     textarea { resize: vertical; min-height: 54px; }
     button {
       padding: 7px 18px; background: #2a6; color: #fff; border: none;
@@ -132,6 +133,50 @@
     .preset-save-row { display: flex; gap: 8px; margin-top: 6px; align-items: flex-end; }
     .preset-save-row input { flex: 1; }
     .preset-save-row button { flex: 0 0 auto; margin-top: 0; white-space: nowrap; }
+
+    /* ── Context selector ── */
+    .ctx-selector { margin-top: 8px; border: 1px solid #1e1e1e; border-radius: 3px; }
+    .ctx-selector > summary {
+      padding: 5px 8px; cursor: pointer; user-select: none; list-style: none;
+      color: #555; font-size: 0.74rem; display: flex; align-items: center; gap: 6px;
+    }
+    .ctx-selector > summary::-webkit-details-marker { display: none; }
+    .ctx-selector > summary::before { content: '▸ '; color: #3a3a3a; }
+    .ctx-selector[open] > summary::before { content: '▾ '; }
+    .ctx-count { color: #2a6; font-size: 0.7rem; }
+    .ctx-body { padding: 8px 10px 10px; border-top: 1px solid #1a1a1a; }
+    .ctx-tag-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 8px; min-height: 26px; }
+    .ctx-tag-chip {
+      font-size: 0.66rem; padding: 2px 7px 2px 8px; border-radius: 2px;
+      background: #1a2a1a; color: #4a8; border: 1px solid #243;
+      display: flex; align-items: center; gap: 4px; white-space: nowrap;
+    }
+    .ctx-tag-chip button {
+      background: none; border: none; color: #4a8; padding: 0; margin: 0;
+      cursor: pointer; font-size: 0.72rem; line-height: 1;
+    }
+    .ctx-tag-chip button:hover { color: #6c6; background: none; }
+    .ctx-tag-input { flex: 0 1 110px; min-width: 60px; font-size: 0.74rem; padding: 3px 6px; }
+    .ctx-tree { margin-top: 4px; }
+    .ctx-group { margin-bottom: 2px; }
+    .ctx-group > summary {
+      list-style: none; cursor: pointer; user-select: none;
+      color: #444; font-size: 0.68rem; letter-spacing: 0.08em; padding: 2px 0;
+    }
+    .ctx-group > summary::-webkit-details-marker { display: none; }
+    .ctx-group > summary::before { content: '▸ '; }
+    .ctx-group[open] > summary::before { content: '▾ '; }
+    .ctx-entry {
+      display: flex; align-items: flex-start; gap: 6px;
+      padding: 3px 6px 3px 12px; border-radius: 2px; cursor: pointer;
+    }
+    .ctx-entry:hover { background: #161616; }
+    .ctx-entry input[type="checkbox"] { margin-top: 2px; flex-shrink: 0; accent-color: #2a6; cursor: pointer; }
+    .ctx-entry-info { min-width: 0; flex: 1; }
+    .ctx-entry-title { color: #aaa; font-size: 0.74rem; }
+    .ctx-entry.is-checked .ctx-entry-title { color: #4a8; }
+    .ctx-entry-desc  { color: #484848; font-size: 0.67rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ctx-empty { color: #333; font-size: 0.72rem; padding: 4px 0; }
   </style>
 </head>
 <body>
@@ -139,6 +184,7 @@
   <div id="topbar">
     <a href="/">&#8592; AI Jobs</a>
     <span class="page-title">Chain Jobs</span>
+    <a href="/context/" style="font-size:0.65rem;color:#444;letter-spacing:0.14em;text-transform:uppercase;text-decoration:none;" onmouseover="this.style.color='#888'" onmouseout="this.style.color='#444'">Context</a>
     <div class="topbar-btn" onclick="openSeqDrawer()" style="margin-right:4px;">Sequences</div>
     <div class="topbar-btn" onclick="openJobsDrawer()">Jobs</div>
   </div>
@@ -242,6 +288,10 @@
       <p class="section-label" style="margin-bottom:14px;">OUTPUT</p>
       <div id="chain-msg" class="msg" style="margin-top:0;"></div>
       <div id="chain-step-status" style="margin-top:14px;"></div>
+      <div id="chain-final-context" style="display:none;margin-top:16px;">
+        <p class="section-label" style="margin-bottom:6px;">CONTEXT</p>
+        <pre id="chain-final-context-pre" class="output-pre"></pre>
+      </div>
       <div id="chain-final-input" style="display:none;margin-top:16px;">
         <p class="section-label" style="margin-bottom:6px;">FINAL INPUT</p>
         <pre id="chain-final-input-pre" class="output-pre"></pre>
@@ -364,12 +414,13 @@
     }
 
     // ── Chain Presets (localStorage) ─────────────────────────────────
-    const _PRESETS_KEY = 'chain_llm_presets';
+    const _PRESETS_KEY          = 'chain_llm_presets';
+    const _PRESET_SELECTED_KEY  = 'chain_llm_preset_selected';
 
     function _loadChainPresets() {
       const sel = document.getElementById('chain-preset-select');
       const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
-      const current = sel.value;
+      const savedId = localStorage.getItem(_PRESET_SELECTED_KEY) || '';
       while (sel.options.length > 1) sel.remove(1);
       for (const p of presets) {
         const opt = document.createElement('option');
@@ -377,15 +428,19 @@
         opt.textContent = p.name;
         sel.appendChild(opt);
       }
-      if (current) sel.value = current;
+      if (savedId) {
+        sel.value = savedId;
+        applyChainPreset();
+      }
     }
 
     function applyChainPreset() {
       const id = document.getElementById('chain-preset-select').value;
-      if (!id) return;
+      if (!id) { localStorage.removeItem(_PRESET_SELECTED_KEY); return; }
       const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
       const p = presets.find(x => x.id === id);
       if (!p) return;
+      localStorage.setItem(_PRESET_SELECTED_KEY, id);
       document.getElementById('chain-api-base').value   = p.api_base;
       document.getElementById('chain-model').value      = p.model;
       document.getElementById('chain-temp').value       = p.temperature;
@@ -492,19 +547,173 @@
       document.getElementById('chain-steps-list').innerHTML = '';
       _chainStepCounter = 0;
       for (const s of steps) {
-        addChainStep(s.prompt || '', (s.context_files || []).join('\n'));
+        addChainStep(s.prompt || '', s.context_ids || []);
       }
+    }
+
+    // ── Context library ──────────────────────────────────────────────
+    let _ctxItems = [];
+
+    async function loadContextItems() {
+      try {
+        const data = await api('/context-items');
+        _ctxItems = data.items || [];
+      } catch(e) { _ctxItems = []; }
+    }
+
+    function _allTags() {
+      const set = new Set();
+      for (const item of _ctxItems) (item.tags || []).forEach(t => set.add(t));
+      return [...set].sort();
+    }
+
+    function _buildCtxSelector(stepEl, selectedIds) {
+      const sel = stepEl.querySelector('.ctx-selector');
+      if (!sel) return;
+      const selectedTagsEl = stepEl.querySelector('.ctx-selected-tags');
+      const treeEl = stepEl.querySelector('.ctx-tree');
+      const datalistId = sel.getAttribute('data-list-id');
+      const datalist = document.getElementById(datalistId);
+
+      // Build datalist for tag autocomplete
+      const allTags = _allTags();
+      if (datalist) {
+        datalist.innerHTML = allTags.map(t => `<option value="${t}">`).join('');
+      }
+
+      // Group items by tag
+      const byTag = {};
+      const untagged = [];
+      for (const item of _ctxItems) {
+        if (!item.tags || item.tags.length === 0) {
+          untagged.push(item);
+        } else {
+          for (const tag of item.tags) {
+            if (!byTag[tag]) byTag[tag] = [];
+            byTag[tag].push(item);
+          }
+        }
+      }
+
+      const selectedTagsList = _getSelectedTags(stepEl);
+      const tagSelectedIds = new Set();
+      for (const tag of selectedTagsList) {
+        for (const item of _ctxItems) {
+          if ((item.tags || []).includes(tag)) tagSelectedIds.add(item.id);
+        }
+      }
+
+      if (_ctxItems.length === 0) {
+        treeEl.innerHTML = '<div class="ctx-empty">No context items. <a href="/context/" style="color:#4a8;">Add some</a>.</div>';
+      } else {
+        const groups = Object.keys(byTag).sort();
+        let html = '';
+        const _entryHtml = (item, isChecked) => {
+          const chk = isChecked ? 'checked' : '';
+          const cls = isChecked ? ' is-checked' : '';
+          return `<div class="ctx-entry${cls}" onclick="_onEntryClick(event,this)">` +
+            `<input type="checkbox" class="ctx-chk" data-id="${item.id}" ${chk}>` +
+            `<div class="ctx-entry-info">` +
+              `<div class="ctx-entry-title">${_escHtml(item.title || '(untitled)')}</div>` +
+              (item.description ? `<div class="ctx-entry-desc">${_escHtml(item.description)}</div>` : '') +
+            `</div></div>`;
+        };
+        for (const tag of groups) {
+          const items = byTag[tag];
+          html += `<details class="ctx-group" open><summary>${tag} (${items.length})</summary>`;
+          for (const item of items) {
+            html += _entryHtml(item, selectedIds.has(item.id) || tagSelectedIds.has(item.id));
+          }
+          html += '</details>';
+        }
+        if (untagged.length > 0) {
+          html += `<details class="ctx-group" open><summary>untagged (${untagged.length})</summary>`;
+          for (const item of untagged) {
+            html += _entryHtml(item, selectedIds.has(item.id) || tagSelectedIds.has(item.id));
+          }
+          html += '</details>';
+        }
+        treeEl.innerHTML = html;
+      }
+      _updateCtxCount(stepEl);
+    }
+
+    function _getSelectedTags(stepEl) {
+      return [...stepEl.querySelectorAll('.ctx-tag-row .ctx-tag-chip')]
+        .map(chip => chip.getAttribute('data-tag'));
+    }
+
+    function _addTag(stepEl, tag) {
+      tag = tag.trim();
+      if (!tag) return;
+      const existing = _getSelectedTags(stepEl);
+      if (existing.includes(tag)) return;
+      const row = stepEl.querySelector('.ctx-tag-row');
+      const input = row.querySelector('.ctx-tag-input');
+      const chip = document.createElement('span');
+      chip.className = 'ctx-tag-chip';
+      chip.setAttribute('data-tag', tag);
+      chip.innerHTML = _escHtml(tag) + `<button onclick="_removeTag(this.closest('.chain-step-card'), '${tag.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">×</button>`;
+      row.insertBefore(chip, input);
+      _rebuildTree(stepEl);
+    }
+
+    function _removeTag(stepEl, tag) {
+      const chip = [...stepEl.querySelectorAll('.ctx-tag-row .ctx-tag-chip')]
+        .find(c => c.getAttribute('data-tag') === tag);
+      if (chip) chip.remove();
+      _rebuildTree(stepEl);
+    }
+
+    function _rebuildTree(stepEl) {
+      const checked = new Set(
+        [...stepEl.querySelectorAll('.ctx-chk:checked')].map(c => c.getAttribute('data-id'))
+      );
+      _buildCtxSelector(stepEl, checked);
+    }
+
+    function _onEntryClick(event, entry) {
+      const chk = entry.querySelector('.ctx-chk');
+      if (!chk) return;
+      if (event.target !== chk) {
+        // Click was on the row text, not the checkbox — toggle manually
+        chk.checked = !chk.checked;
+      }
+      entry.classList.toggle('is-checked', chk.checked);
+      const stepEl = entry.closest('.chain-step-card');
+      if (stepEl) _updateCtxCount(stepEl);
+    }
+
+    function _updateCtxCount(stepEl) {
+      const ids = _collectStepContextIds(stepEl);
+      const summary = stepEl.querySelector('.ctx-selector > summary');
+      const countEl = summary && summary.querySelector('.ctx-count');
+      if (countEl) countEl.textContent = ids.length > 0 ? `(${ids.length})` : '';
+    }
+
+    function _collectStepContextIds(stepEl) {
+      const checkedIds = new Set(
+        [...stepEl.querySelectorAll('.ctx-chk:checked')].map(c => c.getAttribute('data-id'))
+      );
+      const selectedTags = _getSelectedTags(stepEl);
+      for (const tag of selectedTags) {
+        for (const item of _ctxItems) {
+          if ((item.tags || []).includes(tag)) checkedIds.add(item.id);
+        }
+      }
+      return [...checkedIds];
     }
 
     // ── Chain ────────────────────────────────────────────────────────
     const _CHAIN_DEFAULT_PROMPT =
-      'Using the previous output, continue the task.\n\nPrevious:\n{{previous}}\n\nContext:\n{{context}}';
+      'Using the previous output, continue the task.\n\nPrevious:\n{{previous}}';
     let _chainStepCounter  = 0;
     let _chainJobPollTimer = null;
 
-    function addChainStep(prompt = _CHAIN_DEFAULT_PROMPT, contextFiles = '') {
+    function addChainStep(prompt = _CHAIN_DEFAULT_PROMPT, contextIds = []) {
       const idx = _chainStepCounter++;
       const id  = `chain-step-${idx}`;
+      const listId = `ctx-list-${idx}`;
       const el  = document.createElement('div');
       el.id = id; el.className = 'chain-step-card';
       el.innerHTML =
@@ -515,9 +724,20 @@
         '</div>' +
         '<label>Prompt</label>' +
         '<textarea class="chain-step-prompt" style="min-height:72px;">' + _escHtml(prompt) + '</textarea>' +
-        '<label>Context Files <span style="color:#383838;font-size:0.7rem;">(one relative path per line)</span></label>' +
-        '<textarea class="chain-step-context" style="min-height:34px;">' + _escHtml(contextFiles) + '</textarea>';
+        '<datalist id="' + listId + '"></datalist>' +
+        '<details class="ctx-selector" data-list-id="' + listId + '">' +
+          '<summary>Context <span class="ctx-count"></span></summary>' +
+          '<div class="ctx-body">' +
+            '<div class="ctx-tag-row">' +
+              '<input class="ctx-tag-input" type="text" list="' + listId + '" placeholder="Add tag…" ' +
+                'onkeydown="if(event.key===\'Enter\'||event.key===\',\'){event.preventDefault();_addTag(this.closest(\'.chain-step-card\'),this.value);this.value=\'\'}" ' +
+                'onchange="_addTag(this.closest(\'.chain-step-card\'),this.value);this.value=\'\'">' +
+            '</div>' +
+            '<div class="ctx-tree"></div>' +
+          '</div>' +
+        '</details>';
       document.getElementById('chain-steps-list').appendChild(el);
+      _buildCtxSelector(el, new Set(contextIds));
     }
 
     function removeChainStep(id) {
@@ -531,9 +751,8 @@
       let i = 0;
       for (const el of stepEls) {
         const prompt = el.querySelector('.chain-step-prompt').value;
-        const ctxRaw = el.querySelector('.chain-step-context').value.trim();
-        const context_files = ctxRaw ? ctxRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
-        steps.push({ name: 'Step ' + (++i), type: 'llm', prompt, context_files });
+        const context_ids = _collectStepContextIds(el);
+        steps.push({ name: 'Step ' + (++i), type: 'llm', prompt, context_ids });
       }
       return steps;
     }
@@ -544,6 +763,7 @@
       const outputDiv     = document.getElementById('chain-output');
       const hint          = document.getElementById('chain-right-hint');
       msg.textContent = ''; stepStatusDiv.innerHTML = ''; outputDiv.style.display = 'none';
+      document.getElementById('chain-final-context').style.display = 'none';
       document.getElementById('chain-final-input').style.display = 'none';
 
       const steps = _collectSteps();
@@ -574,9 +794,13 @@
       }
     }
 
-    function _stepCollapseHtml(step, stepIndex, promptText, outputText) {
+    function _stepCollapseHtml(step, stepIndex, contextText, promptText, outputText) {
       const cls = step.status === 'error' ? 'status-failed' : statusClass(step.status);
       let bodyHtml = '';
+      if (contextText) {
+        bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">CONTEXT</p>' +
+          '<pre class="output-pre">' + _escHtml(contextText) + '</pre>';
+      }
       if (promptText != null) {
         bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">PROMPT</p>' +
           '<pre class="output-pre">' + _escHtml(promptText) + '</pre>';
@@ -602,13 +826,15 @@
     async function _fetchStepFiles(jobId, step, arrayIndex) {
       const dirName = String(arrayIndex + 1).padStart(3, '0') + '_' + step.id;
       const base = '/v1/jobs/' + jobId + '/files/steps/' + dirName + '/';
-      const [pr, or] = await Promise.allSettled([
+      const [cr, pr, or] = await Promise.allSettled([
+        fetch(base + 'context.txt'),
         fetch(base + 'prompt.txt'),
         fetch(base + 'output.txt'),
       ]);
-      const promptText = pr.status === 'fulfilled' && pr.value.ok ? await pr.value.text() : null;
-      const outputText = or.status === 'fulfilled' && or.value.ok ? await or.value.text() : null;
-      return { promptText, outputText };
+      const contextText = cr.status === 'fulfilled' && cr.value.ok ? await cr.value.text() : null;
+      const promptText  = pr.status === 'fulfilled' && pr.value.ok ? await pr.value.text() : null;
+      const outputText  = or.status === 'fulfilled' && or.value.ok ? await or.value.text() : null;
+      return { contextText, promptText, outputText };
     }
 
     async function _pollChainJob(jobId) {
@@ -636,17 +862,27 @@
               );
               stepStatusDiv.innerHTML = intermediateSteps.map((step, i) => {
                 const files = fileResults[i].status === 'fulfilled' ? fileResults[i].value : {};
-                return _stepCollapseHtml(step, i + 1, files.promptText ?? null, files.outputText ?? null);
+                return _stepCollapseHtml(step, i + 1, files.contextText || '', files.promptText ?? null, files.outputText ?? null);
               }).join('');
 
-              // Fetch final step's rendered prompt
+              // Fetch final step's context and rendered prompt
               if (steps.length > 0) {
                 const finalStep = steps[steps.length - 1];
                 const finalDir = String(steps.length).padStart(3, '0') + '_' + finalStep.id;
+                const finalBase = '/v1/jobs/' + jobId + '/files/steps/' + finalDir + '/';
                 try {
-                  const fp = await fetch('/v1/jobs/' + jobId + '/files/steps/' + finalDir + '/prompt.txt');
-                  if (fp.ok) {
-                    document.getElementById('chain-final-input-pre').textContent = await fp.text();
+                  const [fcr, fp] = await Promise.allSettled([
+                    fetch(finalBase + 'context.txt'),
+                    fetch(finalBase + 'prompt.txt'),
+                  ]);
+                  const finalCtx = fcr.status === 'fulfilled' && fcr.value.ok ? await fcr.value.text() : '';
+                  if (finalCtx) {
+                    const ctxDiv = document.getElementById('chain-final-context');
+                    document.getElementById('chain-final-context-pre').textContent = finalCtx;
+                    ctxDiv.style.display = 'block';
+                  }
+                  if (fp.status === 'fulfilled' && fp.value.ok) {
+                    document.getElementById('chain-final-input-pre').textContent = await fp.value.text();
                     document.getElementById('chain-final-input').style.display = 'block';
                   }
                 } catch (e) {}
@@ -677,7 +913,7 @@
               );
               stepStatusDiv.innerHTML = steps.map((step, i) => {
                 const files = fileResults[i].status === 'fulfilled' ? fileResults[i].value : {};
-                return _stepCollapseHtml(step, i + 1, files.promptText ?? null, files.outputText ?? null);
+                return _stepCollapseHtml(step, i + 1, files.contextText || '', files.promptText ?? null, files.outputText ?? null);
               }).join('');
             }
           } catch (e) {}
@@ -693,7 +929,9 @@
 
     // ── Init ─────────────────────────────────────────────────────────
     _loadChainPresets();
-    addChainStep('Create five bullet points for the following task:\n\n', '');
+    loadContextItems().then(() => {
+      addChainStep('Create five bullet points for the following task:\n\n', []);
+    });
   </script>
 </body>
 </html>

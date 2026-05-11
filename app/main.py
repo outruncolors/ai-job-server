@@ -7,6 +7,13 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .chain.context_library import (
+    create_item,
+    delete_item,
+    get_item,
+    list_items,
+    update_item,
+)
 from .chain.executor import execute_chain_job, list_chain_steps, patch_initial_chain_status
 from .chain.models import ChainJobRequest
 from .chain.sequences import delete_sequence, duplicate_sequence, list_sequences, save_sequence
@@ -137,6 +144,44 @@ def dup_chain_sequence(seq_id: str):
     if result is None:
         raise HTTPException(status_code=404, detail="Sequence not found")
     return result
+
+
+@app.get("/v1/context-items")
+def get_context_items():
+    return {"items": list_items()}
+
+
+@app.post("/v1/context-items", status_code=201)
+async def create_context_item(body: dict):
+    return create_item(
+        title=body.get("title", ""),
+        tags=body.get("tags", []),
+        description=body.get("description", ""),
+        content=body.get("content", ""),
+    )
+
+
+@app.get("/v1/context-items/{item_id}")
+def get_context_item(item_id: str):
+    item = get_item(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Context item not found")
+    return item
+
+
+@app.put("/v1/context-items/{item_id}", status_code=200)
+async def update_context_item(item_id: str, body: dict):
+    result = update_item(item_id, **{k: v for k, v in body.items()})
+    if result is None:
+        raise HTTPException(status_code=404, detail="Context item not found")
+    return result
+
+
+@app.delete("/v1/context-items/{item_id}", status_code=200)
+def remove_context_item(item_id: str):
+    if not delete_item(item_id):
+        raise HTTPException(status_code=404, detail="Context item not found")
+    return {"ok": True}
 
 
 # Serve static UI from /

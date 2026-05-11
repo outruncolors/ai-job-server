@@ -1,0 +1,16 @@
+{
+  "mode": "ephemeral",
+  "model": "k2-fsa/OmniVoice",
+  "persistent_api_base": "http://127.0.0.1:8091",
+  "response_format": "wav",
+  "voice": "default",
+  "speed": 1.0,
+  "language": null,
+  "instruct": null,
+  "ref_audio_filename": null,
+  "ref_text": null,
+  "server_command": null,
+  "infer_base_command": [
+    "/opt/ai-stack/runtimes/omnivoice-venv/bin/omnivoice-infer"
+  ]
+}

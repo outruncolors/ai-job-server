@@ -91,7 +91,7 @@ async def execute_chain_job(
     job_dir: Path,
     request: ChainJobRequest,
 ) -> None:
-    from .context import resolve_context_files
+    from .context import resolve_context_ids
     from .template import render_template
 
     steps_dir = job_dir / "steps"
@@ -144,10 +144,10 @@ async def execute_chain_job(
         )
 
         try:
-            context = resolve_context_files(step.context_files)
+            context = resolve_context_ids(step.context_ids)
             (step_dir / "context.txt").write_text(context, encoding="utf-8")
 
-            prompt = render_template(
+            rendered = render_template(
                 step.prompt,
                 input=request.input,
                 previous=previous_output,
@@ -155,6 +155,10 @@ async def execute_chain_job(
                 step_index=step_index,
                 step_name=step.name,
             )
+            if context and "{{context}}" not in step.prompt:
+                prompt = f"<START CONTEXT>\n{context}\n<END CONTEXT>\n\n{rendered}"
+            else:
+                prompt = rendered
             (step_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
 
             output = await client.generate(prompt, request.llm)
