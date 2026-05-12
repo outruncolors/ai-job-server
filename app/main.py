@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -103,6 +104,15 @@ def get_job_detail(job_id: str):
     if data is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return JobStatus(**data)
+
+
+@app.delete("/v1/jobs/{job_id}", status_code=200)
+def delete_job(job_id: str):
+    job_dir = find_job_dir(job_id)
+    if job_dir is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    shutil.rmtree(job_dir)
+    return {"deleted": job_id}
 
 
 @app.get("/v1/jobs/{job_id}/steps")
