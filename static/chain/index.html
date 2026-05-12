@@ -102,6 +102,10 @@
     }
     .chain-step-head span { color: #484848; font-size: 0.72rem; }
     .chain-step-head button { margin-top: 0; padding: 2px 8px; font-size: 0.7rem; }
+    .chain-step-kind {
+      width: auto; padding: 2px 6px; font-size: 0.7rem; background: #181818;
+      border: 1px solid #2e2e2e; color: #888; border-radius: 3px; cursor: pointer;
+    }
     .section-label { color: #383838; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; }
     .output-pre {
       background: #0e0e0e; padding: 14px; border-radius: 3px; margin-top: 8px;
@@ -271,6 +275,10 @@
       <div id="chain-final-input" style="display:none;margin-top:16px;">
         <p class="section-label" style="margin-bottom:6px;">FINAL INPUT</p>
         <pre id="chain-final-input-pre" class="output-pre"></pre>
+      </div>
+      <div id="chain-final-audio" style="display:none;margin-top:16px;">
+        <p class="section-label" style="margin-bottom:6px;">FINAL AUDIO</p>
+        <audio id="chain-final-audio-player" controls style="width:100%;margin-top:4px;"></audio>
       </div>
       <div id="chain-output" style="display:none;margin-top:16px;">
         <p class="section-label" style="margin-bottom:6px;">FINAL OUTPUT</p>
@@ -450,7 +458,7 @@
       document.getElementById('chain-steps-list').innerHTML = '';
       _chainStepCounter = 0;
       for (const s of steps) {
-        addChainStep(s.prompt || '', s.context_ids || []);
+        addChainStep({ type: s.type, prompt: s.prompt || '', context_ids: s.context_ids || [], voice_preset_id: s.voice_preset_id || '' });
       }
     }
 
@@ -607,40 +615,93 @@
       return [...checkedIds];
     }
 
+    // ── Voice presets (for chain voice steps) ───────────────────────
+    let _voicePresets = [];
+
+    async function loadVoicePresets() {
+      try {
+        const data = await api('/voice-presets');
+        _voicePresets = data || [];
+      } catch(e) { _voicePresets = []; }
+    }
+
+    function _voicePresetOptions(selectedId) {
+      const opts = '<option value="">— select preset —</option>' +
+        _voicePresets.map(p =>
+          `<option value="${p.id}"${p.id === selectedId ? ' selected' : ''}>${_escHtml(p.name)}</option>`
+        ).join('');
+      return opts;
+    }
+
     // ── Chain ────────────────────────────────────────────────────────
     const _CHAIN_DEFAULT_PROMPT =
       'Using the previous output, continue the task.\n\nPrevious:\n{{previous}}';
     let _chainStepCounter  = 0;
     let _chainJobPollTimer = null;
 
-    function addChainStep(prompt = _CHAIN_DEFAULT_PROMPT, contextIds = []) {
-      const idx = _chainStepCounter++;
-      const id  = `chain-step-${idx}`;
+    function addChainStep(opts = {}) {
+      const type       = opts.type || 'llm';
+      const prompt     = opts.prompt !== undefined ? opts.prompt : _CHAIN_DEFAULT_PROMPT;
+      const contextIds = opts.context_ids || [];
+      const presetId   = opts.voice_preset_id || '';
+
+      const idx    = _chainStepCounter++;
+      const id     = `chain-step-${idx}`;
       const listId = `ctx-list-${idx}`;
-      const el  = document.createElement('div');
+      const el     = document.createElement('div');
       el.id = id; el.className = 'chain-step-card';
+
+      const kindSel =
+        '<select class="chain-step-kind" onchange="_onStepKindChange(this)">' +
+          '<option value="llm"' + (type === 'llm' ? ' selected' : '') + '>text</option>' +
+          '<option value="voice"' + (type === 'voice' ? ' selected' : '') + '>voice</option>' +
+        '</select>';
+
       el.innerHTML =
         '<div class="chain-step-head">' +
           '<span>Step</span>' +
-          '<button class="secondary" onclick="removeChainStep(\'' + id + '\')" ' +
-            'style="margin-top:0;padding:2px 8px;font-size:0.7rem;">Remove</button>' +
-        '</div>' +
-        '<label>Prompt</label>' +
-        '<textarea class="chain-step-prompt" style="min-height:72px;">' + _escHtml(prompt) + '</textarea>' +
-        '<datalist id="' + listId + '"></datalist>' +
-        '<details class="ctx-selector" data-list-id="' + listId + '">' +
-          '<summary>Context <span class="ctx-count"></span></summary>' +
-          '<div class="ctx-body">' +
-            '<div class="ctx-tag-row">' +
-              '<input class="ctx-tag-input" type="text" list="' + listId + '" placeholder="Add tag…" ' +
-                'onkeydown="if(event.key===\'Enter\'||event.key===\',\'){event.preventDefault();_addTag(this.closest(\'.chain-step-card\'),this.value);this.value=\'\'}" ' +
-                'onchange="_addTag(this.closest(\'.chain-step-card\'),this.value);this.value=\'\'">' +
-            '</div>' +
-            '<div class="ctx-tree"></div>' +
+          '<div style="display:flex;gap:6px;align-items:center;">' +
+            kindSel +
+            '<button class="secondary" onclick="removeChainStep(\'' + id + '\')" ' +
+              'style="margin-top:0;padding:2px 8px;font-size:0.7rem;">Remove</button>' +
           '</div>' +
-        '</details>';
+        '</div>' +
+        '<div class="chain-step-text-fields"' + (type === 'voice' ? ' style="display:none;"' : '') + '>' +
+          '<label>Prompt</label>' +
+          '<textarea class="chain-step-prompt" style="min-height:72px;">' + _escHtml(prompt) + '</textarea>' +
+          '<datalist id="' + listId + '"></datalist>' +
+          '<details class="ctx-selector" data-list-id="' + listId + '">' +
+            '<summary>Context <span class="ctx-count"></span></summary>' +
+            '<div class="ctx-body">' +
+              '<div class="ctx-tag-row">' +
+                '<input class="ctx-tag-input" type="text" list="' + listId + '" placeholder="Add tag…" ' +
+                  'onkeydown="if(event.key===\'Enter\'||event.key===\',\'){event.preventDefault();_addTag(this.closest(\'.chain-step-card\'),this.value);this.value=\'\'}" ' +
+                  'onchange="_addTag(this.closest(\'.chain-step-card\'),this.value);this.value=\'\'">' +
+              '</div>' +
+              '<div class="ctx-tree"></div>' +
+            '</div>' +
+          '</details>' +
+        '</div>' +
+        '<div class="chain-step-voice-fields"' + (type !== 'voice' ? ' style="display:none;"' : '') + '>' +
+          '<label>Voice Preset</label>' +
+          '<select class="chain-step-voice-preset">' + _voicePresetOptions(presetId) + '</select>' +
+        '</div>';
+
       document.getElementById('chain-steps-list').appendChild(el);
       _buildCtxSelector(el, new Set(contextIds));
+    }
+
+    function _onStepKindChange(sel) {
+      const card = sel.closest('.chain-step-card');
+      const kind = sel.value;
+      card.querySelector('.chain-step-text-fields').style.display = kind === 'llm' ? '' : 'none';
+      const voiceFields = card.querySelector('.chain-step-voice-fields');
+      voiceFields.style.display = kind === 'voice' ? '' : 'none';
+      if (kind === 'voice') {
+        const presetSel = card.querySelector('.chain-step-voice-preset');
+        const currentVal = presetSel.value;
+        presetSel.innerHTML = _voicePresetOptions(currentVal);
+      }
     }
 
     function removeChainStep(id) {
@@ -653,9 +714,15 @@
       const steps = [];
       let i = 0;
       for (const el of stepEls) {
-        const prompt = el.querySelector('.chain-step-prompt').value;
-        const context_ids = _collectStepContextIds(el);
-        steps.push({ name: 'Step ' + (++i), type: 'llm', prompt, context_ids });
+        const kind = el.querySelector('.chain-step-kind').value;
+        if (kind === 'voice') {
+          const presetId = el.querySelector('.chain-step-voice-preset').value;
+          steps.push({ name: 'Step ' + (++i), type: 'voice', prompt: '', context_ids: [], voice_preset_id: presetId || null });
+        } else {
+          const prompt = el.querySelector('.chain-step-prompt').value;
+          const context_ids = _collectStepContextIds(el);
+          steps.push({ name: 'Step ' + (++i), type: 'llm', prompt, context_ids });
+        }
       }
       return steps;
     }
@@ -668,10 +735,15 @@
       msg.textContent = ''; stepStatusDiv.innerHTML = ''; outputDiv.style.display = 'none';
       document.getElementById('chain-final-context').style.display = 'none';
       document.getElementById('chain-final-input').style.display = 'none';
+      document.getElementById('chain-final-audio').style.display = 'none';
 
       const steps = _collectSteps();
       if (steps.length === 0) {
         msg.style.color = '#e44'; msg.textContent = 'Add at least one step.'; return;
+      }
+      const missingPreset = steps.some(s => s.type === 'voice' && !s.voice_preset_id);
+      if (missingPreset) {
+        msg.style.color = '#e44'; msg.textContent = 'Select a voice preset for every voice step.'; return;
       }
 
       const body = {
@@ -697,29 +769,41 @@
       }
     }
 
-    function _stepCollapseHtml(step, stepIndex, contextText, promptText, outputText) {
+    function _stepCollapseHtml(step, stepIndex, files) {
       const cls = step.status === 'error' ? 'status-failed' : statusClass(step.status);
+      const typeTag = step.type === 'voice' ? ' <span style="color:#555;font-size:0.66rem;">voice</span>' : '';
       let bodyHtml = '';
-      if (contextText) {
-        bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">CONTEXT</p>' +
-          '<pre class="output-pre">' + _escHtml(contextText) + '</pre>';
-      }
-      if (promptText != null) {
-        bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">PROMPT</p>' +
-          '<pre class="output-pre">' + _escHtml(promptText) + '</pre>';
-      }
-      if (outputText != null) {
-        bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">OUTPUT</p>' +
-          '<pre class="output-pre">' + _escHtml(outputText) + '</pre>';
-      } else if (step.error) {
-        bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
-          '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
+      if (step.type === 'voice') {
+        if (files && files.audioUrl) {
+          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">AUDIO</p>' +
+            '<audio controls style="width:100%;margin-top:4px;" src="' + files.audioUrl + '"></audio>';
+        } else if (step.error) {
+          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
+            '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
+        }
+      } else {
+        const { contextText, promptText, outputText } = files || {};
+        if (contextText) {
+          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">CONTEXT</p>' +
+            '<pre class="output-pre">' + _escHtml(contextText) + '</pre>';
+        }
+        if (promptText != null) {
+          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">PROMPT</p>' +
+            '<pre class="output-pre">' + _escHtml(promptText) + '</pre>';
+        }
+        if (outputText != null) {
+          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">OUTPUT</p>' +
+            '<pre class="output-pre">' + _escHtml(outputText) + '</pre>';
+        } else if (step.error) {
+          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
+            '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
+        }
       }
       return '<details class="step-collapse">' +
         '<summary>' +
           '<span class="step-num">Step ' + stepIndex + '</span>' +
           '<span class="step-sep">·</span>' +
-          '<span class="step-col-name">' + _escHtml(step.name) + '</span>' +
+          '<span class="step-col-name">' + _escHtml(step.name) + typeTag + '</span>' +
           '<span class="' + cls + '">' + step.status + '</span>' +
         '</summary>' +
         '<div class="step-collapse-body">' + bodyHtml + '</div>' +
@@ -729,6 +813,12 @@
     async function _fetchStepFiles(jobId, step, arrayIndex) {
       const dirName = String(arrayIndex + 1).padStart(3, '0') + '_' + step.id;
       const base = '/v1/jobs/' + jobId + '/files/steps/' + dirName + '/';
+      if (step.type === 'voice') {
+        const audioFile = step.output_file || 'output.wav';
+        const ar = await fetch(base + audioFile).catch(() => null);
+        const audioUrl = ar && ar.ok ? base + audioFile : null;
+        return { audioUrl };
+      }
       const [cr, pr, or] = await Promise.allSettled([
         fetch(base + 'context.txt'),
         fetch(base + 'prompt.txt'),
@@ -765,30 +855,38 @@
               );
               stepStatusDiv.innerHTML = intermediateSteps.map((step, i) => {
                 const files = fileResults[i].status === 'fulfilled' ? fileResults[i].value : {};
-                return _stepCollapseHtml(step, i + 1, files.contextText || '', files.promptText ?? null, files.outputText ?? null);
+                return _stepCollapseHtml(step, i + 1, files);
               }).join('');
 
-              // Fetch final step's context and rendered prompt
+              // Fetch final step content
               if (steps.length > 0) {
                 const finalStep = steps[steps.length - 1];
                 const finalDir = String(steps.length).padStart(3, '0') + '_' + finalStep.id;
                 const finalBase = '/v1/jobs/' + jobId + '/files/steps/' + finalDir + '/';
-                try {
-                  const [fcr, fp] = await Promise.allSettled([
-                    fetch(finalBase + 'context.txt'),
-                    fetch(finalBase + 'prompt.txt'),
-                  ]);
-                  const finalCtx = fcr.status === 'fulfilled' && fcr.value.ok ? await fcr.value.text() : '';
-                  if (finalCtx) {
-                    const ctxDiv = document.getElementById('chain-final-context');
-                    document.getElementById('chain-final-context-pre').textContent = finalCtx;
-                    ctxDiv.style.display = 'block';
+                if (finalStep.type === 'voice') {
+                  const audioFile = finalStep.output_file || 'output.wav';
+                  const ar = await fetch(finalBase + audioFile).catch(() => null);
+                  if (ar && ar.ok) {
+                    document.getElementById('chain-final-audio-player').src = finalBase + audioFile;
+                    document.getElementById('chain-final-audio').style.display = 'block';
                   }
-                  if (fp.status === 'fulfilled' && fp.value.ok) {
-                    document.getElementById('chain-final-input-pre').textContent = await fp.value.text();
-                    document.getElementById('chain-final-input').style.display = 'block';
-                  }
-                } catch (e) {}
+                } else {
+                  try {
+                    const [fcr, fp] = await Promise.allSettled([
+                      fetch(finalBase + 'context.txt'),
+                      fetch(finalBase + 'prompt.txt'),
+                    ]);
+                    const finalCtx = fcr.status === 'fulfilled' && fcr.value.ok ? await fcr.value.text() : '';
+                    if (finalCtx) {
+                      document.getElementById('chain-final-context-pre').textContent = finalCtx;
+                      document.getElementById('chain-final-context').style.display = 'block';
+                    }
+                    if (fp.status === 'fulfilled' && fp.value.ok) {
+                      document.getElementById('chain-final-input-pre').textContent = await fp.value.text();
+                      document.getElementById('chain-final-input').style.display = 'block';
+                    }
+                  } catch (e) {}
+                }
               }
             }
           } catch (e) {}
@@ -816,7 +914,7 @@
               );
               stepStatusDiv.innerHTML = steps.map((step, i) => {
                 const files = fileResults[i].status === 'fulfilled' ? fileResults[i].value : {};
-                return _stepCollapseHtml(step, i + 1, files.contextText || '', files.promptText ?? null, files.outputText ?? null);
+                return _stepCollapseHtml(step, i + 1, files);
               }).join('');
             }
           } catch (e) {}
@@ -833,8 +931,8 @@
     // ── Init ─────────────────────────────────────────────────────────
     document.querySelector('#topnav [data-page="chain"]').classList.add('active');
     _loadChainPresets();
-    loadContextItems().then(() => {
-      addChainStep('Create five bullet points for the following task:\n\n', []);
+    Promise.all([loadContextItems(), loadVoicePresets()]).then(() => {
+      addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
     });
   </script>
 </body>

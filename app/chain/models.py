@@ -16,9 +16,10 @@ class ChainLLMConfig(BaseModel):
 class ChainStep(BaseModel):
     id: Optional[str] = None
     name: str
-    type: Literal["llm"] = "llm"
-    prompt: str
+    type: Literal["llm", "voice"] = "llm"
+    prompt: str = ""
     context_ids: list[str] = []
+    voice_preset_id: Optional[str] = None
 
 
 class ChainJobRequest(BaseModel):

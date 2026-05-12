@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .llm_client import OpenAICompatibleLLMClient
-from .models import ChainJobRequest
+from .models import ChainJobRequest, ChainStep
 
 
 def _now_iso() -> str:
@@ -86,6 +86,71 @@ def list_chain_steps(job_dir: Path) -> list[dict[str, Any]]:
     return steps
 
 
+async def _execute_voice_step(text: str, step_dir: Path, step: ChainStep) -> str:
+    from ..omnivoice.config import get_config
+    from ..omnivoice.manager import get_manager
+    from ..voice_presets import get_preset, resolve_preset_wav
+
+    if not step.voice_preset_id:
+        raise RuntimeError("Voice step requires a voice_preset_id")
+
+    preset = get_preset(step.voice_preset_id)
+    if preset is None:
+        raise RuntimeError(f"Voice preset {step.voice_preset_id!r} not found")
+
+    config = get_config()
+    manager = get_manager()
+    output_path = step_dir / f"output.{config.response_format}"
+
+    effective: dict[str, Any] = {
+        "mode": config.mode,
+        "model": config.model,
+        "voice_preset_id": step.voice_preset_id,
+        "voice_preset_name": preset["name"],
+        "response_format": config.response_format,
+    }
+    (step_dir / "request.json").write_text(
+        json.dumps({**step.model_dump(), "effective": effective}, indent=2), encoding="utf-8"
+    )
+
+    manager.active_voice_jobs += 1
+    try:
+        if config.mode == "persistent":
+            from ..omnivoice.client import OmniVoicePersistentClient
+            client = OmniVoicePersistentClient(config.persistent_api_base)
+            await client.synthesize(
+                text,
+                output_path,
+                model=config.model,
+                voice=config.voice,
+                response_format=config.response_format,
+                speed=config.speed,
+                language=config.language,
+            )
+        else:
+            wav_path = resolve_preset_wav(step.voice_preset_id)
+            if wav_path is None:
+                raise RuntimeError(
+                    f"Voice preset {preset['name']!r} wav file missing. Re-upload or remove the preset."
+                )
+            from ..omnivoice.runner import OmniVoiceEphemeralRunner
+            runner = OmniVoiceEphemeralRunner(config)
+            await runner.run(
+                text,
+                output_path,
+                step_dir,
+                language=config.language,
+                instruct=config.instruct,
+                ref_audio_filename=str(wav_path),
+                ref_text=preset["caption"],
+                num_step=None,
+                guidance_scale=None,
+            )
+    finally:
+        manager.active_voice_jobs -= 1
+    return output_path.name
+
+
 async def execute_chain_job(
     job_id: str,
     job_dir: Path,
@@ -109,8 +174,8 @@ async def execute_chain_job(
     _append_log(job_dir, f"[start] chain job {job_id} with {step_count} steps\n")
 
     client = OpenAICompatibleLLMClient()
-    previous_output = request.input
-    executed_step_dirs: list[str] = []
+    text_output = request.input
+    executed_step_dirs: list[tuple[str, str]] = []  # (dir_name, step_type)
 
     for i, step in enumerate(request.steps):
         step_index = i + 1
@@ -119,7 +184,7 @@ async def execute_chain_job(
         step_dir_name = f"{step_index:03d}_{step_id}"
         step_dir = steps_dir / step_dir_name
         step_dir.mkdir(exist_ok=True)
-        executed_step_dirs.append(step_dir_name)
+        executed_step_dirs.append((step_dir_name, step.type))
 
         _write_chain_status(
             job_dir, "running",
@@ -139,70 +204,113 @@ async def execute_chain_job(
             status="running",
             started_at=step_started_at,
         )
-        (step_dir / "request.json").write_text(
-            json.dumps(step.model_dump(), indent=2), encoding="utf-8"
-        )
 
-        try:
-            context = resolve_context_ids(step.context_ids)
-            (step_dir / "context.txt").write_text(context, encoding="utf-8")
+        if step.type == "llm":
+            try:
+                (step_dir / "request.json").write_text(
+                    json.dumps(step.model_dump(), indent=2), encoding="utf-8"
+                )
+                context = resolve_context_ids(step.context_ids)
+                (step_dir / "context.txt").write_text(context, encoding="utf-8")
 
-            rendered = render_template(
-                step.prompt,
-                input=request.input,
-                previous=previous_output,
-                context=context,
-                step_index=step_index,
-                step_name=step.name,
-            )
-            if context and "{{context}}" not in step.prompt:
-                prompt = f"<START CONTEXT>\n{context}\n<END CONTEXT>\n\n{rendered}"
-            else:
-                prompt = rendered
-            (step_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+                rendered = render_template(
+                    step.prompt,
+                    input=request.input,
+                    previous=text_output,
+                    context=context,
+                    step_index=step_index,
+                    step_name=step.name,
+                )
+                if context and "{{context}}" not in step.prompt:
+                    prompt = f"<START CONTEXT>\n{context}\n<END CONTEXT>\n\n{rendered}"
+                else:
+                    prompt = rendered
+                (step_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
 
-            output = await client.generate(prompt, request.llm)
-            (step_dir / "output.txt").write_text(output, encoding="utf-8")
+                output = await client.generate(prompt, request.llm)
+                (step_dir / "output.txt").write_text(output, encoding="utf-8")
 
-            _write_step_status(
-                step_dir,
-                id=step_id,
-                name=step.name,
-                type=step.type,
-                status="done",
-                started_at=step_started_at,
-                completed_at=_now_iso(),
-                output_file="output.txt",
-            )
-            _append_log(job_dir, f"[step {step_index}/{step_count}] done: {step_id}\n")
-            previous_output = output
+                _write_step_status(
+                    step_dir,
+                    id=step_id,
+                    name=step.name,
+                    type=step.type,
+                    status="done",
+                    started_at=step_started_at,
+                    completed_at=_now_iso(),
+                    output_file="output.txt",
+                )
+                _append_log(job_dir, f"[step {step_index}/{step_count}] llm done: {step_id}\n")
+                text_output = output
 
-        except Exception as exc:
-            _write_step_status(
-                step_dir,
-                id=step_id,
-                name=step.name,
-                type=step.type,
-                status="error",
-                started_at=step_started_at,
-                completed_at=_now_iso(),
-                error=str(exc),
-            )
-            _write_chain_status(job_dir, "error", error=str(exc))
-            _append_log(job_dir, f"[step {step_index}/{step_count}] error: {exc}\n")
-            return
+            except Exception as exc:
+                _write_step_status(
+                    step_dir,
+                    id=step_id,
+                    name=step.name,
+                    type=step.type,
+                    status="error",
+                    started_at=step_started_at,
+                    completed_at=_now_iso(),
+                    error=str(exc),
+                )
+                _write_chain_status(job_dir, "error", error=str(exc))
+                _append_log(job_dir, f"[step {step_index}/{step_count}] error: {exc}\n")
+                return
 
-    (job_dir / "final_output.txt").write_text(previous_output, encoding="utf-8")
+        elif step.type == "voice":
+            try:
+                output_filename = await _execute_voice_step(text_output, step_dir, step)
+                _write_step_status(
+                    step_dir,
+                    id=step_id,
+                    name=step.name,
+                    type=step.type,
+                    status="done",
+                    started_at=step_started_at,
+                    completed_at=_now_iso(),
+                    output_file=output_filename,
+                )
+                _append_log(job_dir, f"[step {step_index}/{step_count}] voice done: {step_id}\n")
+                # text_output intentionally unchanged
+
+            except Exception as exc:
+                _write_step_status(
+                    step_dir,
+                    id=step_id,
+                    name=step.name,
+                    type=step.type,
+                    status="error",
+                    started_at=step_started_at,
+                    completed_at=_now_iso(),
+                    error=str(exc),
+                )
+                _write_chain_status(job_dir, "error", error=str(exc))
+                _append_log(job_dir, f"[step {step_index}/{step_count}] error: {exc}\n")
+                return
+
+    (job_dir / "final_output.txt").write_text(text_output, encoding="utf-8")
 
     artifacts = []
-    for step_dir_name in executed_step_dirs:
-        output_path = job_dir / "steps" / step_dir_name / "output.txt"
-        if output_path.exists():
-            artifacts.append({
-                "filename": f"steps/{step_dir_name}/output.txt",
-                "size": output_path.stat().st_size,
-                "created_at": _now_iso(),
-            })
+    for step_dir_name, step_type in executed_step_dirs:
+        if step_type == "llm":
+            output_path = job_dir / "steps" / step_dir_name / "output.txt"
+            if output_path.exists():
+                artifacts.append({
+                    "filename": f"steps/{step_dir_name}/output.txt",
+                    "size": output_path.stat().st_size,
+                    "created_at": _now_iso(),
+                })
+        elif step_type == "voice":
+            for ext in ("wav", "mp3", "ogg"):
+                output_path = job_dir / "steps" / step_dir_name / f"output.{ext}"
+                if output_path.exists():
+                    artifacts.append({
+                        "filename": f"steps/{step_dir_name}/output.{ext}",
+                        "size": output_path.stat().st_size,
+                        "created_at": _now_iso(),
+                    })
+                    break
     final_path = job_dir / "final_output.txt"
     artifacts.append({
         "filename": "final_output.txt",
