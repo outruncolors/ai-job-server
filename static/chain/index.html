@@ -645,6 +645,10 @@
       const prompt     = opts.prompt !== undefined ? opts.prompt : _CHAIN_DEFAULT_PROMPT;
       const contextIds = opts.context_ids || [];
       const presetId   = opts.voice_preset_id || '';
+      const ctxName    = opts.ctx_name || '';
+      const ctxTags    = (opts.ctx_tags || []).join(', ');
+      const ctxPre     = opts.ctx_pre || '';
+      const ctxPost    = opts.ctx_post || '';
 
       const idx    = _chainStepCounter++;
       const id     = `chain-step-${idx}`;
@@ -656,6 +660,7 @@
         '<select class="chain-step-kind" onchange="_onStepKindChange(this)">' +
           '<option value="llm"' + (type === 'llm' ? ' selected' : '') + '>text</option>' +
           '<option value="voice"' + (type === 'voice' ? ' selected' : '') + '>voice</option>' +
+          '<option value="write_context"' + (type === 'write_context' ? ' selected' : '') + '>write context</option>' +
         '</select>';
 
       el.innerHTML =
@@ -667,7 +672,7 @@
               'style="margin-top:0;padding:2px 8px;font-size:0.7rem;">Remove</button>' +
           '</div>' +
         '</div>' +
-        '<div class="chain-step-text-fields"' + (type === 'voice' ? ' style="display:none;"' : '') + '>' +
+        '<div class="chain-step-text-fields"' + (type !== 'llm' ? ' style="display:none;"' : '') + '>' +
           '<label>Prompt</label>' +
           '<textarea class="chain-step-prompt" style="min-height:72px;">' + _escHtml(prompt) + '</textarea>' +
           '<datalist id="' + listId + '"></datalist>' +
@@ -688,6 +693,16 @@
           (_voicePresets.length === 0
             ? '<div style="color:#555;font-size:0.74rem;margin-top:4px;">No presets — <a href="/voice" style="color:#2a6;">create one at /voice</a></div>'
             : '<select class="chain-step-voice-preset">' + _voicePresetOptions(presetId) + '</select>') +
+        '</div>' +
+        '<div class="chain-step-write-context-fields"' + (type !== 'write_context' ? ' style="display:none;"' : '') + '>' +
+          '<label>Context Name</label>' +
+          '<input class="chain-step-ctx-name" type="text" placeholder="my-notes" value="' + _escHtml(ctxName) + '">' +
+          '<label>Tags <span style="color:#383838;font-size:0.7rem;">(comma-separated)</span></label>' +
+          '<input class="chain-step-ctx-tags" type="text" placeholder="journal, daily…" value="' + _escHtml(ctxTags) + '">' +
+          '<label>Pre <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>' +
+          '<textarea class="chain-step-ctx-pre" style="min-height:48px;">' + _escHtml(ctxPre) + '</textarea>' +
+          '<label>Post <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>' +
+          '<textarea class="chain-step-ctx-post" style="min-height:48px;">' + _escHtml(ctxPost) + '</textarea>' +
         '</div>';
 
       document.getElementById('chain-steps-list').appendChild(el);
@@ -698,8 +713,8 @@
       const card = sel.closest('.chain-step-card');
       const kind = sel.value;
       card.querySelector('.chain-step-text-fields').style.display = kind === 'llm' ? '' : 'none';
-      const voiceFields = card.querySelector('.chain-step-voice-fields');
-      voiceFields.style.display = kind === 'voice' ? '' : 'none';
+      card.querySelector('.chain-step-voice-fields').style.display = kind === 'voice' ? '' : 'none';
+      card.querySelector('.chain-step-write-context-fields').style.display = kind === 'write_context' ? '' : 'none';
       if (kind === 'voice') {
         const presetSel = card.querySelector('.chain-step-voice-preset');
         if (presetSel) {
@@ -723,6 +738,13 @@
         if (kind === 'voice') {
           const presetId = el.querySelector('.chain-step-voice-preset').value;
           steps.push({ name: 'Step ' + (++i), type: 'voice', prompt: '', context_ids: [], voice_preset_id: presetId || null });
+        } else if (kind === 'write_context') {
+          const ctx_name = el.querySelector('.chain-step-ctx-name').value.trim();
+          const ctx_tags = el.querySelector('.chain-step-ctx-tags').value
+            .split(',').map(s => s.trim()).filter(Boolean);
+          const ctx_pre  = el.querySelector('.chain-step-ctx-pre').value;
+          const ctx_post = el.querySelector('.chain-step-ctx-post').value;
+          steps.push({ name: 'Step ' + (++i), type: 'write_context', ctx_name, ctx_tags, ctx_pre, ctx_post });
         } else {
           const prompt = el.querySelector('.chain-step-prompt').value;
           const context_ids = _collectStepContextIds(el);
@@ -750,6 +772,10 @@
       if (missingPreset) {
         msg.style.color = '#e44'; msg.textContent = 'Select a voice preset for every voice step.'; return;
       }
+      const missingCtxName = steps.some(s => s.type === 'write_context' && !s.ctx_name);
+      if (missingCtxName) {
+        msg.style.color = '#e44'; msg.textContent = 'Enter a context name for every write context step.'; return;
+      }
 
       const body = {
         input: '',
@@ -776,12 +802,24 @@
 
     function _stepCollapseHtml(step, stepIndex, files) {
       const cls = step.status === 'error' ? 'status-failed' : statusClass(step.status);
-      const typeTag = step.type === 'voice' ? ' <span style="color:#555;font-size:0.66rem;">voice</span>' : '';
+      const typeTag = step.type === 'voice'
+        ? ' <span style="color:#555;font-size:0.66rem;">voice</span>'
+        : step.type === 'write_context'
+          ? ' <span style="color:#555;font-size:0.66rem;">write context</span>'
+          : '';
       let bodyHtml = '';
       if (step.type === 'voice') {
         if (files && files.audioUrl) {
           bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">AUDIO</p>' +
             '<audio controls style="width:100%;margin-top:4px;" src="' + files.audioUrl + '"></audio>';
+        } else if (step.error) {
+          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
+            '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
+        }
+      } else if (step.type === 'write_context') {
+        if (files && files.itemTitle) {
+          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">CONTEXT ITEM</p>' +
+            '<div style="font-size:0.8rem;color:#aaa;">' + _escHtml(files.itemTitle) + '</div>';
         } else if (step.error) {
           bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
             '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
@@ -823,6 +861,14 @@
         const ar = await fetch(base + audioFile).catch(() => null);
         const audioUrl = ar && ar.ok ? base + audioFile : null;
         return { audioUrl };
+      }
+      if (step.type === 'write_context') {
+        const jr = await fetch(base + 'output.json').catch(() => null);
+        if (jr && jr.ok) {
+          const data = await jr.json().catch(() => null);
+          return { itemTitle: data && data.title, itemId: data && data.id };
+        }
+        return {};
       }
       const [cr, pr, or] = await Promise.allSettled([
         fetch(base + 'context.txt'),
@@ -875,6 +921,8 @@
                     document.getElementById('chain-final-audio-player').src = finalBase + audioFile;
                     document.getElementById('chain-final-audio').style.display = 'block';
                   }
+                } else if (finalStep.type === 'write_context') {
+                  // nothing extra to show; final output text is displayed below
                 } else {
                   try {
                     const [fcr, fp] = await Promise.allSettled([

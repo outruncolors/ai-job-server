@@ -276,6 +276,56 @@ async def execute_chain_job(
                 _append_log(job_dir, f"[step {step_index}/{step_count}] error: {exc}\n")
                 return
 
+        elif step.type == "write_context":
+            try:
+                from .context_library import create_item, list_items, update_item
+
+                parts = [p for p in [step.ctx_pre, text_output, step.ctx_post] if p]
+                entry = "\n\n".join(parts)
+
+                existing = next((item for item in list_items() if item["title"] == step.ctx_name), None)
+                if existing:
+                    new_content = existing["content"] + "\n\n---\n\n" + entry
+                    result_item = update_item(existing["id"], content=new_content)
+                else:
+                    result_item = create_item(
+                        title=step.ctx_name or "",
+                        tags=step.ctx_tags or [],
+                        description="",
+                        content=entry,
+                    )
+
+                (step_dir / "output.json").write_text(
+                    json.dumps(result_item, indent=2), encoding="utf-8"
+                )
+                _write_step_status(
+                    step_dir,
+                    id=step_id,
+                    name=step.name,
+                    type=step.type,
+                    status="done",
+                    started_at=step_started_at,
+                    completed_at=_now_iso(),
+                    output_file="output.json",
+                )
+                _append_log(job_dir, f"[step {step_index}/{step_count}] write_context done: {step_id}\n")
+                # text_output intentionally unchanged
+
+            except Exception as exc:
+                _write_step_status(
+                    step_dir,
+                    id=step_id,
+                    name=step.name,
+                    type=step.type,
+                    status="error",
+                    started_at=step_started_at,
+                    completed_at=_now_iso(),
+                    error=str(exc),
+                )
+                _write_chain_status(job_dir, "error", error=str(exc))
+                _append_log(job_dir, f"[step {step_index}/{step_count}] error: {exc}\n")
+                return
+
     (job_dir / "final_output.txt").write_text(text_output, encoding="utf-8")
 
     artifacts = []
@@ -298,6 +348,14 @@ async def execute_chain_job(
                         "created_at": _now_iso(),
                     })
                     break
+        elif step_type == "write_context":
+            output_path = job_dir / "steps" / step_dir_name / "output.json"
+            if output_path.exists():
+                artifacts.append({
+                    "filename": f"steps/{step_dir_name}/output.json",
+                    "size": output_path.stat().st_size,
+                    "created_at": _now_iso(),
+                })
     final_path = job_dir / "final_output.txt"
     artifacts.append({
         "filename": "final_output.txt",
