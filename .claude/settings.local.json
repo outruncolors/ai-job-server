@@ -22,7 +22,9 @@
       "Bash(grep -E \"\\\\.\\(html|js|css\\)$\")",
       "Bash(grep -E \"\\\\.py$|^d\")",
       "Bash(pip show *)",
-      "Bash(pip3 show *)"
+      "Bash(pip3 show *)",
+      "Read(//var/lib/claude-code/.claude/plugins/**)",
+      "Read(//var/lib/claude-code/.claude/**)"
     ]
   }
 }
