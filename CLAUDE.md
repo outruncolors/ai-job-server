@@ -26,6 +26,12 @@
 | `app/chain/llm_client.py` | `OpenAICompatibleLLMClient` — uses `httpx`, not `requests` |
 | `app/mcp/registry.py` | Hardcoded tool definitions (`random_integer`, `generate_name`, `format_voice_segments`) |
 | `app/mcp/executor.py` | `execute()` — runs a named tool with validated arguments |
+| `app/comfyui/config.py` | `ComfyUIConfig` model, get/save from `config/comfyui.json` |
+| `app/comfyui/manager.py` | `ComfyUIManager` — long-lived process: start/stop/restart, readiness probe, GPU status |
+| `app/comfyui/client.py` | `ComfyUIClient` — httpx wrapper for ComfyUI HTTP API (port 8188) |
+| `app/comfyui/workflows.py` | `list_workflows()`, `introspect_params()`, `inject_params()` — workflow discovery + param injection |
+| `app/comfyui/runner.py` | `execute_image_job()` — submits prompt, polls history, fetches output images |
+| `app/comfyui/router.py` | Routes: `/v1/comfyui/{status,start,stop,restart,config,workflows,system_stats}` |
 | `app/omnivoice/config.py` | `OmniVoiceConfig` model, get/save from `config/omnivoice.json` |
 | `app/omnivoice/runner.py` | `OmniVoiceEphemeralRunner` — subprocess-based TTS invocation |
 | `app/voice_presets.py` | Preset CRUD backed by `config/voice_presets/` |
@@ -36,18 +42,18 @@
 
 ### Frontend page layout
 
-Each page under `static/<page>/` has three files:
+Each page under `static/<page>/` has three files (minimum):
 - `index.html` — slim skeleton (~60–120 lines): meta, link tags, layout HTML, no inline CSS or JS
 - `styles.css` — page-specific styles only
-- `<page>.js` — all page logic
+- `<page>.js` — shared utilities + init (loaded last so tab modules can call its globals from handlers)
 
-Script load order in every HTML: `nav.js` → (page deps) → `<page>.js` → `nav-mobile.js`. The voice page also loads `voice-segments.js` before `voice.js`.
+Pages can split into multiple JS modules. Script load order: `nav.js` → (page deps / tab modules) → `<page>.js` → `nav-mobile.js`. The voice page loads `voice-segments.js` before `voice.js`. The image page loads `server-tab.js`, `generate-tab.js`, `workflows-tab.js`, `config-tab.js` before `image.js`.
 
 ## Architecture
 
 - **Jobs** stored at `JOBS_BASE/YYYY-MM-DD/<uuid>/` with `request.json`, `status.json`, `logs.txt`, `artifacts.json`
 - **Chain jobs** add `steps/NNN_<step_id>/` subdirs; `_expand_steps()` flattens sequence references before execution
-- **Config** (sequences, context items, voice presets, omnivoice settings) lives in `config/` — **gitignored**, never commit
+- **Config** (sequences, context items, voice presets, omnivoice settings, comfyui settings + workflows) lives in `config/` — **gitignored**, never commit
 - **Step types**: `llm`, `voice`, `write_context`, `sequence` (sequence expands inline; only llm updates `text_output`)
 - **Step runner isolation**: step runners in `app/chain/steps/` raise exceptions on failure; `executor.py` owns all status writes and log appends — steps never import from `executor.py`
 - **Cycle detection**: DFS in `sequences.py`; enforced at save time (422) and run time (depth guard at 20)
@@ -55,6 +61,7 @@ Script load order in every HTML: `nav.js` → (page deps) → `<page>.js` → `n
 - UI is dark-theme monospace; two-panel layout (controls left, output right); tab switching via `switchTab()`
 - **Toast system**: `Map`-based, id-deduplicated; defined in `static/server/server.js` and `static/mcp/mcp.js`; requires `<div id="toast-stack"></div>` in HTML
 - **psutil**: `psutil.cpu_percent()` must be called once at import (no interval) to prime the sampler before using `interval=None` calls
+- **ComfyUI**: unlike OmniVoice (ephemeral subprocesses), ComfyUI is a long-lived HTTP server at `127.0.0.1:8188`. `ComfyUIManager` starts it at FastAPI boot (`lifespan` in `main.py`), adopts it if already running, and manages the process group with `os.killpg`. Workflows are API-format JSON in `config/comfyui-workflows/`; params are auto-detected by node class. Install: `bash runtimes/comfyui-setup.sh`
 
 ## Common patterns
 
@@ -95,3 +102,4 @@ Full developer docs are in `docs/`:
 - `docs/api.md` — complete REST API reference with curl examples
 - `docs/chain-jobs.md` — step type reference, template vars, sequences, MCP tools, voice auto-segmentation
 - `docs/configuration.md` — env vars, `omnivoice.json` fields, external services, dev/prod setup
+- `docs/comfyui-setup.md` — ComfyUI install, optimization flags, workflow authoring, troubleshooting

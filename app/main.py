@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,6 +19,10 @@ from .chain.context_library import (
 from .chain.executor import execute_chain_job, list_chain_steps, patch_initial_chain_status
 from .chain.models import ChainJobRequest
 from .chain.sequences import delete_sequence, duplicate_sequence, list_sequences, save_sequence
+from .comfyui.config import get_config as get_comfy_config
+from .comfyui.manager import get_manager as get_comfy_manager
+from .comfyui.router import router as comfyui_router
+from .comfyui.runner import execute_image_job
 from .jobs import (
     clear_pending_jobs,
     create_job,
@@ -44,10 +49,23 @@ from .omnivoice.router import router as omnivoice_router
 from .voice_presets_router import router as presets_router
 from .mcp.router import router as mcp_router
 
-app = FastAPI(title="ai-job-server", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    cfg = get_comfy_config()
+    if cfg.autostart:
+        try:
+            await get_comfy_manager().start()
+        except Exception as exc:
+            print(f"ComfyUI autostart skipped: {exc}")
+    yield
+
+
+app = FastAPI(title="ai-job-server", version="0.1.0", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
+app.include_router(comfyui_router)
 app.include_router(omnivoice_router)
 app.include_router(presets_router)
 app.include_router(mcp_router)
@@ -59,9 +77,19 @@ def health():
 
 
 @app.post("/v1/jobs/image", response_model=JobCreatedResponse, status_code=202)
-def create_image_job(req: ImageJobRequest):
-    input_text = req.prompt
+def create_image_job(req: ImageJobRequest, background_tasks: BackgroundTasks):
+    input_text = req.params.get("prompt", req.workflow)
     data = create_job("image", req.model_dump(), input_text)
+    job_id = data["job_id"]
+    job_dir = find_job_dir(job_id)
+    background_tasks.add_task(
+        execute_image_job,
+        job_id,
+        job_dir,
+        req,
+        get_comfy_config(),
+        get_comfy_manager(),
+    )
     return JobCreatedResponse(**data)
 
 

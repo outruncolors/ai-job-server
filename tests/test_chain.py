@@ -388,7 +388,7 @@ def test_get_chain_steps_not_found(client):
 # ---------------------------------------------------------------------------
 
 def test_get_job_file_status_still_works(client):
-    r = client.post("/v1/jobs/image", json={"prompt": "test"})
+    r = client.post("/v1/jobs/image", json={"workflow": "test_wf"})
     job_id = r.json()["job_id"]
     r2 = client.get(f"/v1/jobs/{job_id}/files/status.json")
     assert r2.status_code == 200

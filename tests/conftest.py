@@ -41,6 +41,24 @@ def patch_context_base(tmp_path, monkeypatch):
     return ctx_dir
 
 
+@pytest.fixture(autouse=True)
+def patch_comfyui_config(tmp_path, monkeypatch):
+    """Redirect ComfyUI config to tmp dir and reset singleton."""
+    import app.comfyui.config as cfg
+    monkeypatch.setattr(cfg, "CONFIG_PATH", tmp_path / "config" / "comfyui.json")
+    monkeypatch.setattr(cfg, "WORKFLOWS_DIR", tmp_path / "config" / "comfyui-workflows")
+    monkeypatch.setattr(cfg, "_config", None)
+
+
+@pytest.fixture(autouse=True)
+def patch_execute_image_job(monkeypatch):
+    """Stub out image job execution so tests don't try to reach ComfyUI."""
+    import app.main as m
+    mock = AsyncMock()
+    monkeypatch.setattr(m, "execute_image_job", mock)
+    return mock
+
+
 @pytest.fixture()
 def mock_execute_voice_job(monkeypatch):
     """Opt-in fixture: replaces execute_voice_job with a no-op AsyncMock.

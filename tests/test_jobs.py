@@ -19,11 +19,11 @@ def test_health(client):
 
 
 # ---------------------------------------------------------------------------
-# Image job creation
+# Image job creation (workflow-based schema)
 # ---------------------------------------------------------------------------
 
 def test_create_image_job(client):
-    payload = {"prompt": "a cat on the moon", "width": 512, "height": 512, "steps": 20}
+    payload = {"workflow": "txt2img", "params": {"prompt": "a cat on the moon", "steps": 20}}
     r = client.post("/v1/jobs/image", json=payload)
     assert r.status_code == 202
     body = r.json()
@@ -34,21 +34,20 @@ def test_create_image_job(client):
 
 
 def test_create_image_job_minimal(client):
-    r = client.post("/v1/jobs/image", json={"prompt": "hello"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
     assert r.status_code == 202
     assert r.json()["job_type"] == "image"
 
 
-def test_create_image_job_missing_prompt(client):
-    r = client.post("/v1/jobs/image", json={"width": 512})
+def test_create_image_job_missing_workflow(client):
+    r = client.post("/v1/jobs/image", json={"params": {"prompt": "hi"}})
     assert r.status_code == 422
 
 
 def test_image_job_files_written(client, tmp_path):
-    r = client.post("/v1/jobs/image", json={"prompt": "test prompt"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img", "params": {"prompt": "test prompt"}})
     job_id = r.json()["job_id"]
 
-    # Find job directory
     job_dirs = list(tmp_path.glob(f"*/{job_id}"))
     assert len(job_dirs) == 1
     job_dir = job_dirs[0]
@@ -118,7 +117,7 @@ def test_voice_job_files_written(client, tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_get_job(client):
-    r = client.post("/v1/jobs/image", json={"prompt": "lookup test"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
     job_id = r.json()["job_id"]
 
     r2 = client.get(f"/v1/jobs/{job_id}")
@@ -143,7 +142,7 @@ def test_list_jobs_empty(client):
 
 
 def test_list_jobs(client):
-    client.post("/v1/jobs/image", json={"prompt": "first"})
+    client.post("/v1/jobs/image", json={"workflow": "txt2img"})
     client.post("/v1/jobs/voice", json={"text": "second"})
     r = client.get("/v1/jobs")
     assert r.status_code == 200
@@ -158,7 +157,7 @@ def test_list_jobs(client):
 # ---------------------------------------------------------------------------
 
 def test_get_job_file_status(client):
-    r = client.post("/v1/jobs/image", json={"prompt": "file test"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
     job_id = r.json()["job_id"]
 
     r2 = client.get(f"/v1/jobs/{job_id}/files/status.json")
@@ -168,7 +167,7 @@ def test_get_job_file_status(client):
 
 
 def test_get_job_file_logs(client):
-    r = client.post("/v1/jobs/image", json={"prompt": "log test"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
     job_id = r.json()["job_id"]
 
     r2 = client.get(f"/v1/jobs/{job_id}/files/logs.txt")
@@ -177,15 +176,14 @@ def test_get_job_file_logs(client):
 
 
 def test_get_job_file_not_found(client):
-    r = client.post("/v1/jobs/image", json={"prompt": "missing file"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
     job_id = r.json()["job_id"]
     r2 = client.get(f"/v1/jobs/{job_id}/files/output.png")
     assert r2.status_code == 404
 
 
 def test_get_job_file_path_traversal(client):
-    r = client.post("/v1/jobs/image", json={"prompt": "evil"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
     job_id = r.json()["job_id"]
     r2 = client.get(f"/v1/jobs/{job_id}/files/../../etc/passwd")
-    # Either 404 (blocked) or 422 (FastAPI rejects the path param)
     assert r2.status_code in (404, 422)

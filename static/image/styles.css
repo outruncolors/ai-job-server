@@ -13,22 +13,98 @@ button {
   padding: 7px 18px; background: #2a6; color: #fff; border: none;
   border-radius: 3px; cursor: pointer; font-family: monospace; font-size: 0.82rem; margin-top: 10px;
 }
-button:hover { background: #3b7; }
+button:hover   { background: #3b7; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.secondary { background: #333; }
 button.secondary:hover { background: #424242; }
-button.danger { background: #7a2222; }
+button.danger  { background: #7a2222; }
 button.danger:hover { background: #992828; }
 .row { display: flex; gap: 10px; }
 .row > * { flex: 1; min-width: 0; }
 .msg { font-size: 0.76rem; min-height: 1.1em; margin-top: 6px; }
-.status-queued  { color: #777; }
-.status-running { color: #fa0; }
-.status-done    { color: #2a6; }
-.status-failed, .status-error { color: #e44; }
 
-/* ── Panels ── */
-#panels { display: flex; height: 100vh; padding-top: 44px; }
-#panel-left  { flex: 1; overflow-y: auto; padding: 24px 28px; border-right: 1px solid #1a1a1a; }
-#panel-right { flex: 1; overflow-y: auto; padding: 24px 28px; }
+/* ── Tab bar ── */
+#tab-bar {
+  position: fixed; top: 44px; left: 0; right: 0; z-index: 90;
+  display: flex; gap: 2px; padding: 8px 16px 0;
+  border-bottom: 1px solid #222; background: #111;
+}
+.tab-btn {
+  background: #1a1a1a; color: #888; border: 1px solid #2a2a2a; border-bottom: none;
+  padding: 5px 16px; font-family: monospace; font-size: 0.8rem; cursor: pointer;
+  border-radius: 3px 3px 0 0; margin-top: 2px;
+}
+.tab-btn.active { background: #111; color: #ccc; border-color: #444; }
+.tab-btn:hover:not(.active) { color: #aaa; background: #1e1e1e; }
 
-.section-label { color: #383838; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; }
+/* ── Tab panes + panels ── */
+.tab-pane        { display: none; }
+.tab-pane.active { display: block; }
+
+#panels { display: flex; height: 100vh; padding-top: 88px; }
+#panel-left  { flex: 1; overflow-y: auto; padding: 20px 24px; border-right: 1px solid #1a1a1a; }
+#panel-right { flex: 1; overflow-y: auto; padding: 20px 24px; }
+
+.section-label { color: #383838; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px; }
+
+/* ── Status card ── */
+.status-card {
+  background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 4px; padding: 12px 14px;
+}
+.status-row { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+.indicator { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.indicator.running  { background: #2a6; box-shadow: 0 0 5px #2a6; }
+.indicator.stopped  { background: #555; }
+.indicator.starting { background: #ca4; box-shadow: 0 0 5px #ca4; }
+.status-detail { margin-top: 8px; color: #555; font-size: 0.76rem; line-height: 1.7; }
+
+/* ── VRAM bar ── */
+.vram-bar-wrap { background: #222; border-radius: 2px; height: 5px; margin: 4px 0 2px; }
+.vram-bar      { height: 5px; border-radius: 2px; background: #2a6; transition: width 0.4s; }
+.vram-bar.warn { background: #ca4; }
+.vram-bar.danger { background: #c44; }
+
+/* ── Button row ── */
+.button-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+/* ── Action log ── */
+.action-log { font-size: 0.76rem; color: #888; max-height: 220px; overflow-y: auto; }
+.log-entry  { padding: 2px 0; border-bottom: 1px solid #1a1a1a; }
+.log-time   { color: #3a3a3a; margin-right: 6px; }
+.log-ok     { color: #2a6; }
+.log-err    { color: #c44; }
+
+/* ── Generate params ── */
+#gen-params label  { color: #666; font-size: 0.76rem; margin-top: 10px; }
+#gen-images        { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+#gen-images img    { max-width: 100%; border: 1px solid #333; border-radius: 3px; cursor: pointer; }
+
+/* ── Workflows tab ── */
+#tab-workflows { padding: 16px 20px; overflow-y: auto; height: 100vh; padding-top: 96px; }
+.wf-card       { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 4px; padding: 12px 14px; margin-bottom: 10px; }
+.wf-name       { font-size: 0.9rem; color: #ccc; margin-bottom: 8px; }
+.wf-params     { display: flex; flex-wrap: wrap; gap: 4px; }
+.wf-param-tag  { background: #222; border: 1px solid #333; border-radius: 2px; padding: 1px 7px; font-size: 0.74rem; color: #888; }
+.wf-empty      { color: #444; font-size: 0.82rem; }
+
+/* ── Config tab ── */
+.info-banner {
+  background: #1a1a18; border: 1px solid #3a3820; border-radius: 3px;
+  color: #998; font-size: 0.78rem; padding: 8px 12px; margin-bottom: 14px;
+}
+
+/* ── Toast stack ── */
+#toast-stack {
+  position: fixed; bottom: 16px; right: 16px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 8px; max-width: 300px;
+}
+.toast {
+  background: #1e1e1e; border-radius: 4px; padding: 10px 14px;
+  font-size: 0.8rem; border-left: 3px solid #555; opacity: 1; transition: opacity 0.3s;
+}
+.toast-success { border-color: #2a6; }
+.toast-error   { border-color: #c44; }
+.toast-warning { border-color: #ca4; }
+.toast-info    { border-color: #46a; }
+.toast-dismiss { float: right; cursor: pointer; color: #555; margin-left: 8px; }
+.toast-countdown { display: block; color: #555; font-size: 0.73rem; margin-top: 2px; }

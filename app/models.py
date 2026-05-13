@@ -7,12 +7,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class ImageJobRequest(BaseModel):
-    prompt: str
-    width: int = 512
-    height: int = 512
-    steps: int = 20
-    model: Optional[str] = None
-    negative_prompt: Optional[str] = None
+    workflow: str
+    params: dict[str, Any] = {}
 
 
 class VoiceSegment(BaseModel):
