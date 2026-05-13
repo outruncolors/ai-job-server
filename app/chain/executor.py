@@ -86,7 +86,13 @@ def list_chain_steps(job_dir: Path) -> list[dict[str, Any]]:
     return steps
 
 
-async def _execute_voice_step(text: str, step_dir: Path, step: ChainStep) -> str:
+async def _execute_voice_step(
+    text: str,
+    step_dir: Path,
+    step: ChainStep,
+    client: "OpenAICompatibleLLMClient | None" = None,
+    llm_config: "ChainLLMConfig | None" = None,
+) -> str:
     from ..omnivoice.config import get_config
     from ..omnivoice.manager import get_manager
     from ..voice_presets import get_preset, resolve_preset_wav
@@ -118,12 +124,20 @@ async def _execute_voice_step(text: str, step_dir: Path, step: ChainStep) -> str
             f"Voice preset {preset['name']!r} wav file missing. Re-upload or remove the preset."
         )
 
+    if step.voice_preprocess and client and llm_config:
+        from ..omnivoice.constants import DEFAULT_VOICE_PREPROCESS_PROMPT
+        preprocess_prompt = config.voice_preprocess_prompt or DEFAULT_VOICE_PREPROCESS_PROMPT
+        text = await client.generate(f"{preprocess_prompt}\n\n{text}", llm_config)
+
+    parts = [p for p in [step.voice_pre, text, step.voice_post] if p]
+    tts_text = "\n\n".join(parts) if parts else text
+
     from ..omnivoice.runner import OmniVoiceEphemeralRunner
     runner = OmniVoiceEphemeralRunner(config)
     manager.active_voice_jobs += 1
     try:
         await runner.run(
-            text,
+            tts_text,
             output_path,
             step_dir,
             language=config.language,
@@ -247,7 +261,9 @@ async def execute_chain_job(
 
         elif step.type == "voice":
             try:
-                output_filename = await _execute_voice_step(text_output, step_dir, step)
+                output_filename = await _execute_voice_step(
+                    text_output, step_dir, step, client=client, llm_config=request.llm
+                )
                 _write_step_status(
                     step_dir,
                     id=step_id,

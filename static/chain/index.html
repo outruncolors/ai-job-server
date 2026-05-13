@@ -634,6 +634,9 @@
       const prompt     = opts.prompt !== undefined ? opts.prompt : _CHAIN_DEFAULT_PROMPT;
       const contextIds = opts.context_ids || [];
       const presetId   = opts.voice_preset_id || '';
+      const voicePre        = opts.voice_pre || '';
+      const voicePost       = opts.voice_post || '';
+      const voicePreprocess = !!opts.voice_preprocess;
       const ctxName        = opts.ctx_name || '';
       const ctxDescription = opts.ctx_description || '';
       const ctxTags        = (opts.ctx_tags || []).join(', ');
@@ -641,6 +644,7 @@
       const ctxPost        = opts.ctx_post || '';
       const ctxOverwrite   = !!opts.ctx_overwrite;
 
+      const isFirst = document.querySelectorAll('#chain-steps-list > .chain-step-card').length === 0;
       const idx    = _chainStepCounter++;
       const id     = `chain-step-${idx}`;
       const listId = `ctx-list-${idx}`;
@@ -650,7 +654,7 @@
       const kindSel =
         '<select class="chain-step-kind" onchange="_onStepKindChange(this)">' +
           '<option value="llm"' + (type === 'llm' ? ' selected' : '') + '>text</option>' +
-          '<option value="voice"' + (type === 'voice' ? ' selected' : '') + '>voice</option>' +
+          '<option value="voice"' + (type === 'voice' ? ' selected' : '') + (isFirst ? ' disabled' : '') + '>voice</option>' +
           '<option value="write_context"' + (type === 'write_context' ? ' selected' : '') + '>write context</option>' +
         '</select>';
 
@@ -684,6 +688,15 @@
           (_voicePresets.length === 0
             ? '<div style="color:#555;font-size:0.74rem;margin-top:4px;">No presets — <a href="/voice" style="color:#2a6;">create one at /voice</a></div>'
             : '<select class="chain-step-voice-preset">' + _voicePresetOptions(presetId) + '</select>') +
+          '<label>Pre <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>' +
+          '<textarea class="chain-step-voice-pre" style="min-height:48px;">' + _escHtml(voicePre) + '</textarea>' +
+          '<label>Post <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>' +
+          '<textarea class="chain-step-voice-post" style="min-height:48px;">' + _escHtml(voicePost) + '</textarea>' +
+          '<label style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer;">' +
+            '<input type="checkbox" class="chain-step-voice-preprocess"' + (voicePreprocess ? ' checked' : '') + '>' +
+            'Pre-process for speech' +
+            '<span style="color:#383838;font-size:0.7rem;">(clean text via LLM before TTS)</span>' +
+          '</label>' +
         '</div>' +
         '<div class="chain-step-write-context-fields"' + (type !== 'write_context' ? ' style="display:none;"' : '') + '>' +
           '<label>Context Name</label>' +
@@ -704,6 +717,20 @@
 
       document.getElementById('chain-steps-list').appendChild(el);
       _buildCtxSelector(el, new Set(contextIds));
+      _refreshFirstStepVoiceDisable();
+    }
+
+    function _refreshFirstStepVoiceDisable() {
+      const cards = document.querySelectorAll('#chain-steps-list > .chain-step-card');
+      cards.forEach((card, i) => {
+        const voiceOpt = card.querySelector('.chain-step-kind option[value="voice"]');
+        if (!voiceOpt) return;
+        voiceOpt.disabled = (i === 0);
+        if (i === 0 && card.querySelector('.chain-step-kind').value === 'voice') {
+          card.querySelector('.chain-step-kind').value = 'llm';
+          _onStepKindChange(card.querySelector('.chain-step-kind'));
+        }
+      });
     }
 
     function _onStepKindChange(sel) {
@@ -724,6 +751,7 @@
     function removeChainStep(id) {
       const el = document.getElementById(id);
       if (el) el.remove();
+      _refreshFirstStepVoiceDisable();
     }
 
     function _collectSteps() {
@@ -733,8 +761,11 @@
       for (const el of stepEls) {
         const kind = el.querySelector('.chain-step-kind').value;
         if (kind === 'voice') {
-          const presetId = el.querySelector('.chain-step-voice-preset').value;
-          steps.push({ name: 'Step ' + (++i), type: 'voice', prompt: '', context_ids: [], voice_preset_id: presetId || null });
+          const presetId        = el.querySelector('.chain-step-voice-preset').value;
+          const voice_pre       = el.querySelector('.chain-step-voice-pre').value;
+          const voice_post      = el.querySelector('.chain-step-voice-post').value;
+          const voice_preprocess = el.querySelector('.chain-step-voice-preprocess').checked;
+          steps.push({ name: 'Step ' + (++i), type: 'voice', prompt: '', context_ids: [], voice_preset_id: presetId || null, voice_pre, voice_post, voice_preprocess });
         } else if (kind === 'write_context') {
           const ctx_name        = el.querySelector('.chain-step-ctx-name').value.trim();
           const ctx_description = el.querySelector('.chain-step-ctx-description').value.trim();

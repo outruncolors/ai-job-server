@@ -20,6 +20,9 @@ class ChainStep(BaseModel):
     prompt: str = ""
     context_ids: list[str] = []
     voice_preset_id: Optional[str] = None
+    voice_pre: Optional[str] = None
+    voice_post: Optional[str] = None
+    voice_preprocess: bool = False
     ctx_name: Optional[str] = None
     ctx_description: Optional[str] = None
     ctx_pre: Optional[str] = None

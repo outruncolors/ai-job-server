@@ -29,6 +29,7 @@ class OmniVoiceConfig(BaseModel):
     ref_audio_filename: Optional[str] = None
     ref_text: Optional[str] = None
     infer_base_command: Optional[List[str]] = None
+    voice_preprocess_prompt: Optional[str] = None
 
 
 def load_config() -> OmniVoiceConfig:

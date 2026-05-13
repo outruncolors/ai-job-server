@@ -113,6 +113,7 @@
       <div id="voice-tabs">
         <button class="tab-btn active" onclick="switchTab('create')">Create Voice</button>
         <button class="tab-btn" onclick="switchTab('use')">Use Voice</button>
+        <button class="tab-btn" onclick="switchTab('preprocess')">Pre-Processing Prompt</button>
       </div>
 
       <!-- ── Create Voice tab ── -->
@@ -330,6 +331,19 @@
 
       </div><!-- /use-panel -->
 
+      <!-- ── Pre-Processing Prompt tab ── -->
+      <div id="preprocess-panel" style="display:none;">
+        <label>Pre-Processing Prompt
+          <span style="color:#383838;font-size:0.7rem;">(overrides built-in default — leave empty to use built-in)</span>
+        </label>
+        <textarea id="preprocess-prompt-input" style="min-height:220px;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button onclick="savePreprocessPrompt()">Save</button>
+          <button class="secondary" onclick="resetPreprocessPrompt()">Reset to Default</button>
+        </div>
+        <div class="msg" id="preprocess-msg"></div>
+      </div><!-- /preprocess-panel -->
+
     </div><!-- /panel-left -->
 
     <!-- ── Right: Output ── -->
@@ -431,13 +445,15 @@
     // ── Tabs ─────────────────────────────────────────────────────────
     function switchTab(tab) {
       _activeTab = tab;
+      const _tabOrder = ['create', 'use', 'preprocess'];
       document.querySelectorAll('.tab-btn').forEach((b, i) =>
-        b.classList.toggle('active', (i === 0) === (tab === 'create'))
+        b.classList.toggle('active', _tabOrder[i] === tab)
       );
-      document.getElementById('create-panel').style.display = tab === 'create' ? '' : 'none';
-      document.getElementById('use-panel').style.display    = tab === 'use'    ? '' : 'none';
-      document.getElementById('create-output').style.display = tab === 'create' ? '' : 'none';
-      document.getElementById('use-output').style.display    = tab === 'use'    ? '' : 'none';
+      document.getElementById('create-panel').style.display     = tab === 'create'     ? '' : 'none';
+      document.getElementById('use-panel').style.display        = tab === 'use'        ? '' : 'none';
+      document.getElementById('preprocess-panel').style.display = tab === 'preprocess' ? '' : 'none';
+      document.getElementById('create-output').style.display    = tab === 'create' ? '' : 'none';
+      document.getElementById('use-output').style.display       = tab === 'use'    ? '' : 'none';
     }
 
     // ── Create: Design ───────────────────────────────────────────────
@@ -651,9 +667,47 @@
       } catch(e) {}
     }
 
+    // ── Pre-Processing Prompt ─────────────────────────────────────────
+    const _DEFAULT_VOICE_PREPROCESS_PROMPT =
+      'You are a text pre-processor for text-to-speech synthesis. ' +
+      'Rewrite the following text so it reads naturally when spoken aloud. ' +
+      'Remove markdown formatting (headers, bold, italics, bullet points, code blocks). ' +
+      'Replace or remove symbols (e.g. \'#\', \'*\', \'->\', \'%\', \'|\', \'~\', \'`\', \'=\', \'+\', \'<\', \'>\'). ' +
+      'Expand abbreviations where meaning is clear. ' +
+      'Preserve sentence boundaries and natural pacing punctuation. ' +
+      'Output only the cleaned text with no explanation or commentary.';
+
+    async function loadPreprocessPrompt() {
+      document.getElementById('preprocess-prompt-input').placeholder = _DEFAULT_VOICE_PREPROCESS_PROMPT;
+      try {
+        const cfg = await api('/v1/omnivoice/config');
+        document.getElementById('preprocess-prompt-input').value = cfg.voice_preprocess_prompt || '';
+      } catch(e) { /* silent */ }
+    }
+
+    async function savePreprocessPrompt() {
+      const msg = document.getElementById('preprocess-msg');
+      const val = document.getElementById('preprocess-prompt-input').value.trim();
+      try {
+        const cfg = await api('/v1/omnivoice/config');
+        cfg.voice_preprocess_prompt = val || null;
+        await api('/v1/omnivoice/config', 'PUT', cfg);
+        msg.style.color = '#2a6'; msg.textContent = 'Saved.';
+      } catch(e) {
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function resetPreprocessPrompt() {
+      document.getElementById('preprocess-prompt-input').value = '';
+      document.getElementById('preprocess-msg').style.color = '#888';
+      document.getElementById('preprocess-msg').textContent = 'Cleared — save to use built-in default.';
+    }
+
     // ── Init ─────────────────────────────────────────────────────────
     document.querySelector('#topnav [data-page="voice"]').classList.add('active');
     loadPresets();
+    loadPreprocessPrompt();
   </script>
   <script src="/js/nav-mobile.js"></script>
 </body>
