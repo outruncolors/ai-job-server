@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Image · AI Job Server</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -55,6 +55,7 @@
 
     .section-label { color: #383838; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; }
   </style>
+  <link rel="stylesheet" href="/css/responsive.css">
 </head>
 <body>
 
@@ -74,7 +75,7 @@
       <label>Prompt</label>
       <textarea id="img-prompt" style="min-height:140px;" placeholder="a photorealistic cat on the moon"></textarea>
 
-      <div class="row" style="margin-top:2px;">
+      <div class="row dims-row" style="margin-top:2px;">
         <div>
           <label>Width</label>
           <input id="img-width" type="number" value="512">
@@ -144,5 +145,6 @@
       }
     }
   </script>
+  <script src="/js/nav-mobile.js"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Context Library · AI Job Server</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -74,6 +74,7 @@
     #form-msg { font-size: 0.75rem; flex: 1; }
     #empty-state { color: #2a2a2a; font-size: 0.82rem; padding: 20px 0; }
   </style>
+  <link rel="stylesheet" href="/css/responsive.css">
 </head>
 <body>
 
@@ -256,5 +257,6 @@
     document.querySelector('#topnav [data-page="context"]').classList.add('active');
     loadItems();
   </script>
+  <script src="/js/nav-mobile.js"></script>
 </body>
 </html>

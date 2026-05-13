@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Jobs · AI Job Server</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -84,6 +84,7 @@
     .raw-links a:hover { color: #6680aa; }
     #detail-delete-wrap { margin-top: 24px; padding-top: 16px; border-top: 1px solid #1a1a1a; }
   </style>
+  <link rel="stylesheet" href="/css/responsive.css">
 </head>
 <body>
 
@@ -356,5 +357,6 @@
     document.querySelector('#topnav [data-page="jobs"]').classList.add('active');
     loadJobs();
   </script>
+  <script src="/js/nav-mobile.js"></script>
 </body>
 </html>

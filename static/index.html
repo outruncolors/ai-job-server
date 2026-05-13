@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>AI Job Server</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -41,8 +41,9 @@
     #nav-up   { top: 7px; }
     #nav-down { bottom: 7px; }
   </style>
+  <link rel="stylesheet" href="/css/responsive.css">
 </head>
-<body>
+<body class="page-home">
   <div id="nav-up"   class="nav-arr hidden" onclick="goToSlide(currentSlide-1)">&#8679;</div>
   <div id="nav-down" class="nav-arr"        onclick="goToSlide(currentSlide+1)">&#8681;</div>
 
@@ -110,5 +111,6 @@
       if (Math.abs(dy) > 60) goToSlide(dy > 0 ? currentSlide + 1 : currentSlide - 1);
     });
   </script>
+  <script src="/js/nav-mobile.js"></script>
 </body>
 </html>

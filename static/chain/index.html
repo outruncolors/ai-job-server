@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Chain Jobs · AI Job Server</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -176,6 +176,7 @@
     .ctx-entry-desc  { color: #484848; font-size: 0.67rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ctx-empty { color: #333; font-size: 0.72rem; padding: 4px 0; }
   </style>
+  <link rel="stylesheet" href="/css/responsive.css">
 </head>
 <body>
 
@@ -935,5 +936,6 @@
       addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
     });
   </script>
+  <script src="/js/nav-mobile.js"></script>
 </body>
 </html>
