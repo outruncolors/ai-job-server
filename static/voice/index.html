@@ -189,12 +189,26 @@
           <button class="danger" onclick="deleteSelectedPreset()" style="margin-top:6px;padding:4px 10px;font-size:0.76rem;">Delete Preset</button>
         </div>
 
-        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:14px;">
-          <label style="margin:0;">Segments</label>
-          <button type="button" class="secondary" id="use-add-seg-btn"
-            style="margin:0;padding:3px 10px;font-size:0.72rem;">+ Add segment</button>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px;">
+          <input type="checkbox" id="use-auto-segment" onchange="toggleAutoSegment()">
+          <label style="margin:0;cursor:pointer;" onclick="document.getElementById('use-auto-segment').click()">Auto-segment with LLM</label>
+          <select id="use-seg-preset-select" onchange="applySegPreset()"
+            style="display:none;flex:1;margin:0;">
+            <option value="">— LLM preset —</option>
+          </select>
         </div>
-        <div id="use-segments-list" style="margin-top:6px;"></div>
+
+        <div id="use-manual-seg">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:10px;">
+            <label style="margin:0;">Segments</label>
+            <button type="button" class="secondary" id="use-add-seg-btn"
+              style="margin:0;padding:3px 10px;font-size:0.72rem;">+ Add segment</button>
+          </div>
+          <div id="use-segments-list" style="margin-top:6px;"></div>
+        </div>
+
+        <textarea id="use-auto-text" style="display:none;min-height:100px;margin-top:6px;"
+          placeholder="Enter full transcript — the LLM will split it into segments with natural delays…"></textarea>
 
         <div class="row" style="margin-top:4px;">
           <div>
@@ -260,10 +274,10 @@
         <label>Segmentation Prompt
           <span style="color:#383838;font-size:0.7rem;">(overrides built-in default — leave empty to use built-in)</span>
         </label>
-        <textarea id="segment-prompt-input" style="min-height:220px;"></textarea>
+        <textarea id="segment-prompt-input" style="min-height:160px;"></textarea>
         <div style="display:flex;gap:8px;margin-top:6px;">
-          <button onclick="saveSegmentPrompt()">Save</button>
-          <button class="secondary" onclick="resetSegmentPrompt()">Reset to Default</button>
+          <button onclick="saveSegmentConfig()">Save</button>
+          <button class="secondary" onclick="resetSegmentPrompt()">Reset Prompt</button>
         </div>
         <div class="msg" id="segment-prompt-msg"></div>
       </div><!-- /segment-prompt-panel -->
@@ -297,6 +311,10 @@
       <!-- Use output -->
       <div id="use-output" style="display:none;">
         <audio id="use-audio" controls></audio>
+        <details id="use-seg-details" style="display:none;margin-top:10px;">
+          <summary style="cursor:pointer;font-size:0.8rem;color:#aaa;">Segments</summary>
+          <pre id="use-seg-result" style="font-size:0.75rem;margin-top:6px;white-space:pre-wrap;word-break:break-word;"></pre>
+        </details>
         <div id="use-right-hint" style="color:#222;font-size:0.74rem;margin-top:8px;">
           Synthesize to hear output here.
         </div>

@@ -214,12 +214,84 @@ async def execute_voice_job(
 
     manager.active_voice_jobs += 1
     try:
+        effective_segments = request.segments
+        if request.auto_segment:
+            if not request.auto_segment_llm_base_url:
+                raise RuntimeError(
+                    "auto_segment requires an LLM API base URL — select a preset in the Chain page"
+                )
+            import re
+            from .chain.llm_client import OpenAICompatibleLLMClient
+            from .chain.models import ChainLLMConfig
+            from .chain.steps.llm import _parse_gemma_tool_calls
+            from .mcp.registry import get_tool, to_openai_schema
+            from .models import VoiceSegment
+            from .omnivoice.constants import DEFAULT_VOICE_AUTO_SEGMENT_PROMPT
+
+            llm_cfg = ChainLLMConfig(
+                api_base=request.auto_segment_llm_base_url,
+                model=request.auto_segment_llm_model,
+            )
+            client = OpenAICompatibleLLMClient()
+            tool_def = get_tool("format_voice_segments")
+            seg_prompt = config.voice_auto_segment_prompt or DEFAULT_VOICE_AUTO_SEGMENT_PROMPT
+            prompt_content = f"{seg_prompt}\n\n{request.text}"
+            _append_log(job_dir, "[auto-segment] calling LLM\n")
+
+            choice = await client.chat(
+                messages=[{"role": "user", "content": prompt_content}],
+                llm_config=llm_cfg,
+                tools=[to_openai_schema(tool_def)],
+            )
+            message = choice.get("message", {})
+            (job_dir / "auto_segment_raw.txt").write_text(
+                json.dumps(message, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            raw_tool_calls = message.get("tool_calls") or []
+            if not raw_tool_calls and message.get("content"):
+                raw_tool_calls = _parse_gemma_tool_calls(message["content"])
+
+            seg_data: list[dict] = []
+            if raw_tool_calls:
+                args = json.loads(raw_tool_calls[0]["function"]["arguments"])
+                seg_data = args.get("segments", [])
+            elif message.get("content"):
+                stripped = message["content"].strip()
+                fence = re.match(r"^```(?:json)?\s*([\s\S]*?)```\s*$", stripped)
+                if fence:
+                    stripped = fence.group(1).strip()
+                try:
+                    parsed = json.loads(stripped)
+                    if isinstance(parsed, list):
+                        seg_data = parsed
+                except json.JSONDecodeError:
+                    pass
+
+            if not seg_data:
+                raise RuntimeError(
+                    "auto_segment: LLM did not call format_voice_segments and returned no parseable JSON"
+                )
+            effective_segments = [
+                VoiceSegment(text=s["text"], delay_ms=int(s.get("delay_ms", 500)))
+                for s in seg_data if str(s.get("text", "")).strip()
+            ]
+            if not effective_segments:
+                raise RuntimeError("auto_segment: no non-empty segments returned by LLM")
+            _append_log(job_dir, f"[auto-segment] {len(effective_segments)} segments\n")
+            (job_dir / "auto_segment_segments.json").write_text(
+                json.dumps(
+                    [{"text": s.text, "delay_ms": s.delay_ms} for s in effective_segments],
+                    indent=2, ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
         runner = OmniVoiceEphemeralRunner(config)
-        if request.segments:
+        if effective_segments:
             from .audio_utils import merge_wav_files
             seg_paths = []
             delay_ms_list = []
-            for idx, seg in enumerate(request.segments):
+            for idx, seg in enumerate(effective_segments):
                 seg_path = job_dir / f"segment_{idx:03d}.wav"
                 _append_log(job_dir, f"[seg {idx}] {seg.text[:60]!r}\n")
                 await runner.run(seg.text, seg_path, job_dir, **common_run_kwargs)

@@ -19,7 +19,8 @@ button.secondary:hover { background: #424242; }
 button.danger { background: #7a2222; }
 button.danger:hover { background: #992828; }
 button[disabled] { opacity: 0.38; cursor: not-allowed; background: #2a2a2a; }
-input[type=range] { width: 100%; accent-color: #2a6; padding: 0; background: none; border: none; }
+input[type=range]    { width: 100%; accent-color: #2a6; padding: 0; background: none; border: none; }
+input[type=checkbox] { width: auto; padding: 0; background: none; border: none; border-radius: 0; }
 .row { display: flex; gap: 10px; }
 .row > * { flex: 1; min-width: 0; }
 .msg { font-size: 0.76rem; min-height: 1.1em; margin-top: 6px; }

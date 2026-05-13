@@ -235,6 +235,13 @@
     // ── Use Voice ────────────────────────────────────────────────────
     let _usePollTimer = null;
 
+    function toggleAutoSegment() {
+      const on = document.getElementById('use-auto-segment').checked;
+      document.getElementById('use-seg-preset-select').style.display = on ? '' : 'none';
+      document.getElementById('use-manual-seg').style.display = on ? 'none' : '';
+      document.getElementById('use-auto-text').style.display  = on ? '' : 'none';
+    }
+
     async function synthesize() {
       const msg   = document.getElementById('use-job-msg');
       const audio = document.getElementById('use-audio');
@@ -242,20 +249,41 @@
       audio.style.display = 'none'; msg.textContent = '';
       const presetId = document.getElementById('use-preset-select').value;
       if (!presetId) { msg.style.color = '#e44'; msg.textContent = 'Select a voice preset first.'; return; }
-      const segsContainer = document.getElementById('use-segments-list');
-      const segments = vsCollectSegments(segsContainer);
-      if (segments.length === 0) { msg.style.color = '#e44'; msg.textContent = 'Enter text in at least one segment.'; return; }
-      // Ensure last segment has no trailing silence
-      segments[segments.length - 1].delay_ms = 0;
-      const body = {
-        segments,
-        voice_preset_id: presetId,
-        speed:           parseFloat(document.getElementById('use-spd').value),
-        num_step:        parseInt(document.getElementById('use-steps').value),
-        guidance_scale:  parseFloat(document.getElementById('use-cfg').value),
-      };
-      const lang = document.getElementById('use-lang').value.trim();
-      if (lang && lang !== 'Auto') body.language = lang;
+      const autoSeg = document.getElementById('use-auto-segment').checked;
+      let body;
+      if (autoSeg) {
+        const text = document.getElementById('use-auto-text').value.trim();
+        if (!text) { msg.style.color = '#e44'; msg.textContent = 'Enter transcript text.'; return; }
+        const segPreset = _getSegPreset();
+        if (!segPreset) { msg.style.color = '#e44'; msg.textContent = 'No LLM preset — add one in the Chain page first.'; return; }
+        if (!segPreset.api_base) { msg.style.color = '#e44'; msg.textContent = `Preset "${segPreset.name}" has no API base URL — fill it in on the Chain page.`; return; }
+        body = {
+          text,
+          auto_segment: true,
+          auto_segment_llm_base_url: segPreset.api_base,
+          auto_segment_llm_model:    segPreset.model,
+          voice_preset_id: presetId,
+          speed:           parseFloat(document.getElementById('use-spd').value),
+          num_step:        parseInt(document.getElementById('use-steps').value),
+          guidance_scale:  parseFloat(document.getElementById('use-cfg').value),
+        };
+        const lang = document.getElementById('use-lang').value.trim();
+        if (lang && lang !== 'Auto') body.language = lang;
+      } else {
+        const segsContainer = document.getElementById('use-segments-list');
+        const segments = vsCollectSegments(segsContainer);
+        if (segments.length === 0) { msg.style.color = '#e44'; msg.textContent = 'Enter text in at least one segment.'; return; }
+        segments[segments.length - 1].delay_ms = 0;
+        body = {
+          segments,
+          voice_preset_id: presetId,
+          speed:           parseFloat(document.getElementById('use-spd').value),
+          num_step:        parseInt(document.getElementById('use-steps').value),
+          guidance_scale:  parseFloat(document.getElementById('use-cfg').value),
+        };
+        const lang = document.getElementById('use-lang').value.trim();
+        if (lang && lang !== 'Auto') body.language = lang;
+      }
       try {
         hint.style.display = 'none';
         const job = await api('/jobs/voice', 'POST', body);
@@ -277,12 +305,30 @@
           msg.style.color = '#2a6'; msg.textContent = 'Done';
           audio.src = '/v1/jobs/' + jobId + '/files/output.wav';
           audio.style.display = 'block'; audio.load();
+          _showUseSegments(jobId);
         } else if (job.status === 'error') {
           clearInterval(_usePollTimer); _usePollTimer = null;
           msg.style.color = '#e44'; msg.textContent = 'Error: ' + (job.error || 'unknown');
+          _showUseSegments(jobId);
         } else {
           msg.textContent = 'Synthesizing… (' + job.status + ')';
         }
+      } catch(e) {}
+    }
+
+    async function _showUseSegments(jobId) {
+      const details = document.getElementById('use-seg-details');
+      const pre     = document.getElementById('use-seg-result');
+      details.style.display = 'none';
+      try {
+        const r = await fetch('/v1/jobs/' + jobId + '/files/auto_segment_segments.json');
+        if (!r.ok) return;
+        const segs = await r.json();
+        pre.textContent = segs.map((s, i) =>
+          `[${i + 1}]  delay_ms=${s.delay_ms}\n     ${s.text}`
+        ).join('\n\n');
+        details.style.display = '';
+        details.open = true;
       } catch(e) {}
     }
 
@@ -299,7 +345,7 @@
     async function loadPreprocessPrompt() {
       document.getElementById('preprocess-prompt-input').placeholder = _DEFAULT_VOICE_PREPROCESS_PROMPT;
       try {
-        const cfg = await api('/v1/omnivoice/config');
+        const cfg = await api('/omnivoice/config');
         document.getElementById('preprocess-prompt-input').value = cfg.voice_preprocess_prompt || '';
       } catch(e) { /* silent */ }
     }
@@ -308,9 +354,9 @@
       const msg = document.getElementById('preprocess-msg');
       const val = document.getElementById('preprocess-prompt-input').value.trim();
       try {
-        const cfg = await api('/v1/omnivoice/config');
+        const cfg = await api('/omnivoice/config');
         cfg.voice_preprocess_prompt = val || null;
-        await api('/v1/omnivoice/config', 'PUT', cfg);
+        await api('/omnivoice/config', 'PUT', cfg);
         msg.style.color = '#2a6'; msg.textContent = 'Saved.';
       } catch(e) {
         msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
@@ -323,21 +369,66 @@
       document.getElementById('preprocess-msg').textContent = 'Cleared — save to use built-in default.';
     }
 
+    // ── Segmentation LLM Preset (inline dropdown, same data as chain page) ───
+    let _segPreset = null;
+
+    function _loadSegPresets() {
+      const sel = document.getElementById('use-seg-preset-select');
+      const presets = JSON.parse(localStorage.getItem('chain_llm_presets') || '[]');
+      const savedId = localStorage.getItem('chain_llm_preset_selected') || '';
+      while (sel.options.length > 1) sel.remove(1);
+      for (const p of presets) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        sel.appendChild(opt);
+      }
+      if (savedId) sel.value = savedId;
+      if (!sel.value && presets.length > 0) sel.value = presets[0].id;
+      _segPreset = presets.find(p => p.id === sel.value) || presets[0] || null;
+    }
+
+    function applySegPreset() {
+      const id = document.getElementById('use-seg-preset-select').value;
+      if (!id) return;
+      localStorage.setItem('chain_llm_preset_selected', id);
+      const presets = JSON.parse(localStorage.getItem('chain_llm_presets') || '[]');
+      _segPreset = presets.find(p => p.id === id) || null;
+    }
+
+    function _getSegPreset() {
+      return _segPreset;
+    }
+
     // ── Segmentation Prompt ───────────────────────────────────────────
+    const _DEFAULT_VOICE_AUTO_SEGMENT_PROMPT =
+      'You are a TTS segmentation assistant. Split the following text into speech segments ' +
+      'and set delay_ms (silence after each segment) by these rules, in priority order:\n\n' +
+      '1. EXPLICIT TIMING INSTRUCTIONS take highest priority. If the text contains annotations ' +
+      'like \'(waits one second)\', \'(pause 2 seconds)\', \'(2s pause)\', \'[3-second break]\', or similar, ' +
+      'convert those to delay_ms in milliseconds (e.g. \'one second\' → 1000, \'500ms\' → 500) and ' +
+      'REMOVE the annotation from the segment text — do not speak it.\n\n' +
+      '2. STRUCTURAL PAUSES when no explicit timing is given: ' +
+      '300–500ms between related sentences, 800–1500ms at paragraph or topic breaks.\n\n' +
+      '3. FINAL SEGMENT always gets delay_ms: 0.\n\n' +
+      'Keep each segment to 1–4 complete sentences. Never split mid-sentence. ' +
+      'Call format_voice_segments with your result. No commentary — only the tool call.';
+
     async function loadSegmentPrompt() {
+      document.getElementById('segment-prompt-input').placeholder = _DEFAULT_VOICE_AUTO_SEGMENT_PROMPT;
       try {
-        const cfg = await api('/v1/omnivoice/config');
+        const cfg = await api('/omnivoice/config');
         document.getElementById('segment-prompt-input').value = cfg.voice_auto_segment_prompt || '';
       } catch(e) { /* silent */ }
     }
 
-    async function saveSegmentPrompt() {
+    async function saveSegmentConfig() {
       const msg = document.getElementById('segment-prompt-msg');
-      const val = document.getElementById('segment-prompt-input').value.trim();
+      const prompt = document.getElementById('segment-prompt-input').value.trim();
       try {
-        const cfg = await api('/v1/omnivoice/config');
-        cfg.voice_auto_segment_prompt = val || null;
-        await api('/v1/omnivoice/config', 'PUT', cfg);
+        const cfg = await api('/omnivoice/config');
+        cfg.voice_auto_segment_prompt = prompt || null;
+        await api('/omnivoice/config', 'PUT', cfg);
         msg.style.color = '#2a6'; msg.textContent = 'Saved.';
       } catch(e) {
         msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
@@ -354,6 +445,7 @@
     loadPresets();
     loadPreprocessPrompt();
     loadSegmentPrompt();
+    _loadSegPresets();
     document.getElementById('use-add-seg-btn').addEventListener('click', function () {
       vsAddSegment(document.getElementById('use-segments-list'));
     });

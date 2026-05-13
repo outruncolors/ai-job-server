@@ -31,6 +31,9 @@ class VoiceJobRequest(BaseModel):
     num_step: Optional[int] = Field(default=None, ge=4, le=64)
     guidance_scale: Optional[float] = Field(default=None, ge=0.0, le=4.0)
     voice_preset_id: Optional[str] = None
+    auto_segment: bool = False
+    auto_segment_llm_base_url: Optional[str] = None
+    auto_segment_llm_model: Optional[str] = None
 
     @model_validator(mode="after")
     def _require_text_or_segments(self) -> "VoiceJobRequest":
