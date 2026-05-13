@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ComfyUI setup — idempotent, run with: bash runtimes/comfyui-setup.sh
+# ComfyUI setup — idempotent, run with: bash scripts/comfyui-setup.sh
 # Target: RTX 3090 Ti (Ampere, sm_86, 24 GB), Debian 13, Python 3.12, CUDA 12.4
 #
 # Requires: python3.12, git, and a loaded NVIDIA driver (550+).
@@ -54,12 +54,22 @@ echo "--- Installing ComfyUI requirements ---"
 "$PIP" install -r "$COMFY_DIR/requirements.txt" --quiet
 
 # 5. Speed stack for 3090 Ti
-#    SageAttention 2.x beats FA2 (~2×) and xformers (~2.9×) on Ampere
 echo "--- Installing Triton ---"
 "$PIP" install triton --quiet
 
-echo "--- Installing SageAttention 2.2.0 ---"
-"$PIP" install sageattention==2.2.0 --no-build-isolation --quiet
+# SageAttention: builds CUDA kernels, so requires nvcc from the CUDA toolkit.
+# The PyPI package (latest ~1.0.6) may or may not have a prebuilt wheel for
+# this torch/CUDA combo. Make this non-fatal — ComfyUI works without it
+# (falls back to pytorch cross-attention); set use_sage_attention=false in
+# config if the import fails at runtime.
+echo "--- Installing SageAttention (best-effort) ---"
+if "$PIP" install sageattention --no-build-isolation --quiet 2>&1; then
+    echo "  SageAttention installed OK"
+else
+    echo "  SageAttention install failed — likely missing nvcc (CUDA toolkit)."
+    echo "  ComfyUI will still work; set use_sage_attention=false in comfyui.json"
+    echo "  or install the CUDA toolkit and re-run this script."
+fi
 
 # 6. Shared model directories
 echo "--- Creating model directories ---"

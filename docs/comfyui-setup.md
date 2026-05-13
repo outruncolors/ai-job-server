@@ -20,7 +20,7 @@ This script is idempotent — re-running updates the pinned tag in place.
 - PyTorch 2.x + CUDA 12.4 (matches driver 550 / CUDA 12.4)
 - ComfyUI core requirements
 - Triton ≥ 3.0 (required by SageAttention)
-- SageAttention 2.2.0 — primary attention backend for the 3090 Ti (~2× faster than Flash Attention 2, ~2.9× xformers)
+- SageAttention (latest from PyPI, currently ~1.0.6) — primary attention backend for the 3090 Ti; install is best-effort since it requires CUDA toolkit (`nvcc`) to compile kernels
 
 ## Launch Flags (3090 Ti defaults)
 
@@ -108,11 +108,12 @@ Edit `COMFY_TAG` in `runtimes/comfyui-setup.sh`, then re-run it.
 - Missing `comfyui_root` (run the setup script)
 - GPU not visible (check driver: `ls /dev/nvidia*`)
 
-**SageAttention import error at startup** — needs CUDA toolkit present at build time. Try:
+**SageAttention import error at startup** — requires `nvcc` (CUDA toolkit, not just the driver) to compile kernels. Install the toolkit:
 ```bash
-/opt/ai-stack/runtimes/comfyui-venv/bin/pip install sageattention==2.2.0 --no-build-isolation
+sudo apt install nvidia-cuda-toolkit   # or follow NVIDIA's CUDA toolkit install guide
+/opt/ai-stack/runtimes/comfyui-venv/bin/pip install sageattention --no-build-isolation
 ```
-If that fails, fall back to `--use-pytorch-cross-attention` by setting `use_sage_attention: false` in config.
+Or just disable it: set `use_sage_attention: false` in `config/comfyui.json` to fall back to PyTorch's built-in cross-attention.
 
 **Workflow not appearing** — JSON must be in **API format** (not UI format). Open the workflow in the editor and re-export after enabling Dev Mode.
 
