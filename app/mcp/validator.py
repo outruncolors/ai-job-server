@@ -34,5 +34,11 @@ def validate_call(name: str, arguments: dict) -> tuple[bool, str | None]:
         elif param.type == "number":
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 return False, f"Argument '{field}' must be a number"
+        elif param.type == "boolean":
+            if not isinstance(value, bool):
+                return False, f"Argument '{field}' must be a boolean"
+
+        if param.enum is not None and value not in param.enum:
+            return False, f"Argument '{field}' must be one of: {', '.join(param.enum)}"
 
     return True, None

@@ -214,9 +214,17 @@
     // Arg form
     const form = document.getElementById('arg-form');
     form.innerHTML = Object.entries(props).map(([k, p]) => {
-      const isNum = p.type === 'integer' || p.type === 'number';
-      const attrs = isNum ? 'type="number" step="1"' : 'type="text"';
-      return `<label>${_escHtml(k)}</label><input ${attrs} id="arg-${_escHtml(k)}" placeholder="${_escHtml(p.description)}">`;
+      let input;
+      if (p.type === 'boolean') {
+        input = `<input type="checkbox" id="arg-${_escHtml(k)}" style="width:auto">`;
+      } else if (p.enum) {
+        input = `<select id="arg-${_escHtml(k)}"><option value="">— select —</option>${p.enum.map(v => `<option value="${_escHtml(v)}">${_escHtml(v)}</option>`).join('')}</select>`;
+      } else {
+        const isNum = p.type === 'integer' || p.type === 'number';
+        const attrs = isNum ? 'type="number" step="1"' : 'type="text"';
+        input = `<input ${attrs} id="arg-${_escHtml(k)}" placeholder="${_escHtml(p.description)}">`;
+      }
+      return `<label>${_escHtml(k)}</label>${input}`;
     }).join('');
 
     document.getElementById('result-wrap').style.display = 'none';
@@ -231,13 +239,18 @@
     const args = {};
     for (const [k, p] of Object.entries(props)) {
       const el = document.getElementById('arg-' + k);
-      const raw = el ? el.value.trim() : '';
-      if (p.type === 'integer') {
-        args[k] = parseInt(raw, 10);
+      if (!el) continue;
+      if (p.type === 'boolean') {
+        args[k] = el.checked;
+      } else if (p.type === 'integer') {
+        const raw = el.value.trim();
+        if (raw !== '') args[k] = parseInt(raw, 10);
       } else if (p.type === 'number') {
-        args[k] = parseFloat(raw);
+        const raw = el.value.trim();
+        if (raw !== '') args[k] = parseFloat(raw);
       } else {
-        args[k] = raw;
+        const raw = el.value.trim();
+        if (raw !== '') args[k] = raw;
       }
     }
 

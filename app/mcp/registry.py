@@ -23,8 +23,37 @@ _random_integer = ToolDefinition(
     ),
 )
 
+_generate_name = ToolDefinition(
+    name="generate_name",
+    description=(
+        "Generate a random US name based on gender. "
+        "Optionally include a middle name and/or last name."
+    ),
+    input_schema=ToolInputSchema(
+        properties={
+            "gender": ToolParameter(
+                type="string",
+                description="Gender of the name to generate.",
+                enum=["male", "female"],
+            ),
+            "include_middle_name": ToolParameter(
+                type="boolean",
+                description="Whether to include a middle name.",
+                default=False,
+            ),
+            "include_last_name": ToolParameter(
+                type="boolean",
+                description="Whether to include a last name.",
+                default=False,
+            ),
+        },
+        required=["gender"],
+    ),
+)
+
 REGISTRY: dict[str, ToolDefinition] = {
     "random_integer": _random_integer,
+    "generate_name": _generate_name,
 }
 
 

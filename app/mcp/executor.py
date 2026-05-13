@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
+from .data.names import FEMALE_NAMES, LAST_NAMES, MALE_NAMES
 from .models import ToolCallError, ToolCallResult
 from .registry import get_tool
 from .validator import validate_call
@@ -18,8 +19,19 @@ def _run_random_integer(args: dict) -> dict:
     return {"value": random.randint(lo, hi)}
 
 
+def _run_generate_name(args: dict) -> dict:
+    pool = MALE_NAMES if args["gender"] == "male" else FEMALE_NAMES
+    parts = [random.choice(pool)]
+    if args.get("include_middle_name", False):
+        parts.append(random.choice(pool))
+    if args.get("include_last_name", False):
+        parts.append(random.choice(LAST_NAMES))
+    return {"name": " ".join(parts)}
+
+
 _EXECUTORS: dict[str, Callable[[dict], Any]] = {
     "random_integer": _run_random_integer,
+    "generate_name": _run_generate_name,
 }
 
 

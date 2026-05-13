@@ -11,6 +11,7 @@ class ToolParameter(BaseModel):
     minimum: int | None = None
     maximum: int | None = None
     default: Any = None
+    enum: list[str] | None = None
 
     @model_serializer
     def _ser(self) -> dict:
@@ -21,6 +22,8 @@ class ToolParameter(BaseModel):
             out["maximum"] = self.maximum
         if self.default is not None:
             out["default"] = self.default
+        if self.enum is not None:
+            out["enum"] = self.enum
         return out
 
 
