@@ -20,7 +20,7 @@ This script is idempotent — re-running updates the pinned tag in place.
 - PyTorch 2.x + CUDA 12.4 (matches driver 550 / CUDA 12.4)
 - ComfyUI core requirements
 - Triton ≥ 3.0 (required by SageAttention)
-- SageAttention (latest from PyPI, currently ~1.0.6) — primary attention backend for the 3090 Ti; install is best-effort since it requires CUDA toolkit (`nvcc`) to compile kernels
+- SageAttention 2.x (built from source, cloned to `/opt/ai-stack/runtimes/SageAttention`) — primary attention backend for the 3090 Ti. 2.x is not on PyPI (version-per-CUDA-ABI problem); the script builds it with nvcc targeting sm_86 only, using gcc-13 as host compiler (nvcc 12.4 rejects the Debian 13 default of GCC 14)
 
 ## Launch Flags (3090 Ti defaults)
 
@@ -108,12 +108,11 @@ Edit `COMFY_TAG` in `runtimes/comfyui-setup.sh`, then re-run it.
 - Missing `comfyui_root` (run the setup script)
 - GPU not visible (check driver: `ls /dev/nvidia*`)
 
-**SageAttention import error at startup** — requires `nvcc` (CUDA toolkit, not just the driver) to compile kernels. Install the toolkit:
-```bash
-sudo apt install nvidia-cuda-toolkit   # or follow NVIDIA's CUDA toolkit install guide
-/opt/ai-stack/runtimes/comfyui-venv/bin/pip install sageattention --no-build-isolation
-```
-Or just disable it: set `use_sage_attention: false` in `config/comfyui.json` to fall back to PyTorch's built-in cross-attention.
+**SageAttention import error at startup** — the setup script handles this, but if something went wrong: re-run `bash scripts/comfyui-setup.sh` (it's idempotent). The build requires `nvcc` + `gcc-13`; the script installs both via apt if they're missing.
+
+If you want to disable it entirely: set `use_sage_attention: false` in `config/comfyui.json` to fall back to PyTorch's built-in cross-attention (slower but always works).
+
+**Why not PyPI?** — SageAttention 2.x is not published to PyPI because PyPI can't distinguish binary wheels for the same version built against different CUDA/torch combinations. The script clones and builds from source.
 
 **Workflow not appearing** — JSON must be in **API format** (not UI format). Open the workflow in the editor and re-export after enabling Dev Mode.
 
