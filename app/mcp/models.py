@@ -12,6 +12,7 @@ class ToolParameter(BaseModel):
     maximum: int | None = None
     default: Any = None
     enum: list[str] | None = None
+    items: dict | None = None
 
     @model_serializer
     def _ser(self) -> dict:
@@ -24,6 +25,8 @@ class ToolParameter(BaseModel):
             out["default"] = self.default
         if self.enum is not None:
             out["enum"] = self.enum
+        if self.items is not None:
+            out["items"] = self.items
         return out
 
 

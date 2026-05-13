@@ -737,6 +737,7 @@
       const voicePre        = opts.voice_pre || '';
       const voicePost       = opts.voice_post || '';
       const voicePreprocess = !!opts.voice_preprocess;
+      const voiceAutoSegment = !!opts.voice_auto_segment;
       const ctxName        = opts.ctx_name || '';
       const ctxDescription = opts.ctx_description || '';
       const ctxTags        = (opts.ctx_tags || []).join(', ');
@@ -816,6 +817,11 @@
             '<input type="checkbox" class="chain-step-voice-preprocess"' + (voicePreprocess ? ' checked' : '') + '>' +
             'Pre-process for speech' +
             '<span style="color:#383838;font-size:0.7rem;">(clean text via LLM before TTS)</span>' +
+          '</label>' +
+          '<label style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;">' +
+            '<input type="checkbox" class="chain-step-voice-auto-segment"' + (voiceAutoSegment ? ' checked' : '') + '>' +
+            'Auto-segment via LLM' +
+            '<span style="color:#383838;font-size:0.7rem;">(LLM splits text and sets pause timings)</span>' +
           '</label>' +
         '</div>' +
         '<div class="chain-step-write-context-fields"' + (type !== 'write_context' ? ' style="display:none;"' : '') + '>' +
@@ -897,7 +903,8 @@
           const voice_pre       = el.querySelector('.chain-step-voice-pre').value;
           const voice_post      = el.querySelector('.chain-step-voice-post').value;
           const voice_preprocess = el.querySelector('.chain-step-voice-preprocess').checked;
-          steps.push({ name: 'Step ' + (++i), type: 'voice', prompt: '', context_ids: [], voice_preset_id: presetId || null, voice_pre, voice_post, voice_preprocess });
+          const voice_auto_segment = el.querySelector('.chain-step-voice-auto-segment').checked;
+          steps.push({ name: 'Step ' + (++i), type: 'voice', prompt: '', context_ids: [], voice_preset_id: presetId || null, voice_pre, voice_post, voice_preprocess, voice_auto_segment });
         } else if (kind === 'write_context') {
           const ctx_name        = el.querySelector('.chain-step-ctx-name').value.trim();
           const ctx_description = el.querySelector('.chain-step-ctx-description').value.trim();
@@ -989,6 +996,21 @@
           bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
             '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
         }
+        if (files && (files.autoSegPrompt != null || files.autoSegRaw != null)) {
+          let inner = '';
+          if (files.autoSegPrompt != null) {
+            inner += '<details style="margin-bottom:6px;"><summary style="font-size:0.72rem;color:#555;cursor:pointer;">PROMPT</summary>' +
+              '<pre class="output-pre" style="margin-top:4px;">' + _escHtml(files.autoSegPrompt) + '</pre></details>';
+          }
+          if (files.autoSegRaw != null) {
+            inner += '<details><summary style="font-size:0.72rem;color:#555;cursor:pointer;">RAW RESPONSE</summary>' +
+              '<pre class="output-pre" style="margin-top:4px;font-size:0.68rem;">' + _escHtml(files.autoSegRaw) + '</pre></details>';
+          }
+          bodyHtml += '<details style="margin-top:10px;border:1px solid #1e1e1e;border-radius:3px;padding:6px 8px;background:#0a0a0a;">' +
+            '<summary style="font-size:0.72rem;color:#555;cursor:pointer;list-style:none;">' +
+              '<span style="color:#444;">▸ </span>INTERNAL REQUESTS · auto_segment</summary>' +
+            '<div style="margin-top:6px;">' + inner + '</div></details>';
+        }
       } else if (step.type === 'write_context') {
         if (files && files.itemTitle) {
           bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">CONTEXT ITEM</p>' +
@@ -1012,8 +1034,11 @@
             '<pre class="output-pre">' + _escHtml(outputText) + '</pre>';
         }
         if (files && files.toolCallsData && files.toolCallsData.length > 0) {
-          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">TOOL CALLS (' + files.toolCallsData.length + ')</p>' +
-            '<pre class="output-pre" style="font-size:0.68rem;">' + _escHtml(JSON.stringify(files.toolCallsData, null, 2)) + '</pre>';
+          bodyHtml += '<details style="margin-top:10px;border:1px solid #1e1e1e;border-radius:3px;padding:6px 8px;background:#0a0a0a;">' +
+            '<summary style="font-size:0.72rem;color:#555;cursor:pointer;list-style:none;">' +
+              '<span style="color:#444;">▸ </span>TOOL CALLS · ' + files.toolCallsData.length + '</summary>' +
+            '<pre class="output-pre" style="margin-top:6px;font-size:0.68rem;">' + _escHtml(JSON.stringify(files.toolCallsData, null, 2)) + '</pre>' +
+            '</details>';
         }
         if (outputText == null && step.error) {
           bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
@@ -1036,9 +1061,15 @@
       const base = '/v1/jobs/' + jobId + '/files/steps/' + dirName + '/';
       if (step.type === 'voice') {
         const audioFile = step.output_file || 'output.wav';
-        const ar = await fetch(base + audioFile).catch(() => null);
-        const audioUrl = ar && ar.ok ? base + audioFile : null;
-        return { audioUrl };
+        const [ar, pr, rr] = await Promise.allSettled([
+          fetch(base + audioFile),
+          fetch(base + 'auto_segment_prompt.txt'),
+          fetch(base + 'auto_segment_raw.txt'),
+        ]);
+        const audioUrl = ar.status === 'fulfilled' && ar.value.ok ? base + audioFile : null;
+        const autoSegPrompt = pr.status === 'fulfilled' && pr.value.ok ? await pr.value.text() : null;
+        const autoSegRaw    = rr.status === 'fulfilled' && rr.value.ok ? await rr.value.text() : null;
+        return { audioUrl, autoSegPrompt, autoSegRaw };
       }
       if (step.type === 'write_context') {
         const jr = await fetch(base + 'output.json').catch(() => null);
@@ -1048,16 +1079,18 @@
         }
         return {};
       }
-      const [cr, pr, or, tcr] = await Promise.allSettled([
+      const fetches = [
         fetch(base + 'context.txt'),
         fetch(base + 'prompt.txt'),
         fetch(base + 'output.txt'),
-        fetch(base + 'tool_calls.json'),
-      ]);
-      const contextText   = cr.status  === 'fulfilled' && cr.value.ok  ? await cr.value.text()                          : null;
-      const promptText    = pr.status  === 'fulfilled' && pr.value.ok  ? await pr.value.text()                          : null;
-      const outputText    = or.status  === 'fulfilled' && or.value.ok  ? await or.value.text()                          : null;
-      const toolCallsData = tcr.status === 'fulfilled' && tcr.value.ok ? await tcr.value.json().catch(() => null) : null;
+      ];
+      const hasTools = step.tools && step.tools.length > 0;
+      if (hasTools) fetches.push(fetch(base + 'tool_calls.json'));
+      const [cr, pr, or, tcr] = await Promise.allSettled(fetches);
+      const contextText   = cr  && cr.status  === 'fulfilled' && cr.value.ok  ? await cr.value.text()                          : null;
+      const promptText    = pr  && pr.status  === 'fulfilled' && pr.value.ok  ? await pr.value.text()                          : null;
+      const outputText    = or  && or.status  === 'fulfilled' && or.value.ok  ? await or.value.text()                          : null;
+      const toolCallsData = tcr && tcr.status === 'fulfilled' && tcr.value.ok ? await tcr.value.json().catch(() => null) : null;
       return { contextText, promptText, outputText, toolCallsData };
     }
 
@@ -1129,20 +1162,44 @@
                 const finalBase = '/v1/jobs/' + jobId + '/files/steps/' + finalDir + '/';
                 if (finalStep.type === 'voice') {
                   const audioFile = finalStep.output_file || 'output.wav';
-                  const ar = await fetch(finalBase + audioFile).catch(() => null);
-                  if (ar && ar.ok) {
+                  const [far, fpr, frr] = await Promise.allSettled([
+                    fetch(finalBase + audioFile),
+                    fetch(finalBase + 'auto_segment_prompt.txt'),
+                    fetch(finalBase + 'auto_segment_raw.txt'),
+                  ]);
+                  if (far.status === 'fulfilled' && far.value.ok) {
                     document.getElementById('chain-final-audio-player').src = finalBase + audioFile;
                     document.getElementById('chain-final-audio').style.display = 'block';
+                  }
+                  const fSegPrompt = fpr.status === 'fulfilled' && fpr.value.ok ? await fpr.value.text() : null;
+                  const fSegRaw    = frr.status === 'fulfilled' && frr.value.ok ? await frr.value.text() : null;
+                  if (fSegPrompt != null || fSegRaw != null) {
+                    let inner = '';
+                    if (fSegPrompt != null) inner +=
+                      '<details style="margin-bottom:6px;"><summary style="font-size:0.72rem;color:#555;cursor:pointer;">PROMPT</summary>' +
+                      '<pre class="output-pre" style="margin-top:4px;">' + _escHtml(fSegPrompt) + '</pre></details>';
+                    if (fSegRaw != null) inner +=
+                      '<details><summary style="font-size:0.72rem;color:#555;cursor:pointer;">RAW RESPONSE</summary>' +
+                      '<pre class="output-pre" style="margin-top:4px;font-size:0.68rem;">' + _escHtml(fSegRaw) + '</pre></details>';
+                    const tcEl = document.getElementById('chain-final-tool-calls');
+                    tcEl.innerHTML =
+                      '<details style="border:1px solid #1e1e1e;border-radius:3px;padding:6px 8px;background:#0a0a0a;">' +
+                      '<summary style="font-size:0.72rem;color:#555;cursor:pointer;list-style:none;">' +
+                        '<span style="color:#444;">▸ </span>INTERNAL REQUESTS · auto_segment</summary>' +
+                      '<div style="margin-top:6px;">' + inner + '</div></details>';
+                    tcEl.style.display = 'block';
                   }
                 } else if (finalStep.type === 'write_context') {
                   // nothing extra to show; final output text is displayed below
                 } else {
                   try {
-                    const [fcr, fp, ftcr] = await Promise.allSettled([
+                    const finalFetches = [
                       fetch(finalBase + 'context.txt'),
                       fetch(finalBase + 'prompt.txt'),
-                      fetch(finalBase + 'tool_calls.json'),
-                    ]);
+                    ];
+                    const finalHasTools = finalStep.tools && finalStep.tools.length > 0;
+                    if (finalHasTools) finalFetches.push(fetch(finalBase + 'tool_calls.json'));
+                    const [fcr, fp, ftcr] = await Promise.allSettled(finalFetches);
                     const finalCtx = fcr.status === 'fulfilled' && fcr.value.ok ? await fcr.value.text() : '';
                     if (finalCtx) {
                       document.getElementById('chain-final-context-pre').textContent = finalCtx;

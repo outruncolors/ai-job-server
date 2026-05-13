@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ImageJobRequest(BaseModel):
@@ -15,8 +15,14 @@ class ImageJobRequest(BaseModel):
     negative_prompt: Optional[str] = None
 
 
-class VoiceJobRequest(BaseModel):
+class VoiceSegment(BaseModel):
     text: str
+    delay_ms: int = Field(default=500, ge=0, le=30_000)
+
+
+class VoiceJobRequest(BaseModel):
+    text: Optional[str] = None
+    segments: Optional[list[VoiceSegment]] = None
     voice: str = "default"
     speed: float = Field(default=1.0, ge=0.25, le=4.0)
     language: Optional[str] = None
@@ -25,6 +31,12 @@ class VoiceJobRequest(BaseModel):
     num_step: Optional[int] = Field(default=None, ge=4, le=64)
     guidance_scale: Optional[float] = Field(default=None, ge=0.0, le=4.0)
     voice_preset_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _require_text_or_segments(self) -> "VoiceJobRequest":
+        if not self.text and not self.segments:
+            raise ValueError("Either 'text' or 'segments' must be provided")
+        return self
 
 
 class JobStatus(BaseModel):

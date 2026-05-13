@@ -91,6 +91,15 @@
     #use-empty-msg { display: none; color: #555; font-size: 0.76rem; margin-top: 6px; }
     #use-preset-row { display: none; }
     #use-audio { margin-top: 14px; width: 100%; display: none; }
+    .seg-row { border: 1px solid #1e1e1e; border-radius: 3px; padding: 8px 10px; margin-bottom: 6px; background: #0f0f0f; }
+    .seg-row-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .seg-label { flex: 1; font-size: 0.7rem; color: #444; }
+    .seg-remove-btn { margin: 0; padding: 2px 7px; font-size: 0.68rem; }
+    .seg-row textarea { min-height: 72px; width: 100%; }
+    .seg-delay-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .seg-delay-label { color: #555; font-size: 0.7rem; margin: 0; white-space: nowrap; }
+    .seg-delay-row input[type=number] { width: 80px; flex: 0 0 80px; }
+    .seg-delay-note { color: #2e2e2e; font-size: 0.68rem; flex: 1; }
   </style>
   <link rel="stylesheet" href="/css/responsive.css">
 </head>
@@ -116,6 +125,7 @@
         <button class="tab-btn active" onclick="switchTab('create')">Create Voice</button>
         <button class="tab-btn" onclick="switchTab('use')">Use Voice</button>
         <button class="tab-btn" onclick="switchTab('preprocess')">Pre-Processing Prompt</button>
+        <button class="tab-btn" onclick="switchTab('segment-prompt')">Segmentation Prompt</button>
       </div>
 
       <!-- ── Create Voice tab ── -->
@@ -284,8 +294,12 @@
           <button class="danger" onclick="deleteSelectedPreset()" style="margin-top:6px;padding:4px 10px;font-size:0.76rem;">Delete Preset</button>
         </div>
 
-        <label style="margin-top:14px;">Text to synthesize</label>
-        <textarea id="use-text" style="min-height:120px;" placeholder="Enter text to speak…"></textarea>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:14px;">
+          <label style="margin:0;">Segments</label>
+          <button type="button" class="secondary" id="use-add-seg-btn"
+            style="margin:0;padding:3px 10px;font-size:0.72rem;">+ Add segment</button>
+        </div>
+        <div id="use-segments-list" style="margin-top:6px;"></div>
 
         <div class="row" style="margin-top:4px;">
           <div>
@@ -346,6 +360,19 @@
         <div class="msg" id="preprocess-msg"></div>
       </div><!-- /preprocess-panel -->
 
+      <!-- ── Segmentation Prompt tab ── -->
+      <div id="segment-prompt-panel" style="display:none;">
+        <label>Segmentation Prompt
+          <span style="color:#383838;font-size:0.7rem;">(overrides built-in default — leave empty to use built-in)</span>
+        </label>
+        <textarea id="segment-prompt-input" style="min-height:220px;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button onclick="saveSegmentPrompt()">Save</button>
+          <button class="secondary" onclick="resetSegmentPrompt()">Reset to Default</button>
+        </div>
+        <div class="msg" id="segment-prompt-msg"></div>
+      </div><!-- /segment-prompt-panel -->
+
     </div><!-- /panel-left -->
 
     <!-- ── Right: Output ── -->
@@ -384,6 +411,7 @@
 
   </div>
 
+  <script src="/js/voice-segments.js"></script>
   <script>
     async function api(path, method = 'GET', body = null) {
       const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -447,13 +475,14 @@
     // ── Tabs ─────────────────────────────────────────────────────────
     function switchTab(tab) {
       _activeTab = tab;
-      const _tabOrder = ['create', 'use', 'preprocess'];
+      const _tabOrder = ['create', 'use', 'preprocess', 'segment-prompt'];
       document.querySelectorAll('.tab-btn').forEach((b, i) =>
         b.classList.toggle('active', _tabOrder[i] === tab)
       );
-      document.getElementById('create-panel').style.display     = tab === 'create'     ? '' : 'none';
-      document.getElementById('use-panel').style.display        = tab === 'use'        ? '' : 'none';
-      document.getElementById('preprocess-panel').style.display = tab === 'preprocess' ? '' : 'none';
+      document.getElementById('create-panel').style.display        = tab === 'create'         ? '' : 'none';
+      document.getElementById('use-panel').style.display           = tab === 'use'            ? '' : 'none';
+      document.getElementById('preprocess-panel').style.display    = tab === 'preprocess'     ? '' : 'none';
+      document.getElementById('segment-prompt-panel').style.display = tab === 'segment-prompt' ? '' : 'none';
       document.getElementById('create-output').style.display    = tab === 'create' ? '' : 'none';
       document.getElementById('use-output').style.display       = tab === 'use'    ? '' : 'none';
     }
@@ -628,10 +657,13 @@
       audio.style.display = 'none'; msg.textContent = '';
       const presetId = document.getElementById('use-preset-select').value;
       if (!presetId) { msg.style.color = '#e44'; msg.textContent = 'Select a voice preset first.'; return; }
-      const text = document.getElementById('use-text').value.trim();
-      if (!text) { msg.style.color = '#e44'; msg.textContent = 'Enter text to synthesize.'; return; }
+      const segsContainer = document.getElementById('use-segments-list');
+      const segments = vsCollectSegments(segsContainer);
+      if (segments.length === 0) { msg.style.color = '#e44'; msg.textContent = 'Enter text in at least one segment.'; return; }
+      // Ensure last segment has no trailing silence
+      segments[segments.length - 1].delay_ms = 0;
       const body = {
-        text,
+        segments,
         voice_preset_id: presetId,
         speed:           parseFloat(document.getElementById('use-spd').value),
         num_step:        parseInt(document.getElementById('use-steps').value),
@@ -706,10 +738,42 @@
       document.getElementById('preprocess-msg').textContent = 'Cleared — save to use built-in default.';
     }
 
+    // ── Segmentation Prompt ───────────────────────────────────────────
+    async function loadSegmentPrompt() {
+      try {
+        const cfg = await api('/v1/omnivoice/config');
+        document.getElementById('segment-prompt-input').value = cfg.voice_auto_segment_prompt || '';
+      } catch(e) { /* silent */ }
+    }
+
+    async function saveSegmentPrompt() {
+      const msg = document.getElementById('segment-prompt-msg');
+      const val = document.getElementById('segment-prompt-input').value.trim();
+      try {
+        const cfg = await api('/v1/omnivoice/config');
+        cfg.voice_auto_segment_prompt = val || null;
+        await api('/v1/omnivoice/config', 'PUT', cfg);
+        msg.style.color = '#2a6'; msg.textContent = 'Saved.';
+      } catch(e) {
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function resetSegmentPrompt() {
+      document.getElementById('segment-prompt-input').value = '';
+      document.getElementById('segment-prompt-msg').style.color = '#888';
+      document.getElementById('segment-prompt-msg').textContent = 'Cleared — save to use built-in default.';
+    }
+
     // ── Init ─────────────────────────────────────────────────────────
     document.querySelector('#topnav [data-page="voice"]').classList.add('active');
     loadPresets();
     loadPreprocessPrompt();
+    loadSegmentPrompt();
+    document.getElementById('use-add-seg-btn').addEventListener('click', function () {
+      vsAddSegment(document.getElementById('use-segments-list'));
+    });
+    vsAddSegment(document.getElementById('use-segments-list'));
   </script>
   <script src="/js/nav-mobile.js"></script>
 </body>

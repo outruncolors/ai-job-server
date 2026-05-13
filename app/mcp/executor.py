@@ -29,9 +29,14 @@ def _run_generate_name(args: dict) -> dict:
     return {"name": " ".join(parts)}
 
 
+def _run_format_voice_segments(args: dict) -> dict:
+    return args  # arguments are the result; schema validation is the value
+
+
 _EXECUTORS: dict[str, Callable[[dict], Any]] = {
     "random_integer": _run_random_integer,
     "generate_name": _run_generate_name,
+    "format_voice_segments": _run_format_voice_segments,
 }
 
 

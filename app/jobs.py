@@ -203,20 +203,32 @@ async def execute_voice_job(
         ref_audio_filename = str(wav_path)
         ref_text_resolved = preset["caption"]
 
+    common_run_kwargs = dict(
+        language=request.language,
+        instruct=request.instruct,
+        ref_audio_filename=ref_audio_filename,
+        ref_text=ref_text_resolved,
+        num_step=request.num_step,
+        guidance_scale=request.guidance_scale,
+    )
+
     manager.active_voice_jobs += 1
     try:
         runner = OmniVoiceEphemeralRunner(config)
-        await runner.run(
-            request.text,
-            output_path,
-            job_dir,
-            language=request.language,
-            instruct=request.instruct,
-            ref_audio_filename=ref_audio_filename,
-            ref_text=ref_text_resolved,
-            num_step=request.num_step,
-            guidance_scale=request.guidance_scale,
-        )
+        if request.segments:
+            from .audio_utils import merge_wav_files
+            seg_paths = []
+            delay_ms_list = []
+            for idx, seg in enumerate(request.segments):
+                seg_path = job_dir / f"segment_{idx:03d}.wav"
+                _append_log(job_dir, f"[seg {idx}] {seg.text[:60]!r}\n")
+                await runner.run(seg.text, seg_path, job_dir, **common_run_kwargs)
+                seg_paths.append(seg_path)
+                delay_ms_list.append(seg.delay_ms)
+            _append_log(job_dir, f"[merge] {len(seg_paths)} segments\n")
+            merge_wav_files(seg_paths, delay_ms_list, output_path)
+        else:
+            await runner.run(request.text, output_path, job_dir, **common_run_kwargs)
         _update_artifacts(job_dir, output_path)
         _write_status(job_dir, "done")
         _append_log(job_dir, f"[done] output written to {output_path.name}\n")

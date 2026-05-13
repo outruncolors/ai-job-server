@@ -67,7 +67,8 @@ def create_image_job(req: ImageJobRequest):
 
 @app.post("/v1/jobs/voice", response_model=JobCreatedResponse, status_code=202)
 def create_voice_job(req: VoiceJobRequest, background_tasks: BackgroundTasks):
-    data = create_job("voice", req.model_dump(), req.text)
+    input_text = req.text or (req.segments[0].text if req.segments else "")
+    data = create_job("voice", req.model_dump(), input_text)
     job_id = data["job_id"]
     job_dir = find_job_dir(job_id)
     background_tasks.add_task(

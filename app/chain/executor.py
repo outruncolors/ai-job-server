@@ -39,8 +39,9 @@ def _write_step_status(
     completed_at: Optional[str] = None,
     error: Optional[str] = None,
     output_file: Optional[str] = None,
+    tools: Optional[list] = None,
 ) -> None:
-    data = {
+    data: dict = {
         "id": id,
         "name": name,
         "type": type,
@@ -50,6 +51,8 @@ def _write_step_status(
         "error": error,
         "output_file": output_file,
     }
+    if tools is not None:
+        data["tools"] = tools
     (step_dir / "status.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
@@ -238,29 +241,100 @@ async def _execute_voice_step(
             f"Voice preset {preset['name']!r} wav file missing. Re-upload or remove the preset."
         )
 
-    if step.voice_preprocess and client and llm_config:
-        from ..omnivoice.constants import DEFAULT_VOICE_PREPROCESS_PROMPT
-        preprocess_prompt = config.voice_preprocess_prompt or DEFAULT_VOICE_PREPROCESS_PROMPT
-        text = await client.generate(f"{preprocess_prompt}\n\n{text}", llm_config)
-
-    parts = [p for p in [step.voice_pre, text, step.voice_post] if p]
-    tts_text = "\n\n".join(parts) if parts else text
-
     from ..omnivoice.runner import OmniVoiceEphemeralRunner
     runner = OmniVoiceEphemeralRunner(config)
+    common_run_kwargs = dict(
+        language=config.language,
+        instruct=config.instruct,
+        ref_audio_filename=str(wav_path),
+        ref_text=preset["caption"],
+        num_step=None,
+        guidance_scale=None,
+    )
+
+    # Determine segments (auto-segment takes priority over preprocess)
+    segments = None
+    if step.voice_auto_segment and client and llm_config:
+        from ..omnivoice.constants import DEFAULT_VOICE_AUTO_SEGMENT_PROMPT
+        from ..mcp.registry import get_tool, to_openai_schema
+        from ..models import VoiceSegment
+        import re as _re
+        tool_def = get_tool("format_voice_segments")
+        seg_prompt = config.voice_auto_segment_prompt or DEFAULT_VOICE_AUTO_SEGMENT_PROMPT
+        prompt_content = f"{seg_prompt}\n\n{text}"
+        (step_dir / "auto_segment_prompt.txt").write_text(prompt_content, encoding="utf-8")
+        choice = await client.chat(
+            messages=[{
+                "role": "user",
+                "content": prompt_content,
+            }],
+            llm_config=llm_config,
+            tools=[to_openai_schema(tool_def)],
+        )
+        message = choice.get("message", {})
+        raw_content = message.get("content") or ""
+
+        # Save raw LLM response for debugging
+        (step_dir / "auto_segment_raw.txt").write_text(
+            json.dumps(message, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+        raw_tool_calls = message.get("tool_calls") or []
+        if not raw_tool_calls and raw_content:
+            raw_tool_calls = _parse_gemma_tool_calls(raw_content)
+
+        seg_data: list[dict] = []
+        if raw_tool_calls:
+            tc = raw_tool_calls[0]
+            args = json.loads(tc["function"]["arguments"])
+            seg_data = args.get("segments", [])
+        elif raw_content:
+            # Fallback: model responded with a JSON array instead of calling the tool
+            stripped = raw_content.strip()
+            fence = _re.match(r"^```(?:json)?\s*([\s\S]*?)```\s*$", stripped)
+            if fence:
+                stripped = fence.group(1).strip()
+            try:
+                parsed = json.loads(stripped)
+                if isinstance(parsed, list):
+                    seg_data = parsed
+            except json.JSONDecodeError:
+                pass
+
+        if not seg_data:
+            raise RuntimeError(
+                "voice_auto_segment: LLM did not call format_voice_segments and "
+                "returned no parseable JSON. See auto_segment_raw.txt for the raw response."
+            )
+
+        segments = [
+            VoiceSegment(text=s["text"], delay_ms=int(s.get("delay_ms", 500)))
+            for s in seg_data
+            if str(s.get("text", "")).strip()
+        ]
+        if not segments:
+            raise RuntimeError("voice_auto_segment: no non-empty segments returned")
+
     manager.active_voice_jobs += 1
     try:
-        await runner.run(
-            tts_text,
-            output_path,
-            step_dir,
-            language=config.language,
-            instruct=config.instruct,
-            ref_audio_filename=str(wav_path),
-            ref_text=preset["caption"],
-            num_step=None,
-            guidance_scale=None,
-        )
+        if segments:
+            from ..audio_utils import merge_wav_files
+            seg_paths = []
+            delay_ms_list = []
+            for idx, seg in enumerate(segments):
+                seg_path = step_dir / f"segment_{idx:03d}.wav"
+                await runner.run(seg.text, seg_path, step_dir, **common_run_kwargs)
+                seg_paths.append(seg_path)
+                delay_ms_list.append(seg.delay_ms)
+            merge_wav_files(seg_paths, delay_ms_list, output_path)
+        else:
+            if step.voice_preprocess and client and llm_config:
+                from ..omnivoice.constants import DEFAULT_VOICE_PREPROCESS_PROMPT
+                preprocess_prompt = config.voice_preprocess_prompt or DEFAULT_VOICE_PREPROCESS_PROMPT
+                text = await client.generate(f"{preprocess_prompt}\n\n{text}", llm_config)
+            parts = [p for p in [step.voice_pre, text, step.voice_post] if p]
+            tts_text = "\n\n".join(parts) if parts else text
+            await runner.run(tts_text, output_path, step_dir, **common_run_kwargs)
     finally:
         manager.active_voice_jobs -= 1
     return output_path.name
@@ -399,6 +473,7 @@ async def execute_chain_job(
                     started_at=step_started_at,
                     completed_at=_now_iso(),
                     output_file="output.txt",
+                    tools=step.tools,
                 )
                 _append_log(job_dir, f"[step {step_index}/{step_count}] llm done: {step_id}\n")
                 text_output = output
@@ -413,6 +488,7 @@ async def execute_chain_job(
                     started_at=step_started_at,
                     completed_at=_now_iso(),
                     error=str(exc),
+                    tools=step.tools,
                 )
                 _write_chain_status(job_dir, "error", error=str(exc))
                 _append_log(job_dir, f"[step {step_index}/{step_count}] error: {exc}\n")

@@ -30,6 +30,7 @@ class OmniVoiceConfig(BaseModel):
     ref_text: Optional[str] = None
     infer_base_command: Optional[List[str]] = None
     voice_preprocess_prompt: Optional[str] = None
+    voice_auto_segment_prompt: Optional[str] = None
 
 
 def load_config() -> OmniVoiceConfig:

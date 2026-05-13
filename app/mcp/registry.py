@@ -51,9 +51,41 @@ _generate_name = ToolDefinition(
     ),
 )
 
+_format_voice_segments = ToolDefinition(
+    name="format_voice_segments",
+    description=(
+        "Format analyzed text as voice segments with natural pause timings. "
+        "Call this once with all segments when you have identified the natural "
+        "pause boundaries in the text."
+    ),
+    input_schema=ToolInputSchema(
+        properties={
+            "segments": ToolParameter(
+                type="array",
+                description="Ordered list of text segments with pause durations.",
+                items={
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string", "description": "Text for this segment."},
+                        "delay_ms": {
+                            "type": "integer",
+                            "description": "Silence after this segment in ms. Use 0 for the last segment.",
+                            "minimum": 0,
+                            "maximum": 30000,
+                        },
+                    },
+                    "required": ["text", "delay_ms"],
+                },
+            ),
+        },
+        required=["segments"],
+    ),
+)
+
 REGISTRY: dict[str, ToolDefinition] = {
     "random_integer": _random_integer,
     "generate_name": _generate_name,
+    "format_voice_segments": _format_voice_segments,
 }
 
 

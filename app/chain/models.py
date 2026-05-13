@@ -25,6 +25,7 @@ class ChainStep(BaseModel):
     voice_pre: Optional[str] = None
     voice_post: Optional[str] = None
     voice_preprocess: bool = False
+    voice_auto_segment: bool = False
     ctx_name: Optional[str] = None
     ctx_description: Optional[str] = None
     ctx_pre: Optional[str] = None
