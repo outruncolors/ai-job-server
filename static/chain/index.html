@@ -685,7 +685,9 @@
         '</div>' +
         '<div class="chain-step-voice-fields"' + (type !== 'voice' ? ' style="display:none;"' : '') + '>' +
           '<label>Voice Preset</label>' +
-          '<select class="chain-step-voice-preset">' + _voicePresetOptions(presetId) + '</select>' +
+          (_voicePresets.length === 0
+            ? '<div style="color:#555;font-size:0.74rem;margin-top:4px;">No presets — <a href="/voice" style="color:#2a6;">create one at /voice</a></div>'
+            : '<select class="chain-step-voice-preset">' + _voicePresetOptions(presetId) + '</select>') +
         '</div>';
 
       document.getElementById('chain-steps-list').appendChild(el);
@@ -700,8 +702,10 @@
       voiceFields.style.display = kind === 'voice' ? '' : 'none';
       if (kind === 'voice') {
         const presetSel = card.querySelector('.chain-step-voice-preset');
-        const currentVal = presetSel.value;
-        presetSel.innerHTML = _voicePresetOptions(currentVal);
+        if (presetSel) {
+          const currentVal = presetSel.value;
+          presetSel.innerHTML = _voicePresetOptions(currentVal);
+        }
       }
     }
 

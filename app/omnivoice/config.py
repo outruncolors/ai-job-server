@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -20,9 +20,7 @@ _config: Optional[OmniVoiceConfig] = None
 
 
 class OmniVoiceConfig(BaseModel):
-    mode: Literal["persistent", "ephemeral"] = "ephemeral"
     model: str = "k2-fsa/OmniVoice"
-    persistent_api_base: str = "http://127.0.0.1:8091"
     response_format: str = "wav"
     voice: str = "default"
     speed: float = Field(default=1.0, ge=0.25, le=4.0)
@@ -30,7 +28,6 @@ class OmniVoiceConfig(BaseModel):
     instruct: Optional[str] = None
     ref_audio_filename: Optional[str] = None
     ref_text: Optional[str] = None
-    server_command: Optional[List[str]] = None
     infer_base_command: Optional[List[str]] = None
 
 

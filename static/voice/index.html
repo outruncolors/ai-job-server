@@ -68,32 +68,29 @@
     #panel-left  { flex: 1; overflow-y: auto; padding: 24px 28px; border-right: 1px solid #1a1a1a; }
     #panel-right { flex: 1; overflow-y: auto; padding: 24px 28px; }
 
-
-    /* ── OmniVoice-specific ── */
-    .ov-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-    .ov-running { background: #2a6; }
-    .ov-stopped { background: #3a3a3a; }
-    .ov-error   { background: #e44; }
-
-    #ov-status-bar {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      font-size: 0.74rem; padding-bottom: 12px; margin-bottom: 16px;
-      border-bottom: 1px solid #1e1e1e;
+    /* ── Tabs ── */
+    #voice-tabs { display: flex; gap: 2px; margin-bottom: 20px; border-bottom: 1px solid #1e1e1e; padding-bottom: 0; }
+    .tab-btn {
+      background: none; color: #555; border: none; border-bottom: 2px solid transparent;
+      padding: 6px 14px; margin: 0; margin-bottom: -1px; border-radius: 0;
+      font-family: monospace; font-size: 0.76rem; cursor: pointer; letter-spacing: 0.04em;
     }
-    #ov-status-bar button { margin-top: 0; padding: 4px 10px; font-size: 0.7rem; }
-    #ov-status-bar select { width: auto; font-size: 0.7rem; padding: 3px 6px; }
-    #ov-ctrl-msg { font-size: 0.74rem; min-height: 1.1em; }
+    .tab-btn:hover { color: #999; background: none; }
+    .tab-btn.active { color: #ccc; border-bottom-color: #2a6; }
 
-    #ov-audio { margin-top: 14px; width: 100%; display: none; }
-    #ov-save-design-wrap { display: none; }
-
-    .voice-mode-head {
-      display: flex; align-items: center; gap: 8px; cursor: pointer;
-      padding: 6px 0; border-bottom: 1px solid #1e1e1e; margin-bottom: 4px;
-    }
-    .voice-mode-head input[type=radio] { width: auto; margin: 0; accent-color: #2a6; cursor: pointer; }
-    .voice-mode-head label { display: inline; margin: 0; cursor: pointer; font-size: 0.76rem; color: #666; }
+    /* ── Voice-specific ── */
+    #voice-audio { margin-top: 14px; width: 100%; display: none; }
+    .hint { color: #3a3a3a; font-size: 0.72rem; margin-left: 6px; }
     .section-label { color: #383838; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; }
+    #duration-badge {
+      display: none; margin-top: 8px; font-size: 0.76rem; color: #555;
+    }
+    #duration-badge .dur-val { color: #888; }
+    #save-wrap { display: none; margin-top: 16px; }
+    #duration-warn { display: none; margin-top: 8px; font-size: 0.76rem; color: #c84; }
+    #use-empty-msg { display: none; color: #555; font-size: 0.76rem; margin-top: 6px; }
+    #use-preset-row { display: none; }
+    #use-audio { margin-top: 14px; width: 100%; display: none; }
   </style>
   <link rel="stylesheet" href="/css/responsive.css">
 </head>
@@ -113,102 +110,46 @@
     <!-- ── Left: Controls ── -->
     <div id="panel-left">
 
-      <!-- Server status bar -->
-      <div id="ov-status-bar">
-        <span>
-          <span id="ov-proc-dot" class="ov-dot ov-stopped"></span>
-          <strong id="ov-proc-state" style="color:#666;">-</strong>
-        </span>
-        <span style="color:#444;">Mode: <strong id="ov-mode" style="color:#555;">-</strong></span>
-        <span style="color:#444;">Health: <strong id="ov-health" style="color:#555;">-</strong></span>
-        <span style="color:#444;">Active: <strong id="ov-active" style="color:#555;">0</strong></span>
-        <button onclick="ovAction('start')">Start</button>
-        <button class="secondary" onclick="ovAction('stop')">Stop</button>
-        <button class="secondary" onclick="ovAction('restart')">Restart</button>
-        <select id="ov-mode-select">
-          <option value="ephemeral">ephemeral</option>
-          <option value="persistent">persistent</option>
-        </select>
-        <button class="secondary" onclick="saveOvConfig()">Save</button>
-        <div id="ov-ctrl-msg" style="flex:1;"></div>
+      <div id="voice-tabs">
+        <button class="tab-btn active" onclick="switchTab('create')">Create Voice</button>
+        <button class="tab-btn" onclick="switchTab('use')">Use Voice</button>
       </div>
 
-      <!-- Text + params -->
-      <label>Text</label>
-      <textarea id="ov-text" style="min-height:120px;" placeholder="Hello from OmniVoice!"></textarea>
+      <!-- ── Create Voice tab ── -->
+      <div id="create-panel">
 
-      <div class="row">
-        <div>
-          <label>Language</label>
-          <input id="ov-lang" type="text" list="ov-lang-list" placeholder="Auto">
-          <datalist id="ov-lang-list">
-            <option value="Auto"><option value="English"><option value="Chinese">
-            <option value="Spanish"><option value="French"><option value="German">
-            <option value="Japanese"><option value="Korean"><option value="Portuguese">
-            <option value="Russian"><option value="Italian"><option value="Dutch">
-            <option value="Arabic"><option value="Hindi"><option value="Turkish">
-            <option value="Polish"><option value="Swedish"><option value="Vietnamese">
-            <option value="Thai"><option value="Indonesian"><option value="Ukrainian">
-            <option value="Greek"><option value="Hebrew"><option value="Persian">
-          </datalist>
-        </div>
-        <div>
-          <label>Speed</label>
-          <input id="ov-spd" type="number" step="0.05" min="0.5" max="1.5" value="1.0">
-        </div>
-      </div>
+        <!-- Design subsection -->
+        <details open>
+          <summary>Design Voice</summary>
+          <div style="margin-top:10px;">
+            <label>Sample text <span class="hint">Ideal: 3–10 seconds of speech</span></label>
+            <textarea id="create-text" style="min-height:80px;" placeholder="Speak naturally for 3–10 seconds…"></textarea>
 
-      <!-- Voice mode: Clone -->
-      <div style="margin-top:18px;">
-        <details id="ov-clone-details">
-          <summary>
-            <span class="voice-mode-head">
-              <input type="radio" name="ov-voice-mode" value="clone" id="ov-clone-radio">
-              <label for="ov-clone-radio">Voice Clone</label>
-            </span>
-          </summary>
-          <fieldset style="margin-top:8px;">
-            <legend>Add Preset</legend>
-            <label>Sample (.wav)</label>
-            <input type="file" id="ov-preset-file" accept=".wav" onchange="ovUpdateSavePresetBtn()" style="padding:3px 0;">
-            <label>Name</label>
-            <input type="text" id="ov-preset-name" placeholder="e.g. Alice" oninput="ovUpdateSavePresetBtn()">
-            <label>Caption</label>
-            <textarea id="ov-preset-caption" style="min-height:40px;"
-                      placeholder="Exact words spoken in the sample…" oninput="ovUpdateSavePresetBtn()"></textarea>
-            <div class="btn-wrap">
-              <button id="ov-preset-save-btn" onclick="ovSavePreset()" disabled>Save Preset</button>
-              <span class="btn-tip">Fill in sample, name, and caption first</span>
+            <div class="row" style="margin-top:4px;">
+              <div>
+                <label>Language</label>
+                <input id="create-lang" type="text" list="create-lang-list" placeholder="Auto">
+                <datalist id="create-lang-list">
+                  <option value="Auto"><option value="English"><option value="Chinese">
+                  <option value="Spanish"><option value="French"><option value="German">
+                  <option value="Japanese"><option value="Korean"><option value="Portuguese">
+                  <option value="Russian"><option value="Italian"><option value="Dutch">
+                  <option value="Arabic"><option value="Hindi"><option value="Turkish">
+                  <option value="Polish"><option value="Swedish"><option value="Vietnamese">
+                  <option value="Thai"><option value="Indonesian"><option value="Ukrainian">
+                  <option value="Greek"><option value="Hebrew"><option value="Persian">
+                </datalist>
+              </div>
+              <div>
+                <label>Speed</label>
+                <input id="create-spd" type="number" step="0.05" min="0.5" max="1.5" value="1.0">
+              </div>
             </div>
-            <div id="ov-preset-save-msg" class="msg"></div>
-          </fieldset>
-          <div style="margin-top:10px;">
-            <label>Active Preset</label>
-            <select id="ov-preset-select"><option value="">— none —</option></select>
-            <div id="ov-preset-empty-msg" style="display:none;color:#444;font-size:0.74rem;margin-top:4px;">No presets yet.</div>
-          </div>
-          <div style="margin-top:8px;">
-            <label>Remove Preset</label>
-            <select id="ov-preset-remove-select"><option value="">— select to remove —</option></select>
-          </div>
-          <div id="ov-clone-msg" class="msg"></div>
-        </details>
-      </div>
 
-      <!-- Voice mode: Design -->
-      <div style="margin-top:8px;">
-        <details id="ov-design-details" open>
-          <summary>
-            <span class="voice-mode-head">
-              <input type="radio" name="ov-voice-mode" value="design" id="ov-design-radio" checked>
-              <label for="ov-design-radio">Voice Design</label>
-            </span>
-          </summary>
-          <div style="margin-top:10px;">
-            <div class="row">
+            <div class="row" style="margin-top:4px;">
               <div>
                 <label>Gender</label>
-                <select id="ov-gender">
+                <select id="create-gender">
                   <option value="Auto">Auto</option>
                   <option value="Male / 男">Male</option>
                   <option value="Female / 女">Female</option>
@@ -216,7 +157,7 @@
               </div>
               <div>
                 <label>Age</label>
-                <select id="ov-age">
+                <select id="create-age">
                   <option value="Auto">Auto</option>
                   <option value="Child / 儿童">Child</option>
                   <option value="Teenager / 少年">Teenager</option>
@@ -229,7 +170,7 @@
             <div class="row">
               <div>
                 <label>Pitch</label>
-                <select id="ov-pitch">
+                <select id="create-pitch">
                   <option value="Auto">Auto</option>
                   <option value="Very Low Pitch / 极低音调">Very Low</option>
                   <option value="Low Pitch / 低音调">Low</option>
@@ -240,7 +181,7 @@
               </div>
               <div>
                 <label>Style</label>
-                <select id="ov-style">
+                <select id="create-style">
                   <option value="Auto">Auto</option>
                   <option value="Whisper / 耳语">Whisper</option>
                 </select>
@@ -249,7 +190,7 @@
             <div class="row">
               <div>
                 <label>EN Accent</label>
-                <select id="ov-accent">
+                <select id="create-accent">
                   <option value="Auto">Auto</option>
                   <option value="American Accent / 美式口音">American</option>
                   <option value="Australian Accent / 澳大利亚口音">Australian</option>
@@ -265,7 +206,7 @@
               </div>
               <div>
                 <label>ZH Dialect</label>
-                <select id="ov-dialect">
+                <select id="create-dialect">
                   <option value="Auto">Auto</option>
                   <option value="Northeast Dialect / 东北话">Northeast</option>
                   <option value="Sichuan Dialect / 四川话">Sichuan</option>
@@ -282,56 +223,148 @@
                 </select>
               </div>
             </div>
+
+            <details style="margin-top:10px;">
+              <summary>Advanced</summary>
+              <div style="margin-top:10px;">
+                <label>
+                  Inference Steps: <strong id="create-steps-val">32</strong>
+                  <span style="color:#383838;font-size:0.7rem;"> (4–64)</span>
+                </label>
+                <input id="create-steps" type="range" min="4" max="64" step="1" value="32"
+                       oninput="document.getElementById('create-steps-val').textContent=this.value"
+                       style="margin-top:4px;">
+                <label style="margin-top:10px;">
+                  Guidance Scale: <strong id="create-cfg-val">2.0</strong>
+                  <span style="color:#383838;font-size:0.7rem;"> (0–4)</span>
+                </label>
+                <input id="create-cfg" type="range" min="0" max="4" step="0.1" value="2.0"
+                       oninput="document.getElementById('create-cfg-val').textContent=parseFloat(this.value).toFixed(1)"
+                       style="margin-top:4px;">
+              </div>
+            </details>
+
+            <button onclick="generateSample()" style="margin-top:16px;">Generate Sample</button>
+            <div id="create-job-msg" class="msg"></div>
           </div>
         </details>
-      </div>
 
-      <!-- Generation settings -->
-      <details style="margin-top:10px;">
-        <summary>Generation Settings</summary>
-        <div style="margin-top:10px;">
-          <label>
-            Inference Steps: <strong id="ov-steps-val">32</strong>
-            <span style="color:#383838;font-size:0.7rem;"> (4–64)</span>
-          </label>
-          <input id="ov-steps" type="range" min="4" max="64" step="1" value="32"
-                 oninput="document.getElementById('ov-steps-val').textContent=this.value"
-                 style="margin-top:4px;">
-          <label style="margin-top:10px;">
-            Guidance Scale: <strong id="ov-cfg-val">2.0</strong>
-            <span style="color:#383838;font-size:0.7rem;"> (0–4)</span>
-          </label>
-          <input id="ov-cfg" type="range" min="0" max="4" step="0.1" value="2.0"
-                 oninput="document.getElementById('ov-cfg-val').textContent=parseFloat(this.value).toFixed(1)"
-                 style="margin-top:4px;">
+        <!-- Upload subsection -->
+        <details style="margin-top:12px;">
+          <summary>Upload Sample</summary>
+          <fieldset style="margin-top:8px;">
+            <legend>Save .wav as preset</legend>
+            <label>Sample (.wav) <span class="hint">Must be 3–10 seconds</span></label>
+            <input type="file" id="upload-file" accept=".wav" onchange="onUploadChange()" style="padding:3px 0;">
+            <label>Name</label>
+            <input type="text" id="upload-name" placeholder="e.g. Alice" oninput="onUploadChange()">
+            <label>Caption <span class="hint">Exact words spoken in the sample</span></label>
+            <textarea id="upload-caption" style="min-height:40px;"
+                      placeholder="Exact words spoken…" oninput="onUploadChange()"></textarea>
+            <div class="btn-wrap">
+              <button id="upload-btn" onclick="uploadPreset()" disabled>Save Preset</button>
+              <span class="btn-tip">Fill in sample, name, and caption first</span>
+            </div>
+            <div id="upload-msg" class="msg"></div>
+          </fieldset>
+        </details>
+
+      </div><!-- /create-panel -->
+
+      <!-- ── Use Voice tab ── -->
+      <div id="use-panel" style="display:none;">
+
+        <label style="margin-top:0;">Voice Preset</label>
+        <div id="use-empty-msg">No voice presets yet — create one in the <strong>Create Voice</strong> tab.</div>
+        <div id="use-preset-row">
+          <select id="use-preset-select"></select>
+          <button class="danger" onclick="deleteSelectedPreset()" style="margin-top:6px;padding:4px 10px;font-size:0.76rem;">Delete Preset</button>
         </div>
-      </details>
 
-      <button onclick="ovSubmitVoice()" style="margin-top:20px;">Synthesize</button>
-    </div>
+        <label style="margin-top:14px;">Text to synthesize</label>
+        <textarea id="use-text" style="min-height:120px;" placeholder="Enter text to speak…"></textarea>
+
+        <div class="row" style="margin-top:4px;">
+          <div>
+            <label>Language</label>
+            <input id="use-lang" type="text" list="use-lang-list" placeholder="Auto">
+            <datalist id="use-lang-list">
+              <option value="Auto"><option value="English"><option value="Chinese">
+              <option value="Spanish"><option value="French"><option value="German">
+              <option value="Japanese"><option value="Korean"><option value="Portuguese">
+              <option value="Russian"><option value="Italian"><option value="Dutch">
+              <option value="Arabic"><option value="Hindi"><option value="Turkish">
+              <option value="Polish"><option value="Swedish"><option value="Vietnamese">
+              <option value="Thai"><option value="Indonesian"><option value="Ukrainian">
+              <option value="Greek"><option value="Hebrew"><option value="Persian">
+            </datalist>
+          </div>
+          <div>
+            <label>Speed</label>
+            <input id="use-spd" type="number" step="0.05" min="0.5" max="1.5" value="1.0">
+          </div>
+        </div>
+
+        <details style="margin-top:10px;">
+          <summary>Advanced</summary>
+          <div style="margin-top:10px;">
+            <label>
+              Inference Steps: <strong id="use-steps-val">32</strong>
+              <span style="color:#383838;font-size:0.7rem;"> (4–64)</span>
+            </label>
+            <input id="use-steps" type="range" min="4" max="64" step="1" value="32"
+                   oninput="document.getElementById('use-steps-val').textContent=this.value"
+                   style="margin-top:4px;">
+            <label style="margin-top:10px;">
+              Guidance Scale: <strong id="use-cfg-val">2.0</strong>
+              <span style="color:#383838;font-size:0.7rem;"> (0–4)</span>
+            </label>
+            <input id="use-cfg" type="range" min="0" max="4" step="0.1" value="2.0"
+                   oninput="document.getElementById('use-cfg-val').textContent=parseFloat(this.value).toFixed(1)"
+                   style="margin-top:4px;">
+          </div>
+        </details>
+
+        <button onclick="synthesize()" style="margin-top:16px;">Synthesize</button>
+        <div id="use-job-msg" class="msg"></div>
+
+      </div><!-- /use-panel -->
+
+    </div><!-- /panel-left -->
 
     <!-- ── Right: Output ── -->
     <div id="panel-right">
       <p class="section-label" style="margin-bottom:14px;">OUTPUT</p>
-      <div id="ov-job-msg" class="msg" style="margin-top:0;"></div>
-      <audio id="ov-audio" controls></audio>
 
-      <fieldset id="ov-save-design-wrap" style="margin-top:20px;">
-        <legend>Save as preset</legend>
-        <label>Name</label>
-        <input type="text" id="ov-save-design-name" placeholder="e.g. Warm Narrator"
-               oninput="ovUpdateSaveDesignBtn()">
-        <div class="btn-wrap">
-          <button id="ov-save-design-btn" onclick="ovSaveFromDesign()" disabled>Save Voice</button>
-          <span class="btn-tip">Enter a name first</span>
+      <!-- Create output -->
+      <div id="create-output">
+        <audio id="create-audio" controls></audio>
+        <div id="duration-badge"></div>
+        <div id="duration-warn"></div>
+        <fieldset id="save-wrap">
+          <legend>Save as preset</legend>
+          <label>Name</label>
+          <input type="text" id="save-name" placeholder="e.g. Warm Narrator" oninput="onSaveNameChange()">
+          <div class="btn-wrap">
+            <button id="save-btn" onclick="saveFromDesign()" disabled>Save Voice</button>
+            <span class="btn-tip">Enter a name first</span>
+          </div>
+          <div id="save-msg" class="msg"></div>
+        </fieldset>
+        <div id="create-right-hint" style="color:#222;font-size:0.74rem;margin-top:8px;">
+          Generate a sample to hear output here.
         </div>
-        <div id="ov-save-design-msg" class="msg"></div>
-      </fieldset>
-
-      <div id="voice-right-hint" style="color:#222;font-size:0.74rem;margin-top:8px;">
-        Synthesize to hear output here.
       </div>
-    </div>
+
+      <!-- Use output -->
+      <div id="use-output" style="display:none;">
+        <audio id="use-audio" controls></audio>
+        <div id="use-right-hint" style="color:#222;font-size:0.74rem;margin-top:8px;">
+          Synthesize to hear output here.
+        </div>
+      </div>
+
+    </div><!-- /panel-right -->
 
   </div>
 
@@ -346,159 +379,73 @@
     function _escHtml(str) {
       return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
-    function statusClass(s) { return 'status-' + s; }
 
-    // ── Voice presets ────────────────────────────────────────────────
-    let _ovPresets      = [];
-    let _ovCurrentJobId = null;
-    let _ovJobPollTimer = null;
+    // ── Presets ──────────────────────────────────────────────────────
+    let _presets = [];
+    let _activeTab = 'create';
 
-    async function ovLoadPresets() {
+    async function loadPresets() {
       try {
         const r = await fetch('/v1/voice-presets');
-        if (!r.ok) throw new Error(await r.text());
-        _ovPresets = await r.json();
-      } catch (e) { _ovPresets = []; }
-      _ovRenderPresetSelects();
+        _presets = r.ok ? await r.json() : [];
+      } catch(e) { _presets = []; }
+      _renderUsePresets();
     }
-    function _ovRenderPresetSelects() {
-      const sel = document.getElementById('ov-preset-select');
-      const rem = document.getElementById('ov-preset-remove-select');
-      const emptyMsg = document.getElementById('ov-preset-empty-msg');
-      const currentVal = sel.value;
-      const opts = _ovPresets.map(p => `<option value="${p.id}">${_escHtml(p.name)}</option>`).join('');
-      sel.innerHTML = '<option value="">— none —</option>' + opts;
-      rem.innerHTML = '<option value="">— select to remove —</option>' + opts;
-      if (_ovPresets.some(p => p.id === currentVal)) sel.value = currentVal;
-      emptyMsg.style.display = _ovPresets.length === 0 ? 'block' : 'none';
-    }
-    function ovUpdateSavePresetBtn() {
-      const hasFile    = document.getElementById('ov-preset-file').files.length > 0;
-      const hasName    = document.getElementById('ov-preset-name').value.trim() !== '';
-      const hasCaption = document.getElementById('ov-preset-caption').value.trim() !== '';
-      document.getElementById('ov-preset-save-btn').disabled = !(hasFile && hasName && hasCaption);
-    }
-    async function ovSavePreset() {
-      const msg    = document.getElementById('ov-preset-save-msg');
-      const fileEl = document.getElementById('ov-preset-file');
-      const nameEl = document.getElementById('ov-preset-name');
-      const captEl = document.getElementById('ov-preset-caption');
-      msg.textContent = '';
-      const fd = new FormData();
-      fd.append('file', fileEl.files[0]);
-      fd.append('name', nameEl.value.trim());
-      fd.append('caption', captEl.value.trim());
-      try {
-        const r = await fetch('/v1/voice-presets', { method: 'POST', body: fd });
-        if (!r.ok) throw new Error(await r.text());
-        const preset = await r.json();
-        msg.style.color = '#2a6'; msg.textContent = `Saved "${preset.name}"`;
-        fileEl.value = ''; nameEl.value = ''; captEl.value = '';
-        ovUpdateSavePresetBtn();
-        await ovLoadPresets();
-        _ovSetMode('clone');
-        document.getElementById('ov-preset-select').value = preset.id;
-      } catch (e) {
-        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
+
+    function _renderUsePresets() {
+      const sel      = document.getElementById('use-preset-select');
+      const emptyMsg = document.getElementById('use-empty-msg');
+      const row      = document.getElementById('use-preset-row');
+      if (_presets.length === 0) {
+        emptyMsg.style.display = 'block';
+        row.style.display = 'none';
+      } else {
+        emptyMsg.style.display = 'none';
+        row.style.display = 'block';
+        const cur = sel.value;
+        sel.innerHTML = _presets.map(p =>
+          `<option value="${p.id}"${p.id === cur ? ' selected' : ''}>${_escHtml(p.name)}</option>`
+        ).join('');
+        if (!_presets.some(p => p.id === cur) && _presets.length > 0) sel.value = _presets[0].id;
       }
     }
-    function ovUpdateSaveDesignBtn() {
-      const hasName = document.getElementById('ov-save-design-name').value.trim() !== '';
-      document.getElementById('ov-save-design-btn').disabled = !hasName;
-    }
-    async function ovSaveFromDesign() {
-      if (!_ovCurrentJobId) return;
-      const msg    = document.getElementById('ov-save-design-msg');
-      const nameEl = document.getElementById('ov-save-design-name');
-      const name   = nameEl.value.trim();
-      if (!name) return;
-      const caption = document.getElementById('ov-text').value.trim();
-      msg.style.color = '#fa0'; msg.textContent = 'Saving…';
+
+    async function deleteSelectedPreset() {
+      const sel = document.getElementById('use-preset-select');
+      const id  = sel.value;
+      if (!id) return;
+      const preset = _presets.find(p => p.id === id);
+      const name   = preset ? preset.name : id;
+      if (!window.confirm(`Remove voice preset "${name}"? This cannot be undone.`)) return;
+      const msg = document.getElementById('use-job-msg');
       try {
-        const r = await fetch('/v1/voice-presets/from-job', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: _ovCurrentJobId, name, caption }),
-        });
+        const r = await fetch(`/v1/voice-presets/${id}`, { method: 'DELETE' });
         if (!r.ok) throw new Error(await r.text());
-        const preset = await r.json();
-        msg.style.color = '#2a6'; msg.textContent = `Saved as "${preset.name}"`;
-        await ovLoadPresets();
-        _ovSetMode('clone');
-        document.getElementById('ov-preset-select').value = preset.id;
-        document.getElementById('ov-save-design-wrap').style.display = 'none';
-      } catch (e) {
+        msg.style.color = '#2a6'; msg.textContent = `Removed "${name}"`;
+        await loadPresets();
+      } catch(e) {
         msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
     }
 
-    // ── OmniVoice control ────────────────────────────────────────────
-    function _ovSetMode(which) {
-      const isClone = which === 'clone';
-      document.getElementById('ov-clone-details').open  = isClone;
-      document.getElementById('ov-design-details').open = !isClone;
-      document.getElementById('ov-clone-radio').checked  = isClone;
-      document.getElementById('ov-design-radio').checked = !isClone;
+    // ── Tabs ─────────────────────────────────────────────────────────
+    function switchTab(tab) {
+      _activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach((b, i) =>
+        b.classList.toggle('active', (i === 0) === (tab === 'create'))
+      );
+      document.getElementById('create-panel').style.display = tab === 'create' ? '' : 'none';
+      document.getElementById('use-panel').style.display    = tab === 'use'    ? '' : 'none';
+      document.getElementById('create-output').style.display = tab === 'create' ? '' : 'none';
+      document.getElementById('use-output').style.display    = tab === 'use'    ? '' : 'none';
     }
-    function _ovActiveMode() {
-      return document.getElementById('ov-clone-radio').checked ? 'clone' : 'design';
-    }
-    function _ovInitExclusiveDetails() {
-      ['clone', 'design'].forEach(mode => {
-        document.getElementById(`ov-${mode}-details`)
-          .querySelector('summary')
-          .addEventListener('click', e => { e.preventDefault(); _ovSetMode(mode); });
-        document.getElementById(`ov-${mode}-radio`)
-          .addEventListener('change', () => _ovSetMode(mode));
-      });
-    }
-    async function ovFetch(path, method = 'GET', body = null) {
-      const opts = { method, headers: { 'Content-Type': 'application/json' } };
-      if (body) opts.body = JSON.stringify(body);
-      const r = await fetch('/v1/omnivoice' + path, opts);
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
-    }
-    async function loadOvStatus() {
-      try {
-        const s = await ovFetch('/status');
-        document.getElementById('ov-mode').textContent = s.mode;
-        document.getElementById('ov-proc-state').textContent = s.persistent.process_state;
-        const dot = document.getElementById('ov-proc-dot');
-        dot.className = 'ov-dot ' + (s.persistent.process_state === 'running' ? 'ov-running' : 'ov-stopped');
-        document.getElementById('ov-health').textContent = s.persistent.health;
-        document.getElementById('ov-active').textContent = s.active_voice_jobs;
-        document.getElementById('ov-mode-select').value = s.mode;
-      } catch (e) {
-        document.getElementById('ov-proc-state').textContent = 'unreachable';
-      }
-    }
-    async function ovAction(action) {
-      const msg = document.getElementById('ov-ctrl-msg');
-      msg.textContent = '';
-      try {
-        await ovFetch('/' + action, 'POST');
-        await loadOvStatus();
-        msg.style.color = '#2a6'; msg.textContent = action + ' OK';
-      } catch (e) {
-        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
-      }
-    }
-    async function saveOvConfig() {
-      const msg  = document.getElementById('ov-ctrl-msg');
-      const mode = document.getElementById('ov-mode-select').value;
-      try {
-        const cfg = await ovFetch('/config');
-        cfg.mode = mode;
-        await ovFetch('/config', 'PUT', cfg);
-        await loadOvStatus();
-        msg.style.color = '#2a6'; msg.textContent = 'Config saved.';
-      } catch (e) {
-        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
-      }
-    }
+
+    // ── Create: Design ───────────────────────────────────────────────
+    let _createJobId   = null;
+    let _createPollTimer = null;
+
     function _buildInstruct() {
-      const ids = ['ov-gender','ov-age','ov-pitch','ov-style','ov-accent','ov-dialect'];
+      const ids = ['create-gender','create-age','create-pitch','create-style','create-accent','create-dialect'];
       const parts = [];
       for (const id of ids) {
         const v = document.getElementById(id).value;
@@ -511,103 +458,202 @@
       }
       return parts.join(', ');
     }
-    async function ovSubmitVoice() {
-      const msg   = document.getElementById('ov-job-msg');
-      const audio = document.getElementById('ov-audio');
-      const hint  = document.getElementById('voice-right-hint');
+
+    async function generateSample() {
+      const msg   = document.getElementById('create-job-msg');
+      const audio = document.getElementById('create-audio');
+      const hint  = document.getElementById('create-right-hint');
       audio.style.display = 'none';
-      document.getElementById('ov-save-design-wrap').style.display = 'none';
-      _ovCurrentJobId = null; msg.textContent = '';
+      document.getElementById('duration-badge').style.display = 'none';
+      document.getElementById('duration-warn').style.display = 'none';
+      document.getElementById('save-wrap').style.display = 'none';
+      _createJobId = null; msg.textContent = '';
+      const text = document.getElementById('create-text').value.trim();
+      if (!text) { msg.style.color = '#e44'; msg.textContent = 'Enter sample text first.'; return; }
       const body = {
-        text:           document.getElementById('ov-text').value,
-        speed:          parseFloat(document.getElementById('ov-spd').value),
-        num_step:       parseInt(document.getElementById('ov-steps').value),
-        guidance_scale: parseFloat(document.getElementById('ov-cfg').value),
+        text,
+        speed:          parseFloat(document.getElementById('create-spd').value),
+        num_step:       parseInt(document.getElementById('create-steps').value),
+        guidance_scale: parseFloat(document.getElementById('create-cfg').value),
       };
-      const lang = document.getElementById('ov-lang').value.trim();
+      const lang = document.getElementById('create-lang').value.trim();
       if (lang && lang !== 'Auto') body.language = lang;
-      if (_ovActiveMode() === 'clone') {
-        const presetId = document.getElementById('ov-preset-select').value;
-        if (!presetId) {
-          msg.style.color = '#e44'; msg.textContent = 'Select a voice preset before synthesizing.'; return;
-        }
-        body.voice_preset_id = presetId;
-      } else {
-        const instruct = _buildInstruct();
-        if (instruct) body.instruct = instruct;
-      }
+      const instruct = _buildInstruct();
+      if (instruct) body.instruct = instruct;
       try {
         hint.style.display = 'none';
         const job = await api('/jobs/voice', 'POST', body);
-        msg.style.color = '#fa0';
-        msg.textContent = 'Job ' + job.job_id.slice(0, 8) + '… synthesizing';
-        if (_ovJobPollTimer) clearInterval(_ovJobPollTimer);
-        _ovJobPollTimer = setInterval(() => _pollOvJob(job.job_id), 3000);
-      } catch (e) {
+        msg.style.color = '#fa0'; msg.textContent = 'Generating sample…';
+        if (_createPollTimer) clearInterval(_createPollTimer);
+        _createPollTimer = setInterval(() => _pollCreateJob(job.job_id), 3000);
+      } catch(e) {
         msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
     }
-    async function _pollOvJob(jobId) {
+
+    async function _pollCreateJob(jobId) {
       try {
         const job   = await api('/jobs/' + jobId);
-        const msg   = document.getElementById('ov-job-msg');
-        const audio = document.getElementById('ov-audio');
+        const msg   = document.getElementById('create-job-msg');
+        const audio = document.getElementById('create-audio');
         if (job.status === 'done') {
-          clearInterval(_ovJobPollTimer); _ovJobPollTimer = null;
-          msg.style.color = '#2a6'; msg.textContent = 'Done — playing output.wav';
-          _ovCurrentJobId = jobId;
+          clearInterval(_createPollTimer); _createPollTimer = null;
+          msg.style.color = '#2a6'; msg.textContent = 'Sample ready';
+          _createJobId = jobId;
           audio.src = '/v1/jobs/' + jobId + '/files/output.wav';
           audio.style.display = 'block'; audio.load();
         } else if (job.status === 'error') {
-          clearInterval(_ovJobPollTimer); _ovJobPollTimer = null;
+          clearInterval(_createPollTimer); _createPollTimer = null;
           msg.style.color = '#e44'; msg.textContent = 'Error: ' + (job.error || 'unknown');
         } else {
-          msg.textContent = 'Job ' + jobId.slice(0, 8) + '… ' + job.status;
+          msg.textContent = 'Generating… (' + job.status + ')';
         }
-      } catch (e) {}
+      } catch(e) {}
+    }
+
+    document.getElementById('create-audio').addEventListener('loadedmetadata', function() {
+      const dur   = this.duration;
+      const badge = document.getElementById('duration-badge');
+      const warn  = document.getElementById('duration-warn');
+      const save  = document.getElementById('save-wrap');
+      if (!isFinite(dur)) return;
+      badge.innerHTML = `Duration: <span class="dur-val">${dur.toFixed(1)}s</span>`;
+      badge.style.display = 'block';
+      if (dur >= 3 && dur <= 10) {
+        warn.style.display = 'none';
+        save.style.display = 'block';
+        document.getElementById('save-name').value = '';
+        document.getElementById('save-msg').textContent = '';
+        onSaveNameChange();
+      } else {
+        warn.textContent = `Sample is ${dur.toFixed(1)}s — must be 3–10s to save as preset`;
+        warn.style.display = 'block';
+        save.style.display = 'none';
+      }
+    });
+
+    function onSaveNameChange() {
+      document.getElementById('save-btn').disabled =
+        !document.getElementById('save-name').value.trim();
+    }
+
+    async function saveFromDesign() {
+      if (!_createJobId) return;
+      const msg    = document.getElementById('save-msg');
+      const nameEl = document.getElementById('save-name');
+      const name   = nameEl.value.trim();
+      if (!name) return;
+      const caption = document.getElementById('create-text').value.trim();
+      msg.style.color = '#fa0'; msg.textContent = 'Saving…';
+      try {
+        const r = await fetch('/v1/voice-presets/from-job', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: _createJobId, name, caption }),
+        });
+        if (!r.ok) {
+          let detail = await r.text();
+          try { detail = JSON.parse(detail).detail || detail; } catch(e) {}
+          throw new Error(detail);
+        }
+        const preset = await r.json();
+        msg.style.color = '#2a6'; msg.textContent = `Saved as "${preset.name}"`;
+        document.getElementById('save-wrap').style.display = 'none';
+        await loadPresets();
+      } catch(e) {
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    // ── Create: Upload ───────────────────────────────────────────────
+    function onUploadChange() {
+      const hasFile    = document.getElementById('upload-file').files.length > 0;
+      const hasName    = document.getElementById('upload-name').value.trim() !== '';
+      const hasCaption = document.getElementById('upload-caption').value.trim() !== '';
+      document.getElementById('upload-btn').disabled = !(hasFile && hasName && hasCaption);
+    }
+
+    async function uploadPreset() {
+      const msg    = document.getElementById('upload-msg');
+      const fileEl = document.getElementById('upload-file');
+      const nameEl = document.getElementById('upload-name');
+      const captEl = document.getElementById('upload-caption');
+      msg.textContent = '';
+      const fd = new FormData();
+      fd.append('file', fileEl.files[0]);
+      fd.append('name', nameEl.value.trim());
+      fd.append('caption', captEl.value.trim());
+      try {
+        const r = await fetch('/v1/voice-presets', { method: 'POST', body: fd });
+        if (!r.ok) {
+          let detail = await r.text();
+          try { detail = JSON.parse(detail).detail || detail; } catch(e) {}
+          throw new Error(detail);
+        }
+        const preset = await r.json();
+        msg.style.color = '#2a6'; msg.textContent = `Saved "${preset.name}"`;
+        fileEl.value = ''; nameEl.value = ''; captEl.value = '';
+        onUploadChange();
+        await loadPresets();
+      } catch(e) {
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    // ── Use Voice ────────────────────────────────────────────────────
+    let _usePollTimer = null;
+
+    async function synthesize() {
+      const msg   = document.getElementById('use-job-msg');
+      const audio = document.getElementById('use-audio');
+      const hint  = document.getElementById('use-right-hint');
+      audio.style.display = 'none'; msg.textContent = '';
+      const presetId = document.getElementById('use-preset-select').value;
+      if (!presetId) { msg.style.color = '#e44'; msg.textContent = 'Select a voice preset first.'; return; }
+      const text = document.getElementById('use-text').value.trim();
+      if (!text) { msg.style.color = '#e44'; msg.textContent = 'Enter text to synthesize.'; return; }
+      const body = {
+        text,
+        voice_preset_id: presetId,
+        speed:           parseFloat(document.getElementById('use-spd').value),
+        num_step:        parseInt(document.getElementById('use-steps').value),
+        guidance_scale:  parseFloat(document.getElementById('use-cfg').value),
+      };
+      const lang = document.getElementById('use-lang').value.trim();
+      if (lang && lang !== 'Auto') body.language = lang;
+      try {
+        hint.style.display = 'none';
+        const job = await api('/jobs/voice', 'POST', body);
+        msg.style.color = '#fa0'; msg.textContent = 'Synthesizing…';
+        if (_usePollTimer) clearInterval(_usePollTimer);
+        _usePollTimer = setInterval(() => _pollUseJob(job.job_id), 3000);
+      } catch(e) {
+        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function _pollUseJob(jobId) {
+      try {
+        const job   = await api('/jobs/' + jobId);
+        const msg   = document.getElementById('use-job-msg');
+        const audio = document.getElementById('use-audio');
+        if (job.status === 'done') {
+          clearInterval(_usePollTimer); _usePollTimer = null;
+          msg.style.color = '#2a6'; msg.textContent = 'Done';
+          audio.src = '/v1/jobs/' + jobId + '/files/output.wav';
+          audio.style.display = 'block'; audio.load();
+        } else if (job.status === 'error') {
+          clearInterval(_usePollTimer); _usePollTimer = null;
+          msg.style.color = '#e44'; msg.textContent = 'Error: ' + (job.error || 'unknown');
+        } else {
+          msg.textContent = 'Synthesizing… (' + job.status + ')';
+        }
+      } catch(e) {}
     }
 
     // ── Init ─────────────────────────────────────────────────────────
     document.querySelector('#topnav [data-page="voice"]').classList.add('active');
-    setInterval(loadOvStatus, 3000);
-    loadOvStatus();
-    _ovInitExclusiveDetails();
-    ovLoadPresets();
-
-    document.getElementById('ov-audio').addEventListener('loadedmetadata', function() {
-      const dur  = this.duration;
-      const show = _ovActiveMode() === 'design' && isFinite(dur) && dur >= 3 && dur <= 10;
-      const wrap = document.getElementById('ov-save-design-wrap');
-      wrap.style.display = show ? 'block' : 'none';
-      if (show) {
-        document.getElementById('ov-save-design-name').value = '';
-        document.getElementById('ov-save-design-msg').textContent = '';
-        ovUpdateSaveDesignBtn();
-      }
-    });
-
-    document.getElementById('ov-preset-remove-select').addEventListener('change', async function() {
-      const preset_id = this.value;
-      if (!preset_id) return;
-      const preset = _ovPresets.find(p => p.id === preset_id);
-      const name   = preset ? preset.name : preset_id;
-      if (!window.confirm(`Remove voice preset "${name}"? This cannot be undone.`)) {
-        this.value = ''; return;
-      }
-      const msg = document.getElementById('ov-clone-msg');
-      try {
-        const r = await fetch(`/v1/voice-presets/${preset_id}`, { method: 'DELETE' });
-        if (!r.ok) throw new Error(await r.text());
-        const activeSel = document.getElementById('ov-preset-select');
-        if (activeSel.value === preset_id) activeSel.value = '';
-        this.value = '';
-        msg.style.color = '#2a6'; msg.textContent = `Removed "${name}"`;
-        await ovLoadPresets();
-      } catch (e) {
-        msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
-        this.value = '';
-      }
-    });
+    loadPresets();
   </script>
   <script src="/js/nav-mobile.js"></script>
 </body>

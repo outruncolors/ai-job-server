@@ -103,7 +103,6 @@ async def _execute_voice_step(text: str, step_dir: Path, step: ChainStep) -> str
     output_path = step_dir / f"output.{config.response_format}"
 
     effective: dict[str, Any] = {
-        "mode": config.mode,
         "model": config.model,
         "voice_preset_id": step.voice_preset_id,
         "voice_preset_name": preset["name"],
@@ -113,39 +112,27 @@ async def _execute_voice_step(text: str, step_dir: Path, step: ChainStep) -> str
         json.dumps({**step.model_dump(), "effective": effective}, indent=2), encoding="utf-8"
     )
 
+    wav_path = resolve_preset_wav(step.voice_preset_id)
+    if wav_path is None:
+        raise RuntimeError(
+            f"Voice preset {preset['name']!r} wav file missing. Re-upload or remove the preset."
+        )
+
+    from ..omnivoice.runner import OmniVoiceEphemeralRunner
+    runner = OmniVoiceEphemeralRunner(config)
     manager.active_voice_jobs += 1
     try:
-        if config.mode == "persistent":
-            from ..omnivoice.client import OmniVoicePersistentClient
-            client = OmniVoicePersistentClient(config.persistent_api_base)
-            await client.synthesize(
-                text,
-                output_path,
-                model=config.model,
-                voice=config.voice,
-                response_format=config.response_format,
-                speed=config.speed,
-                language=config.language,
-            )
-        else:
-            wav_path = resolve_preset_wav(step.voice_preset_id)
-            if wav_path is None:
-                raise RuntimeError(
-                    f"Voice preset {preset['name']!r} wav file missing. Re-upload or remove the preset."
-                )
-            from ..omnivoice.runner import OmniVoiceEphemeralRunner
-            runner = OmniVoiceEphemeralRunner(config)
-            await runner.run(
-                text,
-                output_path,
-                step_dir,
-                language=config.language,
-                instruct=config.instruct,
-                ref_audio_filename=str(wav_path),
-                ref_text=preset["caption"],
-                num_step=None,
-                guidance_scale=None,
-            )
+        await runner.run(
+            text,
+            output_path,
+            step_dir,
+            language=config.language,
+            instruct=config.instruct,
+            ref_audio_filename=str(wav_path),
+            ref_text=preset["caption"],
+            num_step=None,
+            guidance_scale=None,
+        )
     finally:
         manager.active_voice_jobs -= 1
     return output_path.name
