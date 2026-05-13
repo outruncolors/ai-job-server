@@ -1,11 +1,19 @@
 # ai-job-server
 
-REST API for queuing AI jobs (image generation, voice generation). Stores every job as a directory on disk. ComfyUI and OmniVoice integration is not wired yet — jobs are accepted and queued but no backend processing runs.
+REST API and browser UI for queuing AI jobs: text generation, voice synthesis, and image generation. Jobs run as background tasks; outputs are stored as plain directories on disk. No database required.
+
+Runs on port **8090**. Designed for LAN use — no authentication, no CORS.
+
+---
 
 ## Requirements
 
 - Python 3.11+
-- Disk space under `/srv/ai-jobs` (created automatically)
+- [OmniVoice](https://github.com/k2-fsa/OmniVoice) (`omnivoice-infer` on PATH) for voice jobs
+- ComfyUI on `127.0.0.1:8188` for image jobs (accepted and queued; backend integration is a stub)
+- An OpenAI-compatible LLM API for chain jobs (e.g. Ollama on another machine)
+
+---
 
 ## Setup
 
@@ -15,90 +23,71 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Run
+---
 
+## Running
+
+**Development** (hot-reload):
 ```bash
-source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8090
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8090 --reload
 ```
 
-The browser UI is available at `http://localhost:8090/`.
-
-To change the job storage directory:
-
+**Production** (single worker required):
 ```bash
-JOBS_BASE=/data/ai-jobs uvicorn app.main:app --host 0.0.0.0 --port 8090
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8090 --workers 1
 ```
 
-## API
+The browser UI is at `http://<host>:8090/`.
 
-### POST /v1/jobs/image
+**Environment variables:**
 
-```json
-{
-  "prompt": "a cat on the moon",
-  "width": 512,
-  "height": 512,
-  "steps": 20,
-  "model": null,
-  "negative_prompt": null
-}
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `JOBS_BASE` | `/srv/ai-jobs` | Root directory for job storage (created automatically) |
+| `OMNIVOICE_CONFIG_PATH` | `<repo>/config/omnivoice.json` | Override path for the OmniVoice config file |
 
-### POST /v1/jobs/voice
-
-```json
-{
-  "text": "Hello, world!",
-  "voice": null,
-  "speed": 1.0,
-  "language": null
-}
-```
-
-Both return `202 Accepted`:
-
-```json
-{
-  "job_id": "uuid",
-  "job_type": "image",
-  "status": "queued",
-  "created_at": "2026-05-09T00:00:00Z"
-}
-```
-
-### GET /v1/jobs
-
-Returns `{ "jobs": [...], "total": N }`.
-
-### GET /v1/jobs/{job_id}
-
-Returns full job status.
-
-### GET /v1/jobs/{job_id}/files/{filename}
-
-Download a file from the job directory. Available files: `request.json`, `input.txt`, `status.json`, `logs.txt`, `artifacts.json`, `output.png`, `output.wav`.
-
-### GET /health
-
-```json
-{ "status": "ok", "timestamp": "..." }
-```
-
-## Job directory layout
-
-```
-/srv/ai-jobs/YYYY-MM-DD/<job_id>/
-├── request.json    # original request body
-├── input.txt       # human-readable input (prompt or text)
-├── status.json     # current job status
-├── logs.txt        # worker logs (empty until processing starts)
-└── artifacts.json  # list of output files (empty until done)
-```
+---
 
 ## Tests
 
 ```bash
 source .venv/bin/activate
-pytest tests/ -v
+.venv/bin/pytest tests/test_chain.py -v   # chain tests — must always pass
+.venv/bin/pytest tests/ -v               # full suite (voice tests have known pre-existing failures)
+```
+
+---
+
+## Documentation
+
+| Doc | Contents |
+|-----|----------|
+| [`docs/architecture.md`](docs/architecture.md) | Module map, job lifecycle, chain execution flow, design decisions |
+| [`docs/api.md`](docs/api.md) | Complete REST API reference with request/response schemas and curl examples |
+| [`docs/chain-jobs.md`](docs/chain-jobs.md) | Chain step types, template variables, sequences, MCP tools, voice auto-segmentation |
+| [`docs/configuration.md`](docs/configuration.md) | Environment variables, `omnivoice.json` fields, `config/` directory layout, external services |
+
+---
+
+## Quick start — chain job
+
+```bash
+curl -s -X POST http://localhost:8090/v1/jobs/chain \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "input": "Write a short poem about the sea.",
+    "llm": {
+      "api_base": "http://your-llm-host:11434/v1",
+      "model": "gemma4"
+    },
+    "steps": [
+      { "name": "Write", "type": "llm", "prompt": "{{input}}" }
+    ]
+  }'
+
+# Poll until done
+curl -s http://localhost:8090/v1/jobs/<job_id>/files/status.json | python3 -m json.tool
+
+# Fetch output
+curl -s http://localhost:8090/v1/jobs/<job_id>/files/final_output.txt
 ```

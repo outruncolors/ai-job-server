@@ -49,6 +49,21 @@
   --z-drawer:      200;
 }
 
+/* ── Top navigation bar ─────────────────────────────────────────────────── */
+
+#topnav {
+  position: fixed; top: 0; left: 0; right: 0; height: 44px;
+  display: flex; align-items: center; padding: 0 20px; gap: 20px;
+  background: #111; border-bottom: 1px solid #1a1a1a; z-index: 100;
+}
+#topnav a {
+  color: #444; text-decoration: none; font-size: 0.72rem;
+  letter-spacing: 0.06em; transition: color 0.15s;
+}
+#topnav a:hover { color: #888; }
+#topnav .nav-home { color: #2a6; font-weight: 700; letter-spacing: 0.02em; }
+#topnav a.active { color: #ccc; }
+
 /* ── Mobile hamburger nav ────────────────────────────────────────────────── */
 
 .nav-hamburger {
