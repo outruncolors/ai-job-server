@@ -152,18 +152,55 @@ async def _execute_voice_step(
     return output_path.name
 
 
+def _expand_steps(
+    steps: list[ChainStep],
+    seq_map: dict[str, dict],
+    prefix: str = "",
+    depth: int = 0,
+) -> list[ChainStep]:
+    if depth > 20:
+        raise RuntimeError("Sequence expansion depth exceeded 20 — possible cycle not caught at save time")
+    import copy
+    result: list[ChainStep] = []
+    for step in steps:
+        if step.type != "sequence":
+            if prefix:
+                step = copy.copy(step)
+                step.name = f"{prefix} > {step.name}"
+            result.append(step)
+        else:
+            if not step.sequence_id:
+                raise RuntimeError(f"Sequence step '{step.name}' has no sequence_id")
+            seq = seq_map.get(step.sequence_id)
+            if seq is None:
+                raise RuntimeError(f"Sequence step '{step.name}' references unknown sequence id '{step.sequence_id}'")
+            new_prefix = f"{prefix} > {step.name}" if prefix else step.name
+            sub_steps = [ChainStep(**s) for s in seq.get("steps", [])]
+            result.extend(_expand_steps(sub_steps, seq_map, new_prefix, depth + 1))
+    return result
+
+
 async def execute_chain_job(
     job_id: str,
     job_dir: Path,
     request: ChainJobRequest,
 ) -> None:
     from .context import resolve_context_ids
+    from .sequences import list_sequences
     from .template import render_template
 
     steps_dir = job_dir / "steps"
     steps_dir.mkdir(exist_ok=True)
 
-    step_count = len(request.steps)
+    seq_map = {s["id"]: s for s in list_sequences()}
+    try:
+        flat_steps = _expand_steps(list(request.steps), seq_map)
+    except RuntimeError as exc:
+        _write_chain_status(job_dir, "error", error=str(exc))
+        _append_log(job_dir, f"[expansion error] {exc}\n")
+        return
+
+    step_count = len(flat_steps)
     _write_chain_status(
         job_dir, "running",
         step_count=step_count,
@@ -178,7 +215,7 @@ async def execute_chain_job(
     text_output = request.input
     executed_step_dirs: list[tuple[str, str]] = []  # (dir_name, step_type)
 
-    for i, step in enumerate(request.steps):
+    for i, step in enumerate(flat_steps):
         step_index = i + 1
         raw_id = step.id or step.name or f"step_{step_index}"
         step_id = _sanitize_id(raw_id, f"step_{step_index}")

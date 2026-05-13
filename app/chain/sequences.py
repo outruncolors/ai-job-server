@@ -39,6 +39,40 @@ def list_sequences() -> list[dict]:
     return _read_index()
 
 
+def check_for_cycles(entries: list[dict], root_id: str) -> None:
+    seq_map = {s["id"]: s for s in entries}
+
+    def direct_deps(sid: str) -> list[str]:
+        seq = seq_map.get(sid)
+        if not seq:
+            return []
+        return [
+            step["sequence_id"]
+            for step in seq.get("steps", [])
+            if step.get("type") == "sequence" and step.get("sequence_id")
+        ]
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {sid: WHITE for sid in seq_map}
+
+    def dfs(node: str, path: list[str]) -> None:
+        color[node] = GRAY
+        path.append(node)
+        for dep in direct_deps(node):
+            if dep not in color:
+                continue
+            if color[dep] == GRAY:
+                cycle_names = [seq_map[n]["name"] for n in path] + [seq_map[dep]["name"]]
+                raise ValueError("Cycle detected: " + " → ".join(cycle_names))
+            if color[dep] == WHITE:
+                dfs(dep, path)
+        path.pop()
+        color[node] = BLACK
+
+    if root_id in color:
+        dfs(root_id, [])
+
+
 def save_sequence(name: str, steps: list[dict]) -> dict:
     entries = _read_index()
     existing = next((e for e in entries if e["name"] == name), None)
@@ -46,6 +80,7 @@ def save_sequence(name: str, steps: list[dict]) -> dict:
     if existing:
         existing["steps"] = steps
         existing["updated_at"] = now
+        check_for_cycles(entries, existing["id"])
         _write_index(entries)
         return existing
     entry = {
@@ -56,6 +91,7 @@ def save_sequence(name: str, steps: list[dict]) -> dict:
         "updated_at": now,
     }
     entries.append(entry)
+    check_for_cycles(entries, entry["id"])
     _write_index(entries)
     return entry
 

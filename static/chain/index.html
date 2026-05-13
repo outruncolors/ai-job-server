@@ -68,10 +68,30 @@
 
     /* ── Sequence bar ── */
     #seq-bar { margin-bottom: 16px; }
-    #seq-bar select { margin-bottom: 6px; }
     #seq-name-row { display: flex; gap: 8px; align-items: flex-end; }
     #seq-name-row input { flex: 1; }
     #seq-name-row button { flex: 0 0 auto; margin-top: 0; white-space: nowrap; }
+
+    /* ── Sequences list panel ── */
+    .seq-row {
+      display: flex; align-items: baseline; gap: 8px; padding: 5px 6px;
+      border: 1px solid #1a1a1a; border-radius: 3px; margin-bottom: 4px;
+      background: #0f0f0f; font-size: 0.76rem;
+    }
+    .seq-row.is-active { border-color: #2a6; }
+    .seq-row-name { flex: 1; color: #aaa; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .seq-row-deps { color: #383838; font-size: 0.67rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+    .seq-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .seq-row-actions button { margin-top: 0; padding: 2px 7px; font-size: 0.68rem; }
+
+    /* ── Artifacts panel ── */
+    .artifact-row {
+      display: flex; align-items: center; gap: 10px; padding: 5px 0;
+      border-bottom: 1px solid #1a1a1a; font-size: 0.74rem;
+    }
+    .artifact-row:last-child { border-bottom: none; }
+    .artifact-name { flex: 1; color: #777; word-break: break-all; }
+    .artifact-size { color: #444; font-size: 0.68rem; white-space: nowrap; }
 
     /* ── Chain-specific ── */
     .chain-step-card {
@@ -216,14 +236,19 @@
       <!-- ── Chain Tab ── -->
       <div id="chain-panel" style="display:none;">
         <div id="seq-bar">
-          <label>Sequence</label>
-          <select id="chain-seq-select" onchange="_onSeqSelect()">
-            <option value="">— new sequence —</option>
-          </select>
-          <div id="seq-name-row">
-            <input id="chain-seq-name" type="text" placeholder="Sequence name…">
-            <button class="secondary" onclick="saveSeq()">Save</button>
-            <button class="danger" onclick="delCurrentSeq()">Del</button>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <span class="section-label">SEQUENCES</span>
+            <button class="secondary" onclick="_newSeq()"
+                    style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
+          </div>
+          <div id="seq-list" style="margin-bottom:10px;"></div>
+          <div id="seq-edit-bar" style="display:none;">
+            <div id="seq-name-row">
+              <input id="chain-seq-name" type="text" placeholder="Sequence name…">
+              <button class="secondary" onclick="saveSeq()">Save</button>
+              <button class="secondary" onclick="_cancelSeqEdit()">Cancel</button>
+            </div>
+            <div id="seq-edit-msg" class="msg" style="color:#fa0;"></div>
           </div>
         </div>
 
@@ -259,6 +284,10 @@
       <div id="chain-output" style="display:none;margin-top:16px;">
         <p class="section-label" style="margin-bottom:6px;">FINAL OUTPUT</p>
         <pre id="chain-output-pre" class="output-pre"></pre>
+      </div>
+      <div id="chain-artifacts" style="display:none;margin-top:16px;">
+        <p class="section-label" style="margin-bottom:6px;">ARTIFACTS</p>
+        <div id="chain-artifacts-list"></div>
       </div>
       <div id="chain-right-hint" style="color:#222;font-size:0.74rem;">
         Run a chain job to see output here.
@@ -369,73 +398,119 @@
     // ── Sequences ─────────────────────────────────────────────────────
     let _allSeqs = [];
 
-    function _renderSeqOptions() {
-      const sel = document.getElementById('chain-seq-select');
-      while (sel.options.length > 1) sel.remove(1);
-      for (const s of _allSeqs) {
-        const opt = document.createElement('option');
-        opt.value = s.id;
-        opt.textContent = s.name;
-        sel.appendChild(opt);
+    function _renderSeqList() {
+      const el = document.getElementById('seq-list');
+      if (_allSeqs.length === 0) {
+        el.innerHTML = '<div style="color:#333;font-size:0.72rem;">No sequences saved.</div>';
+        return;
       }
-      if (_currentSeqId) sel.value = _currentSeqId;
+      const usedBy = {};
+      const usesMap = {};
+      for (const s of _allSeqs) {
+        usedBy[s.id] = usedBy[s.id] || [];
+        usesMap[s.id] = [];
+        for (const step of (s.steps || [])) {
+          if (step.type === 'sequence' && step.sequence_id) {
+            const dep = _allSeqs.find(x => x.id === step.sequence_id);
+            if (dep) {
+              usesMap[s.id].push(dep.name);
+              usedBy[dep.id] = usedBy[dep.id] || [];
+              if (!usedBy[dep.id].includes(s.name)) usedBy[dep.id].push(s.name);
+            }
+          }
+        }
+      }
+      let html = '';
+      for (const s of _allSeqs) {
+        const isActive = s.id === _currentSeqId;
+        const depParts = [];
+        if (usesMap[s.id] && usesMap[s.id].length > 0)
+          depParts.push('uses: ' + usesMap[s.id].join(', '));
+        if (usedBy[s.id] && usedBy[s.id].length > 0)
+          depParts.push('used by: ' + usedBy[s.id].join(', '));
+        const depStr = depParts.join(' · ');
+        html += '<div class="seq-row' + (isActive ? ' is-active' : '') + '">' +
+          '<span class="seq-row-name" title="' + _escHtml(s.name) + '">' + _escHtml(s.name) + '</span>' +
+          (depStr ? '<span class="seq-row-deps" title="' + _escHtml(depStr) + '">' + _escHtml(depStr) + '</span>' : '') +
+          '<span class="seq-row-actions">' +
+            '<button class="secondary" onclick="_editSeq(\'' + s.id + '\')">Edit</button>' +
+            '<button class="danger" onclick="_deleteSeq(\'' + s.id + '\')">Del</button>' +
+          '</span>' +
+          '</div>';
+      }
+      el.innerHTML = html;
     }
 
     async function loadSeqs() {
       try {
         const data = await api('/chain-sequences');
         _allSeqs = (data.sequences || []).slice().sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
-        _renderSeqOptions();
+        _renderSeqList();
       } catch(e) { /* silently fail */ }
     }
 
-    async function saveSeq() {
-      const name = document.getElementById('chain-seq-name').value.trim();
-      if (!name) { alert('Enter a sequence name.'); return; }
-      const steps = _collectSteps();
-      if (steps.length === 0) { alert('Add at least one step.'); return; }
-      try {
-        const saved = await api('/chain-sequences', 'POST', { name, steps });
-        _currentSeqId = saved.id;
-        localStorage.setItem(_SEQ_SELECTED_KEY, saved.id);
-        await loadSeqs();
-      } catch(e) { alert('Error: ' + e.message); }
+    function _newSeq() {
+      _currentSeqId = null;
+      localStorage.removeItem(_SEQ_SELECTED_KEY);
+      document.getElementById('chain-seq-name').value = '';
+      document.getElementById('seq-edit-msg').textContent = '';
+      document.getElementById('chain-steps-list').innerHTML = '';
+      _chainStepCounter = 0;
+      addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
+      document.getElementById('seq-edit-bar').style.display = '';
+      _renderSeqList();
     }
 
-    function _onSeqSelect() {
-      const id = document.getElementById('chain-seq-select').value;
-      if (!id) {
-        _currentSeqId = null;
-        localStorage.removeItem(_SEQ_SELECTED_KEY);
-        document.getElementById('chain-seq-name').value = '';
-        document.getElementById('chain-steps-list').innerHTML = '';
-        _chainStepCounter = 0;
-        addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
-        return;
-      }
+    function _editSeq(id) {
       const seq = _allSeqs.find(s => s.id === id);
       if (!seq) return;
       _currentSeqId = id;
       localStorage.setItem(_SEQ_SELECTED_KEY, id);
       document.getElementById('chain-seq-name').value = seq.name;
+      document.getElementById('seq-edit-msg').textContent = '';
       loadStepsIntoForm(seq.steps);
+      document.getElementById('seq-edit-bar').style.display = '';
+      _renderSeqList();
     }
 
-    async function delCurrentSeq() {
-      if (!_currentSeqId) { alert('No sequence loaded.'); return; }
-      const seq = _allSeqs.find(s => s.id === _currentSeqId);
+    function _cancelSeqEdit() {
+      document.getElementById('seq-edit-bar').style.display = 'none';
+      document.getElementById('seq-edit-msg').textContent = '';
+    }
+
+    async function _deleteSeq(id) {
+      const seq = _allSeqs.find(s => s.id === id);
       if (!seq || !confirm('Delete sequence "' + seq.name + '"?')) return;
       try {
-        await api('/chain-sequences/' + _currentSeqId, 'DELETE');
-        _currentSeqId = null;
-        localStorage.removeItem(_SEQ_SELECTED_KEY);
-        document.getElementById('chain-seq-name').value = '';
-        document.getElementById('chain-seq-select').value = '';
-        document.getElementById('chain-steps-list').innerHTML = '';
-        _chainStepCounter = 0;
-        addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
+        await api('/chain-sequences/' + id, 'DELETE');
+        if (_currentSeqId === id) {
+          _currentSeqId = null;
+          localStorage.removeItem(_SEQ_SELECTED_KEY);
+          document.getElementById('chain-steps-list').innerHTML = '';
+          _chainStepCounter = 0;
+          addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
+          document.getElementById('seq-edit-bar').style.display = 'none';
+        }
         await loadSeqs();
       } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function saveSeq() {
+      const name = document.getElementById('chain-seq-name').value.trim();
+      const msgEl = document.getElementById('seq-edit-msg');
+      msgEl.textContent = '';
+      if (!name) { msgEl.style.color = '#e44'; msgEl.textContent = 'Enter a sequence name.'; return; }
+      const steps = _collectSteps();
+      if (steps.length === 0) { msgEl.style.color = '#e44'; msgEl.textContent = 'Add at least one step.'; return; }
+      try {
+        const saved = await api('/chain-sequences', 'POST', { name, steps });
+        _currentSeqId = saved.id;
+        localStorage.setItem(_SEQ_SELECTED_KEY, saved.id);
+        msgEl.style.color = '#2a6'; msgEl.textContent = 'Saved.';
+        await loadSeqs();
+      } catch(e) {
+        msgEl.style.color = '#e44'; msgEl.textContent = 'Error: ' + e.message;
+      }
     }
 
     function loadStepsIntoForm(steps) {
@@ -448,6 +523,7 @@
           ctx_name: s.ctx_name || '', ctx_description: s.ctx_description || '',
           ctx_tags: s.ctx_tags || [], ctx_pre: s.ctx_pre || '', ctx_post: s.ctx_post || '',
           ctx_overwrite: !!s.ctx_overwrite,
+          sequence_id: s.sequence_id || '',
         });
       }
     }
@@ -623,6 +699,13 @@
       return opts;
     }
 
+    function _seqOptions(selectedId) {
+      return '<option value="">— select sequence —</option>' +
+        _allSeqs.map(s =>
+          `<option value="${s.id}"${s.id === selectedId ? ' selected' : ''}>${_escHtml(s.name)}</option>`
+        ).join('');
+    }
+
     // ── Chain ────────────────────────────────────────────────────────
     const _CHAIN_DEFAULT_PROMPT =
       'Using the previous output, continue the task.\n\nPrevious:\n{{previous}}';
@@ -643,6 +726,7 @@
       const ctxPre         = opts.ctx_pre || '';
       const ctxPost        = opts.ctx_post || '';
       const ctxOverwrite   = !!opts.ctx_overwrite;
+      const seqId          = opts.sequence_id || '';
 
       const isFirst = document.querySelectorAll('#chain-steps-list > .chain-step-card').length === 0;
       const idx    = _chainStepCounter++;
@@ -656,6 +740,7 @@
           '<option value="llm"' + (type === 'llm' ? ' selected' : '') + '>text</option>' +
           '<option value="voice"' + (type === 'voice' ? ' selected' : '') + (isFirst ? ' disabled' : '') + '>voice</option>' +
           '<option value="write_context"' + (type === 'write_context' ? ' selected' : '') + '>write context</option>' +
+          '<option value="sequence"' + (type === 'sequence' ? ' selected' : '') + '>sequence</option>' +
         '</select>';
 
       el.innerHTML =
@@ -713,6 +798,10 @@
             '<input type="checkbox" class="chain-step-ctx-overwrite"' + (ctxOverwrite ? ' checked' : '') + '>' +
             'Overwrite' +
           '</label>' +
+        '</div>' +
+        '<div class="chain-step-sequence-fields"' + (type !== 'sequence' ? ' style="display:none;"' : '') + '>' +
+          '<label>Sequence</label>' +
+          '<select class="chain-step-seq-select">' + _seqOptions(seqId) + '</select>' +
         '</div>';
 
       document.getElementById('chain-steps-list').appendChild(el);
@@ -739,11 +828,19 @@
       card.querySelector('.chain-step-text-fields').style.display = kind === 'llm' ? '' : 'none';
       card.querySelector('.chain-step-voice-fields').style.display = kind === 'voice' ? '' : 'none';
       card.querySelector('.chain-step-write-context-fields').style.display = kind === 'write_context' ? '' : 'none';
+      card.querySelector('.chain-step-sequence-fields').style.display = kind === 'sequence' ? '' : 'none';
       if (kind === 'voice') {
         const presetSel = card.querySelector('.chain-step-voice-preset');
         if (presetSel) {
           const currentVal = presetSel.value;
           presetSel.innerHTML = _voicePresetOptions(currentVal);
+        }
+      }
+      if (kind === 'sequence') {
+        const seqSel = card.querySelector('.chain-step-seq-select');
+        if (seqSel) {
+          const currentVal = seqSel.value;
+          seqSel.innerHTML = _seqOptions(currentVal);
         }
       }
     }
@@ -775,6 +872,9 @@
           const ctx_post        = el.querySelector('.chain-step-ctx-post').value;
           const ctx_overwrite   = el.querySelector('.chain-step-ctx-overwrite').checked;
           steps.push({ name: 'Step ' + (++i), type: 'write_context', ctx_name, ctx_description, ctx_tags, ctx_pre, ctx_post, ctx_overwrite });
+        } else if (kind === 'sequence') {
+          const sequence_id = el.querySelector('.chain-step-seq-select').value || null;
+          steps.push({ name: 'Step ' + (++i), type: 'sequence', sequence_id });
         } else {
           const prompt = el.querySelector('.chain-step-prompt').value;
           const context_ids = _collectStepContextIds(el);
@@ -793,6 +893,8 @@
       document.getElementById('chain-final-context').style.display = 'none';
       document.getElementById('chain-final-input').style.display = 'none';
       document.getElementById('chain-final-audio').style.display = 'none';
+      document.getElementById('chain-artifacts').style.display = 'none';
+      document.getElementById('chain-artifacts-list').innerHTML = '';
 
       const steps = _collectSteps();
       if (steps.length === 0) {
@@ -805,6 +907,10 @@
       const missingCtxName = steps.some(s => s.type === 'write_context' && !s.ctx_name);
       if (missingCtxName) {
         msg.style.color = '#e44'; msg.textContent = 'Enter a context name for every write context step.'; return;
+      }
+      const missingSeq = steps.some(s => s.type === 'sequence' && !s.sequence_id);
+      if (missingSeq) {
+        msg.style.color = '#e44'; msg.textContent = 'Select a sequence for every sequence step.'; return;
       }
 
       const body = {
@@ -911,6 +1017,39 @@
       return { contextText, promptText, outputText };
     }
 
+    function _fmtBytes(n) {
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    async function _renderArtifacts(jobId, artifacts) {
+      const container = document.getElementById('chain-artifacts-list');
+      const panel = document.getElementById('chain-artifacts');
+      if (!artifacts || artifacts.length === 0) return;
+      const nonFinal = artifacts.filter(a => a.filename !== 'final_output.txt');
+      if (nonFinal.length === 0) return;
+      const baseUrl = '/v1/jobs/' + jobId + '/files/';
+      let html = '';
+      for (const a of nonFinal) {
+        const url = baseUrl + a.filename;
+        const size = a.size != null ? _fmtBytes(a.size) : '';
+        const isAudio = /\.(wav|mp3|ogg)$/i.test(a.filename);
+        const isImage = /\.(png|jpg|jpeg|gif|webp)$/i.test(a.filename);
+        html += '<div class="artifact-row">' +
+          '<span class="artifact-name">' + _escHtml(a.filename) + '</span>' +
+          '<span class="artifact-size">' + size + '</span>' +
+          '</div>';
+        if (isAudio) {
+          html += '<audio controls style="width:100%;margin-bottom:6px;" src="' + url + '"></audio>';
+        } else if (isImage) {
+          html += '<img src="' + url + '" style="max-width:100%;margin-bottom:6px;border-radius:3px;" alt="">';
+        }
+      }
+      container.innerHTML = html;
+      panel.style.display = 'block';
+    }
+
     async function _pollChainJob(jobId) {
       try {
         const msg           = document.getElementById('chain-msg');
@@ -982,6 +1121,11 @@
             }
           } catch (e) {}
 
+          try {
+            const ar = await fetch('/v1/jobs/' + jobId + '/files/artifacts.json');
+            if (ar.ok) await _renderArtifacts(jobId, await ar.json());
+          } catch (e) {}
+
         } else if (job.status === 'error') {
           clearInterval(_chainJobPollTimer); _chainJobPollTimer = null;
           msg.style.color = '#e44';
@@ -1019,10 +1163,7 @@
       if (savedSeqId) {
         const seq = _allSeqs.find(s => s.id === savedSeqId);
         if (seq) {
-          _currentSeqId = savedSeqId;
-          document.getElementById('chain-seq-select').value = savedSeqId;
-          document.getElementById('chain-seq-name').value = seq.name;
-          loadStepsIntoForm(seq.steps);
+          _editSeq(savedSeqId);
         } else {
           addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
         }
