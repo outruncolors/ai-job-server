@@ -11,7 +11,7 @@ ComfyUI runs as a managed long-lived subprocess at `http://127.0.0.1:8188`. The 
 ## One-time Install
 
 ```bash
-bash runtimes/comfyui-setup.sh
+bash scripts/comfyui-setup.sh
 ```
 
 This script is idempotent — re-running updates the pinned tag in place.
