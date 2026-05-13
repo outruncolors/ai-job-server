@@ -33,8 +33,11 @@ from .models import (
     JobCreatedResponse,
     JobListResponse,
     JobStatus,
+    ServerRestartResponse,
+    ServerStatsResponse,
     VoiceJobRequest,
 )
+from .server import get_server_stats, schedule_restart
 from .omnivoice.config import get_config
 from .omnivoice.manager import get_manager
 from .omnivoice.router import router as omnivoice_router
@@ -195,6 +198,17 @@ def remove_context_item(item_id: str):
     if not delete_item(item_id):
         raise HTTPException(status_code=404, detail="Context item not found")
     return {"ok": True}
+
+
+@app.get("/v1/server/stats", response_model=ServerStatsResponse)
+def server_stats():
+    return get_server_stats()
+
+
+@app.post("/v1/server/restart", response_model=ServerRestartResponse)
+def server_restart(background_tasks: BackgroundTasks):
+    background_tasks.add_task(schedule_restart)
+    return ServerRestartResponse(ok=True, message="Restart scheduled")
 
 
 # Serve static UI from /

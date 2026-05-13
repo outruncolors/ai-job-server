@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Server · AI Job Server</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: monospace; background: #111; color: #ccc; overflow: hidden; }
+
+    label { display: block; color: #777; font-size: 0.76rem; margin-bottom: 3px; margin-top: 10px; }
+    input, select { width: 100%; padding: 6px 8px; background: #181818; border: 1px solid #2e2e2e; color: #ccc; font-family: monospace; font-size: 0.82rem; border-radius: 3px; }
+    input:focus, select:focus { outline: none; border-color: #4a4a4a; }
+    button { padding: 7px 18px; background: #2a6; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-family: monospace; font-size: 0.82rem; margin-top: 10px; }
+    button:hover { background: #3b7; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.secondary { background: #333; }
+    button.secondary:hover { background: #424242; }
+    button.danger { background: #7a2222; }
+    button.danger:hover { background: #992828; }
+    .msg { font-size: 0.76rem; min-height: 1.1em; margin-top: 6px; }
+
+    #topnav {
+      position: fixed; top: 0; left: 0; right: 0; height: 44px;
+      display: flex; align-items: center; padding: 0 20px; gap: 20px;
+      background: #111; border-bottom: 1px solid #1a1a1a; z-index: 100;
+    }
+    #topnav a { color: #444; text-decoration: none; font-size: 0.72rem; letter-spacing: 0.06em; transition: color 0.15s; }
+    #topnav a:hover { color: #888; }
+    #topnav .nav-home { color: #2a6; font-weight: 700; letter-spacing: 0.02em; }
+    #topnav a.active { color: #ccc; }
+
+    #panels { display: flex; height: 100vh; padding-top: 44px; }
+    #panel-left  { flex: 0 0 380px; overflow-y: auto; padding: 24px 28px; border-right: 1px solid #1a1a1a; }
+    #panel-right { flex: 1; overflow-y: auto; padding: 24px 28px; }
+
+    .section-label { color: #383838; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px; }
+    .panel-section { margin-bottom: 32px; }
+
+    /* Resource stat bars */
+    .stat-grid { display: flex; flex-direction: column; gap: 12px; }
+    .stat-row { display: flex; align-items: center; gap: 10px; }
+    .stat-label { width: 54px; font-size: 0.72rem; color: #555; flex-shrink: 0; }
+    .stat-bar-wrap { flex: 1; height: 5px; background: #1e1e1e; border-radius: 2px; overflow: hidden; }
+    .stat-bar { height: 100%; background: #2a6; border-radius: 2px; width: 0%; transition: width 0.5s ease; }
+    .stat-bar.warn { background: #fa0; }
+    .stat-bar.danger { background: #e44; }
+    .stat-val { width: 90px; font-size: 0.70rem; color: #777; text-align: right; flex-shrink: 0; }
+
+    /* Job count badges */
+    .jobs-counts { display: flex; gap: 10px; flex-wrap: wrap; }
+    .count-badge { text-align: center; padding: 10px 16px; border: 1px solid #1e1e1e; border-radius: 3px; min-width: 68px; }
+    .count-num { font-size: 1.4rem; font-weight: 700; }
+    .count-lbl { font-size: 0.62rem; color: #444; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+    /* Info grid */
+    .info-grid { display: flex; flex-direction: column; gap: 8px; }
+    .info-row { display: flex; gap: 12px; font-size: 0.78rem; }
+    .info-key { color: #555; width: 88px; flex-shrink: 0; }
+    .info-val { color: #bbb; word-break: break-all; }
+
+    /* Action log */
+    #action-log { max-height: 260px; overflow-y: auto; }
+    .log-entry { padding: 4px 0; border-bottom: 1px solid #181818; font-size: 0.72rem; color: #555; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-time { color: #333; margin-right: 8px; }
+    .log-ok { color: #2a6; }
+    .log-err { color: #e44; }
+
+    /* Toast stack */
+    #toast-stack {
+      position: fixed; bottom: 20px; right: 20px;
+      display: flex; flex-direction: column-reverse; gap: 8px;
+      z-index: 500; pointer-events: none;
+    }
+    .toast {
+      min-width: 230px; max-width: 380px; padding: 10px 14px;
+      border-radius: 3px; font-size: 0.78rem; font-family: monospace;
+      pointer-events: auto; border: 1px solid transparent;
+      animation: toast-in 0.18s ease; transition: opacity 0.28s ease;
+    }
+    @keyframes toast-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+    .toast-info    { background: #161622; color: #99b; border-color: #252540; }
+    .toast-success { background: #0d1f14; color: #4c9; border-color: #163525; }
+    .toast-warning { background: #211900; color: #fa0; border-color: #3d3000; }
+    .toast-error   { background: #250f0f; color: #e44; border-color: #451818; }
+    .toast-msg { display: block; }
+    .toast-countdown { display: block; font-size: 0.68rem; opacity: 0.65; margin-top: 4px; }
+    .toast-dismiss { float: right; opacity: 0.4; margin-left: 10px; cursor: pointer; font-size: 0.85rem; line-height: 1; }
+    .toast-dismiss:hover { opacity: 0.8; }
+  </style>
+  <link rel="stylesheet" href="/css/responsive.css">
+</head>
+<body>
+
+<div id="toast-stack"></div>
+
+<nav id="topnav">
+  <a href="/" class="nav-home">AI Jobs</a>
+  <a href="/chain" data-page="chain">Chain</a>
+  <a href="/context/" data-page="context">Context</a>
+  <a href="/voice" data-page="voice">Voice</a>
+  <a href="/image" data-page="image">Image</a>
+  <a href="/jobs" data-page="jobs">Jobs</a>
+  <a href="/server" data-page="server">Server</a>
+</nav>
+
+<div id="panels">
+  <div id="panel-left">
+
+    <div class="panel-section">
+      <p class="section-label">Resources</p>
+      <div class="stat-grid">
+        <div class="stat-row">
+          <span class="stat-label">CPU</span>
+          <div class="stat-bar-wrap"><div class="stat-bar" id="bar-cpu"></div></div>
+          <span class="stat-val" id="val-cpu">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Memory</span>
+          <div class="stat-bar-wrap"><div class="stat-bar" id="bar-mem"></div></div>
+          <span class="stat-val" id="val-mem">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Disk</span>
+          <div class="stat-bar-wrap"><div class="stat-bar" id="bar-disk"></div></div>
+          <span class="stat-val" id="val-disk">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <p class="section-label">Jobs</p>
+      <div class="jobs-counts" id="jobs-counts">
+        <div class="count-badge"><div class="count-num" style="color:#777" id="cnt-queued">—</div><div class="count-lbl">Queued</div></div>
+        <div class="count-badge"><div class="count-num" style="color:#fa0" id="cnt-running">—</div><div class="count-lbl">Running</div></div>
+        <div class="count-badge"><div class="count-num" style="color:#2a6" id="cnt-done">—</div><div class="count-lbl">Done</div></div>
+        <div class="count-badge"><div class="count-num" style="color:#e44" id="cnt-failed">—</div><div class="count-lbl">Failed</div></div>
+      </div>
+    </div>
+
+    <div style="font-size:0.66rem;color:#2a2a2a;margin-top:-16px;" id="refresh-hint">auto-refresh every 5s</div>
+
+  </div>
+
+  <div id="panel-right">
+
+    <div class="panel-section">
+      <p class="section-label">Server Info</p>
+      <div class="info-grid" id="server-info">
+        <div class="info-row"><span class="info-key">Hostname</span><span class="info-val" id="info-hostname">—</span></div>
+        <div class="info-row"><span class="info-key">Python</span><span class="info-val" id="info-python">—</span></div>
+        <div class="info-row"><span class="info-key">Uptime</span><span class="info-val" id="info-uptime">—</span></div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <p class="section-label">Actions</p>
+      <button id="restart-btn" class="danger" onclick="doRestart()">Restart Server</button>
+      <p class="msg" id="action-msg"></p>
+    </div>
+
+    <div class="panel-section">
+      <p class="section-label">Recent Actions</p>
+      <div id="action-log"><div class="log-entry" style="color:#2a2a2a">No actions yet.</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── Utilities ──────────────────────────────────────────────────────────────
+
+  async function api(path, method = 'GET', body = null) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch('/v1' + path, opts);
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+
+  function _escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function _fmtBytes(b) {
+    if (b >= 1e9) return (b / 1e9).toFixed(1) + ' GB';
+    if (b >= 1e6) return (b / 1e6).toFixed(0) + ' MB';
+    return (b / 1e3).toFixed(0) + ' KB';
+  }
+
+  function _fmtUptime(s) {
+    s = Math.floor(s);
+    const d = Math.floor(s / 86400); s %= 86400;
+    const h = Math.floor(s / 3600);  s %= 3600;
+    const m = Math.floor(s / 60);    s %= 60;
+    const parts = [];
+    if (d) parts.push(d + 'd');
+    if (h) parts.push(h + 'h');
+    if (m) parts.push(m + 'm');
+    parts.push(s + 's');
+    return parts.join(' ');
+  }
+
+  // ── Toast system ───────────────────────────────────────────────────────────
+
+  const _toasts = new Map(); // id → { el, timerId }
+  let _toastSeq = 0;
+
+  function toast(type, message, opts = {}) {
+    const id = opts.id || ('t' + (++_toastSeq));
+
+    const existing = _toasts.get(id);
+    if (existing) {
+      clearTimeout(existing.timerId);
+      // Update content in-place to avoid fade collision
+      existing.el.className = 'toast toast-' + type;
+      existing.el.querySelector('.toast-msg').textContent = message;
+      const cdEl = existing.el.querySelector('.toast-countdown');
+      if (cdEl && !opts.countdown) cdEl.textContent = '';
+      if (!cdEl && opts.countdown) {
+        const d = document.createElement('span');
+        d.className = 'toast-countdown';
+        d.id = 'tc-' + id;
+        existing.el.appendChild(d);
+      }
+      if (!opts.persistent) {
+        const dur = opts.duration ?? _toastDuration(type);
+        existing.timerId = setTimeout(() => toastDismiss(id), dur);
+      } else {
+        existing.timerId = null;
+      }
+      return id;
+    }
+
+    const el = document.createElement('div');
+    el.className = 'toast toast-' + type;
+    el.innerHTML =
+      '<span class="toast-dismiss" onclick="toastDismiss(\'' + id + '\')">&#x2715;</span>' +
+      '<span class="toast-msg">' + _escHtml(message) + '</span>' +
+      (opts.countdown ? '<span class="toast-countdown" id="tc-' + id + '"></span>' : '');
+    document.getElementById('toast-stack').appendChild(el);
+
+    let timerId = null;
+    if (!opts.persistent) {
+      const dur = opts.duration ?? _toastDuration(type);
+      timerId = setTimeout(() => toastDismiss(id), dur);
+    }
+    _toasts.set(id, { el, timerId });
+    return id;
+  }
+
+  function _toastDuration(type) {
+    return type === 'success' ? 3500 : type === 'error' ? 6000 : 4500;
+  }
+
+  function toastDismiss(id) {
+    const entry = _toasts.get(id);
+    if (!entry) return;
+    clearTimeout(entry.timerId);
+    entry.el.style.opacity = '0';
+    setTimeout(() => { entry.el.remove(); _toasts.delete(id); }, 300);
+  }
+
+  function toastSetCountdown(id, text) {
+    const el = document.getElementById('tc-' + id);
+    if (el) el.textContent = text;
+  }
+
+  // ── Stats rendering ────────────────────────────────────────────────────────
+
+  function _setBar(barId, pct) {
+    const el = document.getElementById(barId);
+    el.style.width = Math.min(pct, 100) + '%';
+    el.classList.toggle('warn',   pct >= 75 && pct < 90);
+    el.classList.toggle('danger', pct >= 90);
+  }
+
+  function renderStats(s) {
+    _setBar('bar-cpu',  s.cpu_percent);
+    document.getElementById('val-cpu').textContent = s.cpu_percent.toFixed(1) + '%';
+
+    _setBar('bar-mem', s.memory.percent);
+    document.getElementById('val-mem').textContent =
+      _fmtBytes(s.memory.used) + ' / ' + _fmtBytes(s.memory.total);
+
+    _setBar('bar-disk', s.disk.percent);
+    document.getElementById('val-disk').textContent =
+      _fmtBytes(s.disk.used) + ' / ' + _fmtBytes(s.disk.total);
+
+    document.getElementById('cnt-queued').textContent  = s.jobs.queued;
+    document.getElementById('cnt-running').textContent = s.jobs.running;
+    document.getElementById('cnt-done').textContent    = s.jobs.done;
+    document.getElementById('cnt-failed').textContent  = s.jobs.failed;
+
+    document.getElementById('info-hostname').textContent = s.hostname;
+    document.getElementById('info-python').textContent   = s.python_version;
+    document.getElementById('info-uptime').textContent   = _fmtUptime(s.uptime_seconds);
+  }
+
+  async function loadStats() {
+    if (_reconnState !== 'IDLE') return;
+    try {
+      renderStats(await api('/server/stats'));
+    } catch (_) { /* silently tolerate during reconnect */ }
+  }
+
+  // ── Reconnection state machine ─────────────────────────────────────────────
+
+  const FIB = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55];
+  const MAX_ATTEMPTS = FIB.length;
+  const RECONNECT_TOAST = 'reconnect-toast';
+
+  let _reconnState = 'IDLE'; // IDLE | RECONNECTING
+  let _reconnAttempt = 0;
+  let _reconnTimer = null;
+  let _reconnCdTimer = null;
+
+  function _logAction(msg, cls = '') {
+    const log = document.getElementById('action-log');
+    if (log.children.length === 1 && log.firstElementChild.style.color === 'rgb(42, 42, 42)') {
+      log.innerHTML = ''; // clear placeholder
+    }
+    const ts = new Date().toLocaleTimeString();
+    const div = document.createElement('div');
+    div.className = 'log-entry' + (cls ? ' ' + cls : '');
+    div.innerHTML = '<span class="log-time">' + ts + '</span>' + _escHtml(msg);
+    log.prepend(div);
+    while (log.children.length > 20) log.lastChild.remove();
+  }
+
+  async function doRestart() {
+    if (_reconnState !== 'IDLE') return;
+    const btn = document.getElementById('restart-btn');
+    btn.disabled = true;
+    _logAction('Restart requested');
+    toast('warning', 'Sending restart command…', { duration: 2000 });
+    try {
+      await api('/server/restart', 'POST');
+      _reconnState = 'RECONNECTING';
+      _reconnAttempt = 0;
+      _logAction('Restart accepted — waiting for server to come back');
+      // Give execv time to fire before we start polling for UP
+      _reconnTimer = setTimeout(_startReconnect, 1200);
+    } catch (e) {
+      btn.disabled = false;
+      _reconnState = 'IDLE';
+      toast('error', 'Restart failed: ' + e.message);
+      _logAction('Restart failed: ' + e.message, 'log-err');
+    }
+  }
+
+  function _startReconnect() {
+    if (_reconnAttempt >= MAX_ATTEMPTS) {
+      clearInterval(_reconnCdTimer);
+      _reconnCdTimer = null;
+      toastDismiss(RECONNECT_TOAST);
+      const giveUpId = toast('error', 'Server appears to be down after ' + MAX_ATTEMPTS + ' attempts.', { persistent: true });
+      const entry = _toasts.get(giveUpId);
+      if (entry) {
+        const btn = document.createElement('button');
+        btn.textContent = 'Retry';
+        btn.className = 'secondary';
+        btn.style.cssText = 'margin-top:8px;padding:3px 10px;font-size:0.72rem;display:block;';
+        btn.onclick = () => {
+          toastDismiss(giveUpId);
+          _reconnAttempt = 0;
+          _reconnState = 'RECONNECTING';
+          _startReconnect();
+        };
+        entry.el.appendChild(btn);
+      }
+      document.getElementById('restart-btn').disabled = false;
+      _reconnState = 'IDLE';
+      _logAction('Gave up reconnecting after ' + MAX_ATTEMPTS + ' attempts', 'log-err');
+      return;
+    }
+
+    const waitSecs = FIB[_reconnAttempt];
+    toast('warning',
+      'Reconnecting… attempt ' + (_reconnAttempt + 1) + ' of ' + MAX_ATTEMPTS,
+      { id: RECONNECT_TOAST, persistent: true, countdown: true }
+    );
+    _logAction('Reconnect attempt ' + (_reconnAttempt + 1) + ' (wait ' + waitSecs + 's)');
+
+    clearInterval(_reconnCdTimer);
+    let remaining = waitSecs;
+    toastSetCountdown(RECONNECT_TOAST, 'Next attempt in ' + remaining + 's…');
+    _reconnCdTimer = setInterval(() => {
+      remaining--;
+      if (remaining > 0) {
+        toastSetCountdown(RECONNECT_TOAST, 'Next attempt in ' + remaining + 's…');
+      } else {
+        clearInterval(_reconnCdTimer);
+        _reconnCdTimer = null;
+        toastSetCountdown(RECONNECT_TOAST, 'Connecting…');
+      }
+    }, 1000);
+
+    _reconnTimer = setTimeout(_tryReconnect, waitSecs * 1000);
+  }
+
+  async function _tryReconnect() {
+    clearInterval(_reconnCdTimer);
+    _reconnCdTimer = null;
+    try {
+      const r = await fetch('/health');
+      if (!r.ok) throw new Error('non-ok');
+      toastDismiss(RECONNECT_TOAST);
+      toast('success', 'Reconnected!', { duration: 4000 });
+      _logAction('Reconnected successfully', 'log-ok');
+      document.getElementById('restart-btn').disabled = false;
+      _reconnState = 'IDLE';
+      loadStats();
+    } catch (_) {
+      _reconnAttempt++;
+      _startReconnect();
+    }
+  }
+
+  // ── Auto-refresh & init ────────────────────────────────────────────────────
+
+  const _statsInterval = setInterval(loadStats, 5000);
+
+  window.addEventListener('beforeunload', () => {
+    clearInterval(_statsInterval);
+    clearInterval(_reconnCdTimer);
+    clearTimeout(_reconnTimer);
+  });
+
+  document.querySelector('#topnav [data-page="server"]').classList.add('active');
+  loadStats();
+</script>
+<script src="/js/nav-mobile.js"></script>
+</body>
+</html>

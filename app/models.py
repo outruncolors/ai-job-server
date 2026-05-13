@@ -63,3 +63,31 @@ class OmniVoiceStatusResponse(BaseModel):
     ephemeral_available: bool
     active_voice_jobs: int
     infer_base_command: list[str]
+
+
+class ResourceStats(BaseModel):
+    used: int
+    total: int
+    percent: float
+
+
+class JobCounts(BaseModel):
+    queued: int
+    running: int
+    done: int
+    failed: int
+
+
+class ServerStatsResponse(BaseModel):
+    cpu_percent: float
+    memory: ResourceStats
+    disk: ResourceStats
+    uptime_seconds: float
+    jobs: JobCounts
+    hostname: str
+    python_version: str
+
+
+class ServerRestartResponse(BaseModel):
+    ok: bool
+    message: str
