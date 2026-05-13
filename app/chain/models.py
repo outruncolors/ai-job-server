@@ -21,9 +21,11 @@ class ChainStep(BaseModel):
     context_ids: list[str] = []
     voice_preset_id: Optional[str] = None
     ctx_name: Optional[str] = None
+    ctx_description: Optional[str] = None
     ctx_pre: Optional[str] = None
     ctx_post: Optional[str] = None
     ctx_tags: list[str] = []
+    ctx_overwrite: bool = False
 
 
 class ChainJobRequest(BaseModel):

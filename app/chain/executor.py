@@ -285,13 +285,16 @@ async def execute_chain_job(
 
                 existing = next((item for item in list_items() if item["title"] == step.ctx_name), None)
                 if existing:
-                    new_content = existing["content"] + "\n\n---\n\n" + entry
+                    if step.ctx_overwrite:
+                        new_content = entry
+                    else:
+                        new_content = existing["content"] + "\n\n---\n\n" + entry
                     result_item = update_item(existing["id"], content=new_content)
                 else:
                     result_item = create_item(
                         title=step.ctx_name or "",
                         tags=step.ctx_tags or [],
-                        description="",
+                        description=step.ctx_description or "",
                         content=entry,
                     )
 

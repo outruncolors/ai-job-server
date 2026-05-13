@@ -52,46 +52,26 @@
     #topnav a:hover { color: #888; }
     #topnav .nav-home { color: #2a6; font-weight: 700; letter-spacing: 0.02em; }
     #topnav a.active { color: #ccc; }
-    #seq-nav-btn {
-      margin-left: auto; font-size: 0.65rem; color: #444; cursor: pointer;
-      letter-spacing: 0.14em; text-transform: uppercase; transition: color 0.18s;
-      background: none; border: none; padding: 0; font-family: monospace; margin-top: 0;
-    }
-    #seq-nav-btn:hover { color: #888; background: none; }
 
     /* ── Panels ── */
     #panels { display: flex; height: 100vh; padding-top: 44px; }
     #panel-left  { flex: 1; overflow-y: auto; padding: 24px 28px; border-right: 1px solid #1a1a1a; }
     #panel-right { flex: 1; overflow-y: auto; padding: 24px 28px; }
 
-    /* ── Drawers (shared overlay) ── */
-    #drawer-overlay {
-      display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,0.6); z-index: 150; backdrop-filter: blur(4px);
-    }
-    .drawer {
-      position: fixed; top: 0; right: 0; height: 100vh; width: min(500px, 96vw);
-      background: #131313; border-left: 1px solid #222;
-      transform: translateX(100%);
-      transition: transform 0.36s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 200; overflow-y: auto; padding: 20px 22px;
-    }
-    .drawer.open { transform: translateX(0); }
-    .drawer-head { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-    .drawer-head h2 { flex: 1; color: #555; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
-    .drawer-head button { margin-top: 0; padding: 4px 10px; font-size: 0.72rem; }
+    /* ── Tabs ── */
+    #chain-tabs { display: flex; gap: 2px; margin-bottom: 20px; border-bottom: 1px solid #1e1e1e; padding-bottom: 0; }
+    .tab-btn { background: none; color: #555; border: none; border-bottom: 2px solid transparent;
+      padding: 6px 14px; margin: 0; margin-bottom: -1px; border-radius: 0;
+      font-family: monospace; font-size: 0.76rem; cursor: pointer; letter-spacing: 0.04em; }
+    .tab-btn:hover { color: #999; background: none; }
+    .tab-btn.active { color: #ccc; border-bottom-color: #2a6; }
 
-    /* ── Sequences drawer ── */
-    #seq-save-section { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #1a1a1a; }
-    #seq-save-section label { margin-top: 0; }
-    #seq-save-row { display: flex; gap: 8px; margin-top: 6px; align-items: flex-end; }
-    #seq-save-row input { flex: 1; }
-    #seq-save-row button { flex: 0 0 auto; margin-top: 0; }
-    #seq-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
-    #seq-table th { text-align: left; color: #484848; padding: 3px 6px; border-bottom: 1px solid #222; }
-    #seq-table td { padding: 5px 6px; border-bottom: 1px solid #1a1a1a; vertical-align: middle; }
-    #seq-table .seq-actions { display: flex; gap: 4px; justify-content: flex-end; }
-    #seq-table .seq-actions button { margin-top: 0; padding: 2px 8px; font-size: 0.7rem; }
+    /* ── Sequence bar ── */
+    #seq-bar { margin-bottom: 16px; }
+    #seq-bar select { margin-bottom: 6px; }
+    #seq-name-row { display: flex; gap: 8px; align-items: flex-end; }
+    #seq-name-row input { flex: 1; }
+    #seq-name-row button { flex: 0 0 auto; margin-top: 0; white-space: nowrap; }
 
     /* ── Chain-specific ── */
     .chain-step-card {
@@ -187,81 +167,76 @@
     <a href="/voice" data-page="voice">Voice</a>
     <a href="/image" data-page="image">Image</a>
     <a href="/jobs" data-page="jobs">Jobs</a>
-    <button id="seq-nav-btn" onclick="openSeqDrawer()">Sequences</button>
   </nav>
-
-  <div id="drawer-overlay" onclick="closeAllDrawers()"></div>
-
-  <!-- ── Sequences drawer ── -->
-  <div id="seq-drawer" class="drawer">
-    <div class="drawer-head">
-      <h2>Sequences</h2>
-      <button class="secondary" onclick="closeAllDrawers()">&#10005;</button>
-    </div>
-    <div id="seq-save-section">
-      <label>Save current steps as</label>
-      <div id="seq-save-row">
-        <input id="seq-save-name" type="text" placeholder="Chain name…">
-        <button onclick="saveSeq()">Save</button>
-      </div>
-    </div>
-    <table id="seq-table">
-      <thead><tr><th>Name</th><th>Updated</th><th></th></tr></thead>
-      <tbody id="seq-body"><tr><td colspan="3" style="color:#333;padding:8px;">No sequences saved.</td></tr></tbody>
-    </table>
-  </div>
 
   <div id="panels">
 
     <!-- ── Left: Controls ── -->
     <div id="panel-left">
 
-      <!-- LLM Settings at top, open by default -->
-      <details open>
-        <summary>LLM Settings</summary>
-        <div style="margin-top:10px;">
-
-          <label>Preset</label>
-          <select id="chain-preset-select" onchange="applyChainPreset()">
-            <option value="">— select preset —</option>
-          </select>
-          <div class="preset-save-row">
-            <input id="chain-preset-name" type="text" placeholder="Preset name…">
-            <button class="secondary" onclick="saveChainPreset()">Save preset</button>
-          </div>
-
-          <div class="row" style="margin-top:10px;">
-            <div>
-              <label>API Base URL</label>
-              <input id="chain-api-base" type="text" value="http://debian1.local:11434/v1">
-            </div>
-            <div>
-              <label>Model</label>
-              <input id="chain-model" type="text" placeholder="gemma4">
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>Temperature (0–2)</label>
-              <input id="chain-temp" type="number" step="0.1" min="0" max="2" value="0.7">
-            </div>
-            <div>
-              <label>Max Tokens</label>
-              <input id="chain-max-tokens" type="number" min="1" value="2048">
-            </div>
-          </div>
-
-        </div>
-      </details>
-
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:20px;margin-bottom:8px;">
-        <span class="section-label">STEPS</span>
-        <button class="secondary" onclick="addChainStep()"
-                style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ Add Step</button>
+      <div id="chain-tabs">
+        <button class="tab-btn active" onclick="switchTab('llm')">LLM</button>
+        <button class="tab-btn" onclick="switchTab('chain')">Chain</button>
       </div>
-      <div id="chain-steps-list"></div>
 
-      <button onclick="submitChain()" style="margin-top:16px;">Run Chain</button>
+      <!-- ── LLM Tab ── -->
+      <div id="llm-panel">
+        <label>Preset</label>
+        <select id="chain-preset-select" onchange="applyChainPreset()">
+          <option value="">— select preset —</option>
+        </select>
+        <div class="preset-save-row" style="margin-top:6px;">
+          <input id="chain-preset-name" type="text" placeholder="Preset name…">
+          <button class="secondary" onclick="saveChainPreset()">Save</button>
+          <button class="danger" onclick="deleteChainPreset()">Del</button>
+        </div>
+
+        <div class="row" style="margin-top:14px;">
+          <div>
+            <label>API Base URL</label>
+            <input id="chain-api-base" type="text" value="http://debian1.local:11434/v1">
+          </div>
+          <div>
+            <label>Model</label>
+            <input id="chain-model" type="text" placeholder="gemma4">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Temperature (0–2)</label>
+            <input id="chain-temp" type="number" step="0.1" min="0" max="2" value="0.7">
+          </div>
+          <div>
+            <label>Max Tokens</label>
+            <input id="chain-max-tokens" type="number" min="1" value="2048">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Chain Tab ── -->
+      <div id="chain-panel" style="display:none;">
+        <div id="seq-bar">
+          <label>Sequence</label>
+          <select id="chain-seq-select" onchange="_onSeqSelect()">
+            <option value="">— new sequence —</option>
+          </select>
+          <div id="seq-name-row">
+            <input id="chain-seq-name" type="text" placeholder="Sequence name…">
+            <button class="secondary" onclick="saveSeq()">Save</button>
+            <button class="danger" onclick="delCurrentSeq()">Del</button>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;margin-bottom:8px;">
+          <span class="section-label">STEPS</span>
+          <button class="secondary" onclick="addChainStep()"
+                  style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ Add Step</button>
+        </div>
+        <div id="chain-steps-list"></div>
+
+        <button onclick="submitChain()" style="margin-top:16px;">Run Chain</button>
+      </div>
+
     </div>
 
     <!-- ── Right: Output ── -->
@@ -305,29 +280,24 @@
     }
     function statusClass(s) { return 'status-' + s; }
 
-    // ── Drawers ─────────────────────────────────────────────────────
-    let _openDrawer = null;
-
-    function _openDrawerById(id, onOpen) {
-      if (_openDrawer && _openDrawer !== id) {
-        document.getElementById(_openDrawer).classList.remove('open');
-      }
-      _openDrawer = id;
-      document.getElementById('drawer-overlay').style.display = 'block';
-      document.getElementById(id).classList.add('open');
-      if (onOpen) onOpen();
+    // ── Tabs ─────────────────────────────────────────────────────────
+    function switchTab(tab) {
+      _activeTab = tab;
+      localStorage.setItem(_TAB_KEY, tab);
+      document.querySelectorAll('#chain-tabs .tab-btn').forEach((b, i) =>
+        b.classList.toggle('active', (i === 0) === (tab === 'llm'))
+      );
+      document.getElementById('llm-panel').style.display   = tab === 'llm'   ? '' : 'none';
+      document.getElementById('chain-panel').style.display = tab === 'chain' ? '' : 'none';
     }
-    function closeAllDrawers() {
-      document.getElementById('drawer-overlay').style.display = 'none';
-      document.querySelectorAll('.drawer').forEach(d => d.classList.remove('open'));
-      _openDrawer = null;
-    }
-
-    function openSeqDrawer() { _openDrawerById('seq-drawer', loadSeqs); }
 
     // ── Chain Presets (localStorage) ─────────────────────────────────
     const _PRESETS_KEY          = 'chain_llm_presets';
     const _PRESET_SELECTED_KEY  = 'chain_llm_preset_selected';
+    const _SEQ_SELECTED_KEY     = 'chain_sequence_selected';
+    const _TAB_KEY              = 'chain_active_tab';
+    let _currentSeqId           = null;
+    let _activeTab              = 'llm';
 
     function _loadChainPresets() {
       const sel = document.getElementById('chain-preset-select');
@@ -385,72 +355,85 @@
       if (saved) document.getElementById('chain-preset-select').value = saved.id;
     }
 
-    // ── Sequences drawer ─────────────────────────────────────────────
+    function deleteChainPreset() {
+      const id = document.getElementById('chain-preset-select').value;
+      if (!id) { alert('Select a preset to delete.'); return; }
+      const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
+      const p = presets.find(x => x.id === id);
+      if (!p || !confirm('Delete preset "' + p.name + '"?')) return;
+      localStorage.setItem(_PRESETS_KEY, JSON.stringify(presets.filter(x => x.id !== id)));
+      localStorage.removeItem(_PRESET_SELECTED_KEY);
+      _loadChainPresets();
+    }
+
+    // ── Sequences ─────────────────────────────────────────────────────
     let _allSeqs = [];
 
-    function _renderSeqs() {
-      const tbody = document.getElementById('seq-body');
-      if (_allSeqs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="color:#333;padding:8px;">No sequences saved.</td></tr>';
-        return;
+    function _renderSeqOptions() {
+      const sel = document.getElementById('chain-seq-select');
+      while (sel.options.length > 1) sel.remove(1);
+      for (const s of _allSeqs) {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        sel.appendChild(opt);
       }
-      tbody.innerHTML = _allSeqs.map(s => `
-        <tr>
-          <td style="color:#aaa;">${_escHtml(s.name)}</td>
-          <td style="color:#555;">${new Date(s.updated_at).toLocaleDateString()}</td>
-          <td>
-            <div class="seq-actions">
-              <button class="secondary" onclick="editSeq('${s.id}')">Edit</button>
-              <button class="secondary" onclick="dupSeq('${s.id}')">Dup</button>
-              <button class="danger"    onclick="delSeq('${s.id}')">Del</button>
-            </div>
-          </td>
-        </tr>`).join('');
+      if (_currentSeqId) sel.value = _currentSeqId;
     }
 
     async function loadSeqs() {
       try {
         const data = await api('/chain-sequences');
         _allSeqs = (data.sequences || []).slice().sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
-        _renderSeqs();
-      } catch(e) {
-        document.getElementById('seq-body').innerHTML =
-          `<tr><td colspan="3" style="color:#e44">Error: ${e.message}</td></tr>`;
-      }
+        _renderSeqOptions();
+      } catch(e) { /* silently fail */ }
     }
 
     async function saveSeq() {
-      const name = document.getElementById('seq-save-name').value.trim();
+      const name = document.getElementById('chain-seq-name').value.trim();
       if (!name) { alert('Enter a sequence name.'); return; }
       const steps = _collectSteps();
       if (steps.length === 0) { alert('Add at least one step.'); return; }
       try {
-        await api('/chain-sequences', 'POST', { name, steps });
+        const saved = await api('/chain-sequences', 'POST', { name, steps });
+        _currentSeqId = saved.id;
+        localStorage.setItem(_SEQ_SELECTED_KEY, saved.id);
         await loadSeqs();
       } catch(e) { alert('Error: ' + e.message); }
     }
 
-    function editSeq(id) {
+    function _onSeqSelect() {
+      const id = document.getElementById('chain-seq-select').value;
+      if (!id) {
+        _currentSeqId = null;
+        localStorage.removeItem(_SEQ_SELECTED_KEY);
+        document.getElementById('chain-seq-name').value = '';
+        document.getElementById('chain-steps-list').innerHTML = '';
+        _chainStepCounter = 0;
+        addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
+        return;
+      }
       const seq = _allSeqs.find(s => s.id === id);
       if (!seq) return;
+      _currentSeqId = id;
+      localStorage.setItem(_SEQ_SELECTED_KEY, id);
+      document.getElementById('chain-seq-name').value = seq.name;
       loadStepsIntoForm(seq.steps);
-      document.getElementById('seq-save-name').value = seq.name;
-      closeAllDrawers();
     }
 
-    async function dupSeq(id) {
+    async function delCurrentSeq() {
+      if (!_currentSeqId) { alert('No sequence loaded.'); return; }
+      const seq = _allSeqs.find(s => s.id === _currentSeqId);
+      if (!seq || !confirm('Delete sequence "' + seq.name + '"?')) return;
       try {
-        await api('/chain-sequences/' + id + '/duplicate', 'POST');
-        await loadSeqs();
-      } catch(e) { alert('Error: ' + e.message); }
-    }
-
-    async function delSeq(id) {
-      const seq = _allSeqs.find(s => s.id === id);
-      if (!seq) return;
-      if (!confirm('Delete sequence "' + seq.name + '"?')) return;
-      try {
-        await api('/chain-sequences/' + id, 'DELETE');
+        await api('/chain-sequences/' + _currentSeqId, 'DELETE');
+        _currentSeqId = null;
+        localStorage.removeItem(_SEQ_SELECTED_KEY);
+        document.getElementById('chain-seq-name').value = '';
+        document.getElementById('chain-seq-select').value = '';
+        document.getElementById('chain-steps-list').innerHTML = '';
+        _chainStepCounter = 0;
+        addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
         await loadSeqs();
       } catch(e) { alert('Error: ' + e.message); }
     }
@@ -459,7 +442,13 @@
       document.getElementById('chain-steps-list').innerHTML = '';
       _chainStepCounter = 0;
       for (const s of steps) {
-        addChainStep({ type: s.type, prompt: s.prompt || '', context_ids: s.context_ids || [], voice_preset_id: s.voice_preset_id || '' });
+        addChainStep({
+          type: s.type, prompt: s.prompt || '', context_ids: s.context_ids || [],
+          voice_preset_id: s.voice_preset_id || '',
+          ctx_name: s.ctx_name || '', ctx_description: s.ctx_description || '',
+          ctx_tags: s.ctx_tags || [], ctx_pre: s.ctx_pre || '', ctx_post: s.ctx_post || '',
+          ctx_overwrite: !!s.ctx_overwrite,
+        });
       }
     }
 
@@ -645,10 +634,12 @@
       const prompt     = opts.prompt !== undefined ? opts.prompt : _CHAIN_DEFAULT_PROMPT;
       const contextIds = opts.context_ids || [];
       const presetId   = opts.voice_preset_id || '';
-      const ctxName    = opts.ctx_name || '';
-      const ctxTags    = (opts.ctx_tags || []).join(', ');
-      const ctxPre     = opts.ctx_pre || '';
-      const ctxPost    = opts.ctx_post || '';
+      const ctxName        = opts.ctx_name || '';
+      const ctxDescription = opts.ctx_description || '';
+      const ctxTags        = (opts.ctx_tags || []).join(', ');
+      const ctxPre         = opts.ctx_pre || '';
+      const ctxPost        = opts.ctx_post || '';
+      const ctxOverwrite   = !!opts.ctx_overwrite;
 
       const idx    = _chainStepCounter++;
       const id     = `chain-step-${idx}`;
@@ -699,10 +690,16 @@
           '<input class="chain-step-ctx-name" type="text" placeholder="my-notes" value="' + _escHtml(ctxName) + '">' +
           '<label>Tags <span style="color:#383838;font-size:0.7rem;">(comma-separated)</span></label>' +
           '<input class="chain-step-ctx-tags" type="text" placeholder="journal, daily…" value="' + _escHtml(ctxTags) + '">' +
+          '<label>Description <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>' +
+          '<textarea class="chain-step-ctx-description" style="min-height:48px;" placeholder="Short description…">' + _escHtml(ctxDescription) + '</textarea>' +
           '<label>Pre <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>' +
           '<textarea class="chain-step-ctx-pre" style="min-height:48px;">' + _escHtml(ctxPre) + '</textarea>' +
           '<label>Post <span style="color:#383838;font-size:0.7rem;">(optional)</span></label>' +
           '<textarea class="chain-step-ctx-post" style="min-height:48px;">' + _escHtml(ctxPost) + '</textarea>' +
+          '<label style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer;">' +
+            '<input type="checkbox" class="chain-step-ctx-overwrite"' + (ctxOverwrite ? ' checked' : '') + '>' +
+            'Overwrite' +
+          '</label>' +
         '</div>';
 
       document.getElementById('chain-steps-list').appendChild(el);
@@ -739,12 +736,14 @@
           const presetId = el.querySelector('.chain-step-voice-preset').value;
           steps.push({ name: 'Step ' + (++i), type: 'voice', prompt: '', context_ids: [], voice_preset_id: presetId || null });
         } else if (kind === 'write_context') {
-          const ctx_name = el.querySelector('.chain-step-ctx-name').value.trim();
-          const ctx_tags = el.querySelector('.chain-step-ctx-tags').value
+          const ctx_name        = el.querySelector('.chain-step-ctx-name').value.trim();
+          const ctx_description = el.querySelector('.chain-step-ctx-description').value.trim();
+          const ctx_tags        = el.querySelector('.chain-step-ctx-tags').value
             .split(',').map(s => s.trim()).filter(Boolean);
-          const ctx_pre  = el.querySelector('.chain-step-ctx-pre').value;
-          const ctx_post = el.querySelector('.chain-step-ctx-post').value;
-          steps.push({ name: 'Step ' + (++i), type: 'write_context', ctx_name, ctx_tags, ctx_pre, ctx_post });
+          const ctx_pre         = el.querySelector('.chain-step-ctx-pre').value;
+          const ctx_post        = el.querySelector('.chain-step-ctx-post').value;
+          const ctx_overwrite   = el.querySelector('.chain-step-ctx-overwrite').checked;
+          steps.push({ name: 'Step ' + (++i), type: 'write_context', ctx_name, ctx_description, ctx_tags, ctx_pre, ctx_post, ctx_overwrite });
         } else {
           const prompt = el.querySelector('.chain-step-prompt').value;
           const context_ids = _collectStepContextIds(el);
@@ -984,8 +983,23 @@
     // ── Init ─────────────────────────────────────────────────────────
     document.querySelector('#topnav [data-page="chain"]').classList.add('active');
     _loadChainPresets();
-    Promise.all([loadContextItems(), loadVoicePresets()]).then(() => {
-      addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
+    Promise.all([loadContextItems(), loadVoicePresets(), loadSeqs()]).then(() => {
+      const savedSeqId = localStorage.getItem(_SEQ_SELECTED_KEY);
+      if (savedSeqId) {
+        const seq = _allSeqs.find(s => s.id === savedSeqId);
+        if (seq) {
+          _currentSeqId = savedSeqId;
+          document.getElementById('chain-seq-select').value = savedSeqId;
+          document.getElementById('chain-seq-name').value = seq.name;
+          loadStepsIntoForm(seq.steps);
+        } else {
+          addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
+        }
+      } else {
+        addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
+      }
+      const savedTab = localStorage.getItem(_TAB_KEY) || 'llm';
+      switchTab(savedTab);
     });
   </script>
   <script src="/js/nav-mobile.js"></script>
