@@ -188,6 +188,7 @@
     <a href="/image" data-page="image">Image</a>
     <a href="/jobs" data-page="jobs">Jobs</a>
     <a href="/server" data-page="server">Server</a>
+    <a href="/mcp" data-page="mcp">MCP</a>
   </nav>
 
   <div id="panels">
@@ -277,6 +278,10 @@
       <div id="chain-final-input" style="display:none;margin-top:16px;">
         <p class="section-label" style="margin-bottom:6px;">FINAL INPUT</p>
         <pre id="chain-final-input-pre" class="output-pre"></pre>
+      </div>
+      <div id="chain-final-tool-calls" style="display:none;margin-top:16px;">
+        <p class="section-label" style="margin-bottom:6px;">TOOL CALLS</p>
+        <pre id="chain-final-tool-calls-pre" class="output-pre" style="font-size:0.68rem;"></pre>
       </div>
       <div id="chain-final-audio" style="display:none;margin-top:16px;">
         <p class="section-label" style="margin-bottom:6px;">FINAL AUDIO</p>
@@ -520,6 +525,7 @@
       for (const s of steps) {
         addChainStep({
           type: s.type, prompt: s.prompt || '', context_ids: s.context_ids || [],
+          tools: s.tools || [],
           voice_preset_id: s.voice_preset_id || '',
           ctx_name: s.ctx_name || '', ctx_description: s.ctx_description || '',
           ctx_tags: s.ctx_tags || [], ctx_pre: s.ctx_pre || '', ctx_post: s.ctx_post || '',
@@ -692,6 +698,15 @@
       } catch(e) { _voicePresets = []; }
     }
 
+    let _mcpTools = [];
+
+    async function loadMcpTools() {
+      try {
+        const data = await api('/mcp/tools');
+        _mcpTools = data.tools || [];
+      } catch(e) { _mcpTools = []; }
+    }
+
     function _voicePresetOptions(selectedId) {
       const opts = '<option value="">— select preset —</option>' +
         _voicePresets.map(p =>
@@ -717,6 +732,7 @@
       const type       = opts.type || 'llm';
       const prompt     = opts.prompt !== undefined ? opts.prompt : _CHAIN_DEFAULT_PROMPT;
       const contextIds = opts.context_ids || [];
+      const toolNames  = opts.tools || [];
       const presetId   = opts.voice_preset_id || '';
       const voicePre        = opts.voice_pre || '';
       const voicePost       = opts.voice_post || '';
@@ -766,6 +782,24 @@
                   'onchange="_addTag(this.closest(\'.chain-step-card\'),this.value);this.value=\'\'">' +
               '</div>' +
               '<div class="ctx-tree"></div>' +
+            '</div>' +
+          '</details>' +
+          '<details class="ctx-selector" style="margin-top:6px;">' +
+            '<summary>Tools <span class="ctx-count">' + (toolNames.length ? '(' + toolNames.length + ')' : '') + '</span></summary>' +
+            '<div class="ctx-body">' +
+              (_mcpTools.length === 0
+                ? '<div style="color:#333;font-size:0.72rem;padding:4px 0;">No tools registered.</div>'
+                : _mcpTools.map(t =>
+                    '<label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:3px 0;">' +
+                      '<input type="checkbox" class="tool-chk" data-name="' + _escHtml(t.name) + '"' +
+                        (toolNames.includes(t.name) ? ' checked' : '') + '>' +
+                      '<div>' +
+                        '<div style="color:#aaa;font-size:0.74rem;">' + _escHtml(t.name) + '</div>' +
+                        '<div style="color:#444;font-size:0.68rem;">' + _escHtml(t.description) + '</div>' +
+                      '</div>' +
+                    '</label>'
+                  ).join('')
+              ) +
             '</div>' +
           '</details>' +
         '</div>' +
@@ -879,7 +913,8 @@
         } else {
           const prompt = el.querySelector('.chain-step-prompt').value;
           const context_ids = _collectStepContextIds(el);
-          steps.push({ name: 'Step ' + (++i), type: 'llm', prompt, context_ids });
+          const tools = [...el.querySelectorAll('.tool-chk:checked')].map(c => c.getAttribute('data-name'));
+          steps.push({ name: 'Step ' + (++i), type: 'llm', prompt, context_ids, tools });
         }
       }
       return steps;
@@ -893,6 +928,7 @@
       msg.textContent = ''; stepStatusDiv.innerHTML = ''; outputDiv.style.display = 'none';
       document.getElementById('chain-final-context').style.display = 'none';
       document.getElementById('chain-final-input').style.display = 'none';
+      document.getElementById('chain-final-tool-calls').style.display = 'none';
       document.getElementById('chain-final-audio').style.display = 'none';
       document.getElementById('chain-artifacts').style.display = 'none';
       document.getElementById('chain-artifacts-list').innerHTML = '';
@@ -974,7 +1010,12 @@
         if (outputText != null) {
           bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">OUTPUT</p>' +
             '<pre class="output-pre">' + _escHtml(outputText) + '</pre>';
-        } else if (step.error) {
+        }
+        if (files && files.toolCallsData && files.toolCallsData.length > 0) {
+          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">TOOL CALLS (' + files.toolCallsData.length + ')</p>' +
+            '<pre class="output-pre" style="font-size:0.68rem;">' + _escHtml(JSON.stringify(files.toolCallsData, null, 2)) + '</pre>';
+        }
+        if (outputText == null && step.error) {
           bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
             '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
         }
@@ -1007,15 +1048,17 @@
         }
         return {};
       }
-      const [cr, pr, or] = await Promise.allSettled([
+      const [cr, pr, or, tcr] = await Promise.allSettled([
         fetch(base + 'context.txt'),
         fetch(base + 'prompt.txt'),
         fetch(base + 'output.txt'),
+        fetch(base + 'tool_calls.json'),
       ]);
-      const contextText = cr.status === 'fulfilled' && cr.value.ok ? await cr.value.text() : null;
-      const promptText  = pr.status === 'fulfilled' && pr.value.ok ? await pr.value.text() : null;
-      const outputText  = or.status === 'fulfilled' && or.value.ok ? await or.value.text() : null;
-      return { contextText, promptText, outputText };
+      const contextText   = cr.status  === 'fulfilled' && cr.value.ok  ? await cr.value.text()                          : null;
+      const promptText    = pr.status  === 'fulfilled' && pr.value.ok  ? await pr.value.text()                          : null;
+      const outputText    = or.status  === 'fulfilled' && or.value.ok  ? await or.value.text()                          : null;
+      const toolCallsData = tcr.status === 'fulfilled' && tcr.value.ok ? await tcr.value.json().catch(() => null) : null;
+      return { contextText, promptText, outputText, toolCallsData };
     }
 
     function _fmtBytes(n) {
@@ -1070,11 +1113,11 @@
             if (sr.ok) {
               const sd = await sr.json();
               const steps = sd.steps || [];
-              const intermediateSteps = steps.slice(0, -1);
+              const interimSteps = steps.slice(0, -1);
               const fileResults = await Promise.allSettled(
-                intermediateSteps.map((step, i) => _fetchStepFiles(jobId, step, i))
+                interimSteps.map((step, i) => _fetchStepFiles(jobId, step, i))
               );
-              stepStatusDiv.innerHTML = intermediateSteps.map((step, i) => {
+              stepStatusDiv.innerHTML = interimSteps.map((step, i) => {
                 const files = fileResults[i].status === 'fulfilled' ? fileResults[i].value : {};
                 return _stepCollapseHtml(step, i + 1, files);
               }).join('');
@@ -1095,9 +1138,10 @@
                   // nothing extra to show; final output text is displayed below
                 } else {
                   try {
-                    const [fcr, fp] = await Promise.allSettled([
+                    const [fcr, fp, ftcr] = await Promise.allSettled([
                       fetch(finalBase + 'context.txt'),
                       fetch(finalBase + 'prompt.txt'),
+                      fetch(finalBase + 'tool_calls.json'),
                     ]);
                     const finalCtx = fcr.status === 'fulfilled' && fcr.value.ok ? await fcr.value.text() : '';
                     if (finalCtx) {
@@ -1107,6 +1151,12 @@
                     if (fp.status === 'fulfilled' && fp.value.ok) {
                       document.getElementById('chain-final-input-pre').textContent = await fp.value.text();
                       document.getElementById('chain-final-input').style.display = 'block';
+                    }
+                    const finalTcData = ftcr.status === 'fulfilled' && ftcr.value.ok ? await ftcr.value.json().catch(() => null) : null;
+                    if (finalTcData && finalTcData.length > 0) {
+                      const tcEl = document.getElementById('chain-final-tool-calls');
+                      document.getElementById('chain-final-tool-calls-pre').textContent = JSON.stringify(finalTcData, null, 2);
+                      tcEl.style.display = 'block';
                     }
                   } catch (e) {}
                 }
@@ -1159,7 +1209,7 @@
     // ── Init ─────────────────────────────────────────────────────────
     document.querySelector('#topnav [data-page="chain"]').classList.add('active');
     _loadChainPresets();
-    Promise.all([loadContextItems(), loadVoicePresets(), loadSeqs()]).then(() => {
+    Promise.all([loadContextItems(), loadVoicePresets(), loadSeqs(), loadMcpTools()]).then(() => {
       const savedSeqId = localStorage.getItem(_SEQ_SELECTED_KEY);
       if (savedSeqId) {
         const seq = _allSeqs.find(s => s.id === savedSeqId);
