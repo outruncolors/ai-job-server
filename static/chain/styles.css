@@ -30,6 +30,10 @@ details > summary { cursor: pointer; color: #555; font-size: 0.76rem; user-selec
 details > summary::-webkit-details-marker { display: none; }
 details > summary::before { content: '▸ '; }
 details[open] > summary::before { content: '▾ '; }
+.section-collapse > summary { color: #383838; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0; }
+.section-collapse > summary::before { content: '▸ '; color: #2e2e2e; }
+.section-collapse[open] > summary { margin-bottom: 6px; }
+.section-collapse[open] > summary::before { content: '▾ '; }
 
 /* ── Panels ── */
 #panels { display: flex; height: 100vh; padding-top: 44px; }

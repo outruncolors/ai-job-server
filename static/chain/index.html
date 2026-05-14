@@ -91,18 +91,20 @@
       <p class="section-label" style="margin-bottom:14px;">OUTPUT</p>
       <div id="chain-msg" class="msg" style="margin-top:0;"></div>
       <div id="chain-step-status" style="margin-top:14px;"></div>
-      <div id="chain-final-context" style="display:none;margin-top:16px;">
-        <p class="section-label" style="margin-bottom:6px;">CONTEXT</p>
+      <details id="chain-final-context" class="section-collapse" style="display:none;margin-top:16px;">
+        <summary>CONTEXT</summary>
         <pre id="chain-final-context-pre" class="output-pre"></pre>
-      </div>
-      <div id="chain-final-input" style="display:none;margin-top:16px;">
-        <p class="section-label" style="margin-bottom:6px;">FINAL INPUT</p>
+      </details>
+      <details id="chain-final-input" class="section-collapse" style="display:none;margin-top:16px;">
+        <summary>FINAL INPUT</summary>
         <pre id="chain-final-input-pre" class="output-pre"></pre>
-      </div>
-      <div id="chain-final-tool-calls" style="display:none;margin-top:16px;">
-        <p class="section-label" style="margin-bottom:6px;">TOOL CALLS</p>
-        <pre id="chain-final-tool-calls-pre" class="output-pre" style="font-size:0.68rem;"></pre>
-      </div>
+      </details>
+      <details id="chain-final-tool-calls" class="section-collapse" style="display:none;margin-top:16px;">
+        <summary>TOOL CALLS</summary>
+        <div id="chain-final-tool-calls-body">
+          <pre id="chain-final-tool-calls-pre" class="output-pre" style="font-size:0.68rem;"></pre>
+        </div>
+      </details>
       <div id="chain-final-audio" style="display:none;margin-top:16px;">
         <p class="section-label" style="margin-bottom:6px;">FINAL AUDIO</p>
         <audio id="chain-final-audio-player" controls style="width:100%;margin-top:4px;"></audio>
@@ -111,10 +113,10 @@
         <p class="section-label" style="margin-bottom:6px;">FINAL OUTPUT</p>
         <pre id="chain-output-pre" class="output-pre"></pre>
       </div>
-      <div id="chain-artifacts" style="display:none;margin-top:16px;">
-        <p class="section-label" style="margin-bottom:6px;">ARTIFACTS</p>
+      <details id="chain-artifacts" class="section-collapse" style="display:none;margin-top:16px;">
+        <summary>ARTIFACTS</summary>
         <div id="chain-artifacts-list"></div>
-      </div>
+      </details>
       <div id="chain-right-hint" style="color:#222;font-size:0.74rem;">
         Run a chain job to see output here.
       </div>

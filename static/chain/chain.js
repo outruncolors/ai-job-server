@@ -877,7 +877,7 @@
                       '<details><summary style="font-size:0.72rem;color:#555;cursor:pointer;">RAW RESPONSE</summary>' +
                       '<pre class="output-pre" style="margin-top:4px;font-size:0.68rem;">' + _escHtml(fSegRaw) + '</pre></details>';
                     const tcEl = document.getElementById('chain-final-tool-calls');
-                    tcEl.innerHTML =
+                    document.getElementById('chain-final-tool-calls-body').innerHTML =
                       '<details style="border:1px solid #1e1e1e;border-radius:3px;padding:6px 8px;background:#0a0a0a;">' +
                       '<summary style="font-size:0.72rem;color:#555;cursor:pointer;list-style:none;">' +
                         '<span style="color:#444;">▸ </span>INTERNAL REQUESTS · auto_segment</summary>' +
