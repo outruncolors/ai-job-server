@@ -92,7 +92,7 @@ button.danger:hover { background: #992828; }
   display: flex; align-items: center; gap: 8px; cursor: pointer;
   color: #ccc; font-size: 0.82rem; margin-top: 12px;
 }
-.check-label input[type="checkbox"] { margin: 0; cursor: pointer; }
+.check-label input[type="checkbox"] { width: auto; margin: 0; cursor: pointer; }
 .info-banner {
   background: #1a1a18; border: 1px solid #3a3820; border-radius: 3px;
   color: #998; font-size: 0.78rem; padding: 8px 12px; margin-bottom: 14px;
