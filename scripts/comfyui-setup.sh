@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ComfyUI setup — idempotent, run with: bash scripts/comfyui-setup.sh
-# Target: RTX 3090 Ti (Ampere, sm_86, 24 GB), Debian 13, Python 3.12, CUDA 12.4
+# Target: RTX 3090 Ti (Ampere, sm_86, 24 GB), Debian 13, Python 3.13, CUDA 12.4
 #
-# Requires: python3.12, git, sudo access (for apt installs on first run).
+# Requires: python3 (3.13+), git, sudo access (for apt installs on first run).
 # After running: place model files in /opt/ai-stack/models/<type>/ and start
 # ComfyUI from the Image > Server tab (or via the API at POST /v1/comfyui/start).
 
@@ -45,6 +45,10 @@ else
 fi
 
 # ── 2. Clone ComfyUI ──────────────────────────────────────────────────────────
+# Mark these directories safe so git works regardless of who owns them
+git config --global --add safe.directory "$COMFY_DIR" 2>/dev/null || true
+git config --global --add safe.directory "$SAGE_SRC" 2>/dev/null || true
+
 if [ -d "$COMFY_DIR/.git" ]; then
     echo "--- Updating existing clone to $COMFY_TAG ---"
     git -C "$COMFY_DIR" fetch --tags --quiet
@@ -57,8 +61,8 @@ fi
 
 # ── 3. Python venv ───────────────────────────────────────────────────────────
 if [ ! -f "$VENV_DIR/bin/activate" ]; then
-    echo "--- Creating Python 3.12 venv ---"
-    python3.12 -m venv "$VENV_DIR"
+    echo "--- Creating Python venv ---"
+    python3 -m venv "$VENV_DIR"
 fi
 PIP="$VENV_DIR/bin/pip"
 PYTHON="$VENV_DIR/bin/python"
@@ -74,15 +78,20 @@ echo "--- Installing PyTorch cu124 ---"
 echo "--- Installing ComfyUI requirements ---"
 "$PIP" install -r "$COMFY_DIR/requirements.txt" --quiet
 
-# ── 6. Triton ─────────────────────────────────────────────────────────────────
+# ── 6. Extra deps not in requirements.txt ─────────────────────────────────────
+# ComfyUI's frontend_management.py imports requests but it's absent from requirements.txt
+echo "--- Installing extra deps (requests) ---"
+"$PIP" install requests --quiet
+
+# ── 7. Triton ─────────────────────────────────────────────────────────────────
 echo "--- Installing Triton ---"
 "$PIP" install triton --quiet
 
-# ── 7. SageAttention (built from source) ─────────────────────────────────────
+# ── 8. SageAttention (built from source) ─────────────────────────────────────
 # SageAttention 2.x is not on PyPI (version-per-CUDA-ABI problem).
 # We build from the GitHub source. Already done if the package is importable.
 if "$PYTHON" -c "import sageattention" &>/dev/null; then
-    SAGE_VER=$("$PYTHON" -c "import sageattention; print(sageattention.__version__)" 2>/dev/null || echo "unknown")
+    SAGE_VER=$("$PYTHON" -c "import importlib.metadata; print(importlib.metadata.version('sageattention'))" 2>/dev/null || echo "unknown")
     echo "--- SageAttention already installed ($SAGE_VER) ---"
 else
     echo "--- Building SageAttention from source ---"
@@ -111,10 +120,17 @@ else
 
     "$PIP" install "$SAGE_SRC" --no-build-isolation --quiet
 
-    "$PYTHON" -c "import sageattention; print('  SageAttention', sageattention.__version__, 'installed OK')"
+    "$PYTHON" -c "
+import importlib.metadata, sageattention
+try:
+    ver = importlib.metadata.version('sageattention')
+except importlib.metadata.PackageNotFoundError:
+    ver = 'unknown'
+print('  SageAttention', ver, 'installed OK')
+"
 fi
 
-# ── 8. Shared model directories ───────────────────────────────────────────────
+# ── 9. Shared model directories ───────────────────────────────────────────────
 echo "--- Creating model directories ---"
 mkdir -p \
     "$MODELS/checkpoints" \
@@ -130,7 +146,7 @@ mkdir -p \
     "$MODELS/style_models" \
     "$MODELS/hypernetworks"
 
-# ── 9. extra_model_paths.yaml ─────────────────────────────────────────────────
+# ── 10. extra_model_paths.yaml ────────────────────────────────────────────────
 YAML_PATH="$MODELS/extra_model_paths.yaml"
 if [ ! -f "$YAML_PATH" ]; then
     echo "--- Writing extra_model_paths.yaml ---"
@@ -153,17 +169,21 @@ ai_stack:
 YAML
 fi
 
-# ── 10. Output / input dirs for the managed launch ───────────────────────────
+# ── 11. Output / input dirs for the managed launch ───────────────────────────
 _sudo mkdir -p /var/lib/comfy/output /var/lib/comfy/input
 _sudo chown -R "$(id -u):$(id -g)" /var/lib/comfy
 
-# ── 11. Sanity check ──────────────────────────────────────────────────────────
+# ── 12. Sanity check ──────────────────────────────────────────────────────────
 echo ""
 echo "--- Verifying installation ---"
 "$PYTHON" -c "
-import torch, sageattention
+import importlib.metadata, torch, sageattention
+try:
+    sage_ver = importlib.metadata.version('sageattention')
+except importlib.metadata.PackageNotFoundError:
+    sage_ver = 'unknown'
 print(f'  torch {torch.__version__}  CUDA available: {torch.cuda.is_available()}')
-print(f'  sageattention {sageattention.__version__}')
+print(f'  sageattention {sage_ver}')
 "
 
 echo ""

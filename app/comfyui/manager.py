@@ -3,10 +3,9 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
-import subprocess
 import time
 from pathlib import Path
-from typing import Optional
+from typing import IO, Optional
 
 import psutil
 
@@ -17,9 +16,23 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _LOG_DIR = PROJECT_ROOT / "config"
 
 
+async def _pipe_reader(stream: asyncio.StreamReader, prefix: str, log_fh: IO[bytes]) -> None:
+    """Read lines from a subprocess pipe, print prefixed to stdout, and write to log file."""
+    async for raw in stream:
+        text = raw.decode(errors="replace").rstrip()
+        print(f"{prefix} {text}", flush=True)
+        try:
+            log_fh.write(raw)
+            log_fh.flush()
+        except Exception:
+            pass
+
+
 class ComfyUIManager:
     def __init__(self) -> None:
-        self._proc: Optional[subprocess.Popen] = None
+        self._proc: Optional[asyncio.subprocess.Process] = None
+        self._stdout_task: Optional[asyncio.Task] = None
+        self._stderr_task: Optional[asyncio.Task] = None
         self._adopted_pid: Optional[int] = None
         self._started_at: Optional[float] = None
         self._lock: asyncio.Lock = asyncio.Lock()
@@ -69,7 +82,7 @@ class ComfyUIManager:
 
     def _proc_is_running(self) -> bool:
         if self._proc is not None:
-            return self._proc.poll() is None
+            return self._proc.returncode is None
         if self._adopted_pid is not None:
             try:
                 return psutil.pid_exists(self._adopted_pid)
@@ -111,11 +124,11 @@ class ComfyUIManager:
             stdout_log = open(_LOG_DIR / "comfyui-server.stdout.log", "ab")
             stderr_log = open(_LOG_DIR / "comfyui-server.stderr.log", "ab")
             try:
-                self._proc = subprocess.Popen(
-                    self._build_argv(),
+                self._proc = await asyncio.create_subprocess_exec(
+                    *self._build_argv(),
                     cwd=cfg.comfyui_root,
-                    stdout=stdout_log,
-                    stderr=stderr_log,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                     start_new_session=True,
                 )
             except FileNotFoundError as exc:
@@ -123,6 +136,12 @@ class ComfyUIManager:
                     f"ComfyUI not found — check comfyui_root ({cfg.comfyui_root}) "
                     f"and venv_python ({cfg.venv_python}) in config"
                 ) from exc
+            self._stdout_task = asyncio.create_task(
+                _pipe_reader(self._proc.stdout, "[ComfyUI]", stdout_log)
+            )
+            self._stderr_task = asyncio.create_task(
+                _pipe_reader(self._proc.stderr, "[ComfyUI]", stderr_log)
+            )
             self._adopted_pid = None
             self._started_at = time.monotonic()
 
@@ -181,10 +200,19 @@ class ComfyUIManager:
 
             if self._proc is not None:
                 try:
-                    self._proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
+                    await asyncio.wait_for(self._proc.wait(), timeout=5)
+                except asyncio.TimeoutError:
                     pass
 
+            for task in (self._stdout_task, self._stderr_task):
+                if task is not None:
+                    task.cancel()
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=2)
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        pass
+            self._stdout_task = None
+            self._stderr_task = None
             self._proc = None
             self._adopted_pid = None
             self._started_at = None
