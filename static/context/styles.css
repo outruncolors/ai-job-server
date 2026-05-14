@@ -2,7 +2,7 @@
 html, body { height: 100%; font-family: monospace; background: #111; color: #ccc; overflow: hidden; }
 
 label { display: block; color: #777; font-size: 0.76rem; margin-bottom: 3px; margin-top: 10px; }
-input, textarea, select {
+input:not([type="checkbox"]):not([type="radio"]), textarea, select {
   width: 100%; padding: 6px 8px; background: #181818; border: 1px solid #2e2e2e;
   color: #ccc; font-family: monospace; font-size: 0.82rem; border-radius: 3px;
 }

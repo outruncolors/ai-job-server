@@ -3,7 +3,7 @@ html, body { height: 100%; font-family: monospace; background: #111; color: #ccc
 
 /* ── Forms ── */
 label { display: block; color: #777; font-size: 0.76rem; margin-bottom: 3px; margin-top: 10px; }
-input, textarea, select {
+input:not([type="checkbox"]):not([type="radio"]), textarea, select {
   width: 100%; padding: 6px 8px; background: #181818; border: 1px solid #2e2e2e;
   color: #ccc; font-family: monospace; font-size: 0.82rem; border-radius: 3px;
 }
@@ -92,7 +92,7 @@ button.danger:hover { background: #992828; }
   display: flex; align-items: center; gap: 8px; cursor: pointer;
   color: #ccc; font-size: 0.82rem; margin-top: 12px;
 }
-.check-label input[type="checkbox"] { width: auto; margin: 0; cursor: pointer; }
+.check-label input[type="checkbox"] { margin: 0; cursor: pointer; }
 .info-banner {
   background: #1a1a18; border: 1px solid #3a3820; border-radius: 3px;
   color: #998; font-size: 0.78rem; padding: 8px 12px; margin-bottom: 14px;
