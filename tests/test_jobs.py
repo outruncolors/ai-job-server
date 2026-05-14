@@ -23,7 +23,7 @@ def test_health(client):
 # ---------------------------------------------------------------------------
 
 def test_create_image_job(client):
-    payload = {"workflow": "txt2img", "params": {"prompt": "a cat on the moon", "steps": 20}}
+    payload = {"workflow": "txt2img", "prompt": "a cat on the moon"}
     r = client.post("/v1/jobs/image", json=payload)
     assert r.status_code == 202
     body = r.json()
@@ -33,19 +33,18 @@ def test_create_image_job(client):
     assert "created_at" in body
 
 
-def test_create_image_job_minimal(client):
-    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
-    assert r.status_code == 202
-    assert r.json()["job_type"] == "image"
-
-
 def test_create_image_job_missing_workflow(client):
-    r = client.post("/v1/jobs/image", json={"params": {"prompt": "hi"}})
+    r = client.post("/v1/jobs/image", json={"prompt": "hi"})
+    assert r.status_code == 422
+
+
+def test_create_image_job_missing_prompt(client):
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
     assert r.status_code == 422
 
 
 def test_image_job_files_written(client, tmp_path):
-    r = client.post("/v1/jobs/image", json={"workflow": "txt2img", "params": {"prompt": "test prompt"}})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img", "prompt": "test prompt"})
     job_id = r.json()["job_id"]
 
     job_dirs = list(tmp_path.glob(f"*/{job_id}"))
@@ -117,7 +116,7 @@ def test_voice_job_files_written(client, tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_get_job(client):
-    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img", "prompt": "test"})
     job_id = r.json()["job_id"]
 
     r2 = client.get(f"/v1/jobs/{job_id}")
@@ -142,7 +141,7 @@ def test_list_jobs_empty(client):
 
 
 def test_list_jobs(client):
-    client.post("/v1/jobs/image", json={"workflow": "txt2img"})
+    client.post("/v1/jobs/image", json={"workflow": "txt2img", "prompt": "test"})
     client.post("/v1/jobs/voice", json={"text": "second"})
     r = client.get("/v1/jobs")
     assert r.status_code == 200
@@ -157,7 +156,7 @@ def test_list_jobs(client):
 # ---------------------------------------------------------------------------
 
 def test_get_job_file_status(client):
-    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img", "prompt": "test"})
     job_id = r.json()["job_id"]
 
     r2 = client.get(f"/v1/jobs/{job_id}/files/status.json")
@@ -167,7 +166,7 @@ def test_get_job_file_status(client):
 
 
 def test_get_job_file_logs(client):
-    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img", "prompt": "test"})
     job_id = r.json()["job_id"]
 
     r2 = client.get(f"/v1/jobs/{job_id}/files/logs.txt")
@@ -176,14 +175,14 @@ def test_get_job_file_logs(client):
 
 
 def test_get_job_file_not_found(client):
-    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img", "prompt": "test"})
     job_id = r.json()["job_id"]
     r2 = client.get(f"/v1/jobs/{job_id}/files/output.png")
     assert r2.status_code == 404
 
 
 def test_get_job_file_path_traversal(client):
-    r = client.post("/v1/jobs/image", json={"workflow": "txt2img"})
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img", "prompt": "test"})
     job_id = r.json()["job_id"]
     r2 = client.get(f"/v1/jobs/{job_id}/files/../../etc/passwd")
     assert r2.status_code in (404, 422)

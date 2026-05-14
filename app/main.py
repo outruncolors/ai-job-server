@@ -78,7 +78,7 @@ def health():
 
 @app.post("/v1/jobs/image", response_model=JobCreatedResponse, status_code=202)
 def create_image_job(req: ImageJobRequest, background_tasks: BackgroundTasks):
-    input_text = req.params.get("prompt", req.workflow)
+    input_text = req.prompt
     data = create_job("image", req.model_dump(), input_text)
     job_id = data["job_id"]
     job_dir = find_job_dir(job_id)

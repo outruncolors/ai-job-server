@@ -8,7 +8,7 @@ from typing import Any
 from .client import ComfyUIClient
 from .config import ComfyUIConfig
 from .manager import ComfyUIManager
-from .workflows import inject_params, load_workflow
+from .workflows import inject_prompt, load_workflow
 
 
 def _write_status(job_dir: Path, status: str, *, error: str | None = None) -> None:
@@ -48,7 +48,7 @@ async def execute_image_job(
                 )
 
         workflow = load_workflow(request.workflow)
-        workflow = inject_params(workflow, request.params)
+        workflow = inject_prompt(workflow, request.prompt)
 
         client = ComfyUIClient(f"http://{config.host}:{config.port}")
 

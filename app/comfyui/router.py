@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from .config import ComfyUIConfig, get_config, save_config
 from .manager import get_manager
-from .workflows import get_workflow_detail, list_workflows
+from .workflows import list_workflows
 
 router = APIRouter(prefix="/v1/comfyui", tags=["comfyui"])
 
@@ -49,14 +49,6 @@ def update_comfyui_config(new_config: ComfyUIConfig) -> ComfyUIConfig:
 @router.get("/workflows")
 def get_workflows() -> dict:
     return {"workflows": list_workflows()}
-
-
-@router.get("/workflows/{name}")
-def get_workflow(name: str) -> dict:
-    detail = get_workflow_detail(name)
-    if detail is None:
-        raise HTTPException(status_code=404, detail=f"Workflow not found: {name}")
-    return detail
 
 
 @router.get("/system_stats")

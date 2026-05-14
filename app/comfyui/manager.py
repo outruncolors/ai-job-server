@@ -5,7 +5,7 @@ import os
 import signal
 import time
 from pathlib import Path
-from typing import IO, Optional
+from typing import Optional
 
 import psutil
 
@@ -16,23 +16,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _LOG_DIR = PROJECT_ROOT / "config"
 
 
-async def _pipe_reader(stream: asyncio.StreamReader, prefix: str, log_fh: IO[bytes]) -> None:
-    """Read lines from a subprocess pipe, print prefixed to stdout, and write to log file."""
-    async for raw in stream:
-        text = raw.decode(errors="replace").rstrip()
-        print(f"{prefix} {text}", flush=True)
-        try:
-            log_fh.write(raw)
-            log_fh.flush()
-        except Exception:
-            pass
-
-
 class ComfyUIManager:
     def __init__(self) -> None:
         self._proc: Optional[asyncio.subprocess.Process] = None
-        self._stdout_task: Optional[asyncio.Task] = None
-        self._stderr_task: Optional[asyncio.Task] = None
         self._adopted_pid: Optional[int] = None
         self._started_at: Optional[float] = None
         self._lock: asyncio.Lock = asyncio.Lock()
@@ -127,8 +113,8 @@ class ComfyUIManager:
                 self._proc = await asyncio.create_subprocess_exec(
                     *self._build_argv(),
                     cwd=cfg.comfyui_root,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                    stdout=stdout_log,
+                    stderr=stderr_log,
                     start_new_session=True,
                 )
             except FileNotFoundError as exc:
@@ -136,12 +122,9 @@ class ComfyUIManager:
                     f"ComfyUI not found — check comfyui_root ({cfg.comfyui_root}) "
                     f"and venv_python ({cfg.venv_python}) in config"
                 ) from exc
-            self._stdout_task = asyncio.create_task(
-                _pipe_reader(self._proc.stdout, "[ComfyUI]", stdout_log)
-            )
-            self._stderr_task = asyncio.create_task(
-                _pipe_reader(self._proc.stderr, "[ComfyUI]", stderr_log)
-            )
+            finally:
+                stdout_log.close()
+                stderr_log.close()
             self._adopted_pid = None
             self._started_at = time.monotonic()
 
@@ -203,16 +186,6 @@ class ComfyUIManager:
                     await asyncio.wait_for(self._proc.wait(), timeout=5)
                 except asyncio.TimeoutError:
                     pass
-
-            for task in (self._stdout_task, self._stderr_task):
-                if task is not None:
-                    task.cancel()
-                    try:
-                        await asyncio.wait_for(asyncio.shield(task), timeout=2)
-                    except (asyncio.TimeoutError, asyncio.CancelledError):
-                        pass
-            self._stdout_task = None
-            self._stderr_task = None
             self._proc = None
             self._adopted_pid = None
             self._started_at = None

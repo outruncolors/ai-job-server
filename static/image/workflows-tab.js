@@ -1,4 +1,4 @@
-// Workflows tab — list registered workflows and their detected params.
+// Workflows tab — list registered workflows with compatibility status.
 
 function onWorkflowsTabActive() {
   renderWorkflowsList();
@@ -14,7 +14,7 @@ async function renderWorkflowsList() {
     if (!workflows.length) {
       container.innerHTML =
         '<p class="wf-empty">No workflows found in <code>config/comfyui-workflows/</code>.<br>' +
-        'Export a workflow from the ComfyUI editor (API format) and save it there.</p>';
+        'Export a workflow from the ComfyUI editor in API format and save it there.</p>';
       return;
     }
     container.innerHTML = '';
@@ -26,20 +26,20 @@ async function renderWorkflowsList() {
       nameEl.className = 'wf-name';
       nameEl.textContent = w.name;
 
-      const paramsEl = document.createElement('div');
-      paramsEl.className = 'wf-params';
-      (w.params || []).forEach(p => {
-        const tag = document.createElement('span');
-        tag.className = 'wf-param-tag';
-        tag.textContent = p.name + ' (' + p.type + ')';
-        paramsEl.appendChild(tag);
-      });
-      if (!w.params || !w.params.length) {
-        paramsEl.innerHTML = '<span style="color:#444;font-size:0.76rem;">No tunable params detected</span>';
+      const statusEl = document.createElement('div');
+      statusEl.className = 'wf-status';
+      if (w.valid) {
+        statusEl.innerHTML =
+          '<span class="wf-badge wf-badge-ok">Ready</span>' +
+          '<span style="color:#555;font-size:0.76rem;margin-left:8px;">node ' + _escHtml(w.promptNodeId) + '</span>';
+      } else {
+        statusEl.innerHTML =
+          '<span class="wf-badge wf-badge-err">Invalid</span>' +
+          '<span style="color:#c44;font-size:0.76rem;margin-left:8px;">' + _escHtml(w.error || '') + '</span>';
       }
 
       card.appendChild(nameEl);
-      card.appendChild(paramsEl);
+      card.appendChild(statusEl);
       container.appendChild(card);
     });
   } catch (e) {
