@@ -138,6 +138,12 @@
         audio.controls = true;
         audio.src = url;
         div.appendChild(audio);
+      } else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp' || ext === 'gif') {
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = artifact.filename;
+        img.className = 'artifact-img';
+        div.appendChild(img);
       } else if (ext === 'txt') {
         const pre = document.createElement('pre');
         pre.className = 'artifact-pre';

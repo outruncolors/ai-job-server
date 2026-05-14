@@ -58,6 +58,7 @@ button.danger:hover { background: #992828; }
   border: 1px solid #1e1e1e; max-height: 300px; overflow-y: auto;
 }
 audio { width: 100%; margin-top: 4px; }
+.artifact-img { max-width: 100%; border-radius: 3px; margin-top: 4px; display: block; }
 .raw-links { display: flex; flex-wrap: wrap; gap: 10px; }
 .raw-links a { color: #446; font-size: 0.74rem; text-decoration: none; }
 .raw-links a:hover { color: #6680aa; }
