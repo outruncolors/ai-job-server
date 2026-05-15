@@ -22,6 +22,13 @@ from .chain.context_library import (
 from .chain.executor import execute_chain_job, list_chain_steps, patch_initial_chain_status
 from .chain.models import ChainJobRequest
 from .chain.sequences import delete_sequence, duplicate_sequence, list_sequences, save_sequence
+from .image_prompts import (
+    create_prompt,
+    delete_prompt,
+    get_prompt,
+    list_prompts,
+    update_prompt,
+)
 from .tickets.store import (
     create_ticket,
     delete_ticket,
@@ -275,6 +282,49 @@ async def update_ticket_route(tid: str, body: dict):
 def delete_ticket_route(tid: str):
     if not delete_ticket(tid):
         raise HTTPException(status_code=404, detail="Ticket not found")
+    return {"ok": True}
+
+
+@app.get("/v1/image-prompts")
+def get_image_prompts():
+    return {"prompts": list_prompts()}
+
+
+@app.post("/v1/image-prompts", status_code=201)
+async def create_image_prompt(body: dict):
+    try:
+        return create_prompt(
+            name=body.get("name", ""),
+            prompt=body.get("prompt", ""),
+            workflow=body.get("workflow"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/v1/image-prompts/{prompt_id}")
+def get_image_prompt(prompt_id: str):
+    p = get_prompt(prompt_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Image prompt not found")
+    return p
+
+
+@app.put("/v1/image-prompts/{prompt_id}", status_code=200)
+async def update_image_prompt(prompt_id: str, body: dict):
+    try:
+        result = update_prompt(prompt_id, **body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if result is None:
+        raise HTTPException(status_code=404, detail="Image prompt not found")
+    return result
+
+
+@app.delete("/v1/image-prompts/{prompt_id}", status_code=200)
+def remove_image_prompt(prompt_id: str):
+    if not delete_prompt(prompt_id):
+        raise HTTPException(status_code=404, detail="Image prompt not found")
     return {"ok": True}
 
 

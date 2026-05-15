@@ -23,6 +23,7 @@
 | `app/chain/context.py` | `resolve_context_ids()` |
 | `app/chain/context_library.py` | Context item CRUD (JSON index) |
 | `app/tickets/store.py` | Ticket queue CRUD + reorder + `next_ticket()` (JSON index) |
+| `app/image_prompts.py` | Saved image prompt CRUD (JSON index) — name/prompt/workflow |
 | `app/chain/template.py` | `render_template()` — vars: `{{input}}` `{{previous}}` `{{context}}` `{{step_index}}` `{{step_name}}` |
 | `app/chain/llm_client.py` | `OpenAICompatibleLLMClient` — uses `httpx`, not `requests` |
 | `app/mcp/registry.py` | Hardcoded tool definitions (`random_integer`, `generate_name`, `format_voice_segments`) |

@@ -153,6 +153,18 @@ Serve any file inside the job directory. `path` may include slashes (e.g., `step
 | GET | `/v1/ticks/{id}/recent-jobs` | Jobs fired by this tick |
 | POST | `/v1/ticks/preview` | Preview next 3 fires for a cron expression |
 
+## Image prompts
+
+Saved text prompts for image generation. `workflow` is optional — `null` means generic, otherwise the workflow name as context. Names are auto-deduplicated (`Foo`, `Foo (2)`, …).
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/image-prompts` | List → `{ prompts: [...] }` |
+| POST | `/v1/image-prompts` | `{ name, prompt, workflow? }` |
+| GET | `/v1/image-prompts/{id}` | Fetch one |
+| PUT | `/v1/image-prompts/{id}` | Partial update (`name`, `prompt`, `workflow`) |
+| DELETE | `/v1/image-prompts/{id}` | Remove |
+
 ## Voice presets
 
 | Method | Path | |
