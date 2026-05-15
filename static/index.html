@@ -29,6 +29,9 @@
     .slide-row {
       display: flex; gap: 0; align-items: stretch;
     }
+    .slide-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
 
     .slide-card {
       flex: 1; padding: 28px 32px; cursor: pointer;
@@ -38,6 +41,7 @@
     }
     .slide-card:first-child { margin-left: 0; }
     .slide-card:last-child  { margin-right: 0; }
+    .slide-grid > .slide-card { margin: 0; }
     .slide-card:hover { background: #141414; border-color: #2a2a2a; }
     .slide-card:hover .slide-arrow { opacity: 1; transform: translateX(4px); }
 
@@ -62,6 +66,7 @@
     @media (max-width: 768px) {
       .slide { padding: 0 20px !important; justify-content: flex-start; padding-top: 80px !important; }
       .slide-row { flex-direction: column; gap: 10px; }
+      .slide-grid { grid-template-columns: 1fr; gap: 10px; }
       .slide-card { margin: 0 !important; padding: 18px 20px; }
       .slide-label { font-size: 1.4rem; margin-bottom: 6px; }
       .slide-desc { font-size: 0.85rem; }
@@ -102,10 +107,15 @@
     <!-- Slide 2: Tools -->
     <div class="slide">
       <div class="slide-group-label">Tools</div>
-      <div class="slide-row">
+      <div class="slide-grid">
         <div class="slide-card" onclick="location.href='/context/'">
           <div class="slide-label">Context</div>
           <div class="slide-desc">Manage context documents.<br>Attach them to chain steps.</div>
+          <div class="slide-arrow">&#8594;</div>
+        </div>
+        <div class="slide-card" onclick="location.href='/wildcards/'">
+          <div class="slide-label">Wildcards</div>
+          <div class="slide-desc">Define %%token%% replacements.<br>Randomised at submit time.</div>
           <div class="slide-arrow">&#8594;</div>
         </div>
         <div class="slide-card" onclick="location.href='/ticks'">

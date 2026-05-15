@@ -22,6 +22,7 @@ from .chain.context_library import (
 from .chain.executor import execute_chain_job, list_chain_steps, patch_initial_chain_status
 from .chain.models import ChainJobRequest
 from .chain.sequences import delete_sequence, duplicate_sequence, list_sequences, save_sequence
+from .wildcards import create_wildcard, delete_wildcard, list_wildcards, update_wildcard
 from .comfyui.config import get_config as get_comfy_config
 from .comfyui.manager import get_manager as get_comfy_manager
 from .comfyui.router import router as comfyui_router
@@ -240,6 +241,34 @@ async def update_context_item(item_id: str, body: dict):
 def remove_context_item(item_id: str):
     if not delete_item(item_id):
         raise HTTPException(status_code=404, detail="Context item not found")
+    return {"ok": True}
+
+
+@app.get("/v1/wildcards")
+def get_wildcards():
+    return {"wildcards": list_wildcards()}
+
+
+@app.post("/v1/wildcards", status_code=201)
+async def create_wildcard_route(body: dict):
+    return create_wildcard(
+        name=body.get("name", ""),
+        entries=body.get("entries", []),
+    )
+
+
+@app.put("/v1/wildcards/{wid}", status_code=200)
+async def update_wildcard_route(wid: str, body: dict):
+    result = update_wildcard(wid, name=body.get("name", ""), entries=body.get("entries", []))
+    if result is None:
+        raise HTTPException(status_code=404, detail="Wildcard not found")
+    return result
+
+
+@app.delete("/v1/wildcards/{wid}", status_code=200)
+def remove_wildcard(wid: str):
+    if not delete_wildcard(wid):
+        raise HTTPException(status_code=404, detail="Wildcard not found")
     return {"ok": True}
 
 

@@ -16,13 +16,12 @@
     // ── Tabs ─────────────────────────────────────────────────────────
     function switchTab(tab) {
       _activeTab = tab;
-      const _tabs = ['chain', 'sequences', 'wildcards'];
+      const _tabs = ['chain', 'sequences'];
       document.querySelectorAll('#chain-tabs .tab-btn').forEach((b, i) =>
         b.classList.toggle('active', _tabs[i] === tab)
       );
       document.getElementById('chain-panel').style.display     = tab === 'chain'     ? '' : 'none';
       document.getElementById('sequences-panel').style.display = tab === 'sequences' ? '' : 'none';
-      document.getElementById('wildcards-panel').style.display = tab === 'wildcards' ? '' : 'none';
     }
 
     // ── LLM Presets (server-side, used silently at submit time) ──────
@@ -606,8 +605,14 @@
         msg.textContent = 'No LLM preset configured — add one in Server → LLM.';
         return;
       }
+      for (const step of steps) {
+        if (step.prompt)     step.prompt     = await resolveWildcards(step.prompt);
+        if (step.voice_pre)  step.voice_pre  = await resolveWildcards(step.voice_pre);
+        if (step.voice_post) step.voice_post = await resolveWildcards(step.voice_post);
+        if (step.ctx_pre)    step.ctx_pre    = await resolveWildcards(step.ctx_pre);
+        if (step.ctx_post)   step.ctx_post   = await resolveWildcards(step.ctx_post);
+      }
       const body = {
-        input: '',
         llm: {
           api_base:    _defPreset.api_base,
           model:       _defPreset.model,

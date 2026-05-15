@@ -103,7 +103,7 @@
       document.getElementById('duration-warn').style.display = 'none';
       document.getElementById('save-wrap').style.display = 'none';
       _createJobId = null; msg.textContent = '';
-      const text = document.getElementById('create-text').value.trim();
+      const text = await resolveWildcards(document.getElementById('create-text').value.trim());
       if (!text) { msg.style.color = '#e44'; msg.textContent = 'Enter sample text first.'; return; }
       const body = {
         text,
@@ -255,7 +255,7 @@
       const autoSeg = document.getElementById('use-auto-segment').checked;
       let body;
       if (autoSeg) {
-        const text = document.getElementById('use-auto-text').value.trim();
+        const text = await resolveWildcards(document.getElementById('use-auto-text').value.trim());
         if (!text) { msg.style.color = '#e44'; msg.textContent = 'Enter transcript text.'; return; }
         const segPreset = _getSegPreset();
         if (!segPreset) { msg.style.color = '#e44'; msg.textContent = 'No LLM preset — add one in the Chain page first.'; return; }
@@ -274,8 +274,9 @@
         if (lang && lang !== 'Auto') body.language = lang;
       } else {
         const segsContainer = document.getElementById('use-segments-list');
-        const segments = vsCollectSegments(segsContainer);
-        if (segments.length === 0) { msg.style.color = '#e44'; msg.textContent = 'Enter text in at least one segment.'; return; }
+        const rawSegments = vsCollectSegments(segsContainer);
+        if (rawSegments.length === 0) { msg.style.color = '#e44'; msg.textContent = 'Enter text in at least one segment.'; return; }
+        const segments = await Promise.all(rawSegments.map(async s => ({ ...s, text: await resolveWildcards(s.text) })));
         segments[segments.length - 1].delay_ms = 0;
         body = {
           segments,

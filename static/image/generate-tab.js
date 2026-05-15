@@ -97,7 +97,7 @@ async function submitGenerate() {
   const workflow = sel.value;
   if (!workflow) return;
 
-  const prompt = (document.getElementById('gen-prompt').value || '').trim();
+  const prompt = await resolveWildcards((document.getElementById('gen-prompt').value || '').trim());
   const statusEl = document.getElementById('gen-status');
   const imagesEl = document.getElementById('gen-images');
   imagesEl.innerHTML = '';
