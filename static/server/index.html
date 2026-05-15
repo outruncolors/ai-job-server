@@ -10,73 +10,247 @@
 <body>
 
 <div id="toast-stack"></div>
-
 <nav id="topnav"></nav>
 
-<div id="panels">
-  <div id="panel-left">
+<div id="tab-bar">
+  <button class="tab-btn active" data-tab="web"    onclick="switchTab('web')">Web</button>
+  <button class="tab-btn"        data-tab="llm"    onclick="switchTab('llm')">LLM</button>
+  <button class="tab-btn"        data-tab="comfyui" onclick="switchTab('comfyui')">ComfyUI</button>
+</div>
 
-    <div class="panel-section">
-      <p class="section-label">Resources</p>
-      <div class="stat-grid">
-        <div class="stat-row">
-          <span class="stat-label">CPU</span>
-          <div class="stat-bar-wrap"><div class="stat-bar" id="bar-cpu"></div></div>
-          <span class="stat-val" id="val-cpu">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Memory</span>
-          <div class="stat-bar-wrap"><div class="stat-bar" id="bar-mem"></div></div>
-          <span class="stat-val" id="val-mem">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Disk</span>
-          <div class="stat-bar-wrap"><div class="stat-bar" id="bar-disk"></div></div>
-          <span class="stat-val" id="val-disk">—</span>
+<!-- ── Web tab ────────────────────────────────────────────────────── -->
+<div id="tab-web" class="tab-pane active" role="tabpanel">
+  <div id="panels">
+    <div id="panel-left">
+
+      <div class="panel-section">
+        <p class="section-label">Resources</p>
+        <div class="stat-grid">
+          <div class="stat-row">
+            <span class="stat-label">CPU</span>
+            <div class="stat-bar-wrap"><div class="stat-bar" id="bar-cpu"></div></div>
+            <span class="stat-val" id="val-cpu">—</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Memory</span>
+            <div class="stat-bar-wrap"><div class="stat-bar" id="bar-mem"></div></div>
+            <span class="stat-val" id="val-mem">—</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Disk</span>
+            <div class="stat-bar-wrap"><div class="stat-bar" id="bar-disk"></div></div>
+            <span class="stat-val" id="val-disk">—</span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="panel-section">
-      <p class="section-label">Jobs</p>
-      <div class="jobs-counts" id="jobs-counts">
-        <div class="count-badge"><div class="count-num" style="color:#777" id="cnt-queued">—</div><div class="count-lbl">Queued</div></div>
-        <div class="count-badge"><div class="count-num" style="color:#fa0" id="cnt-running">—</div><div class="count-lbl">Running</div></div>
-        <div class="count-badge"><div class="count-num" style="color:#2a6" id="cnt-done">—</div><div class="count-lbl">Done</div></div>
-        <div class="count-badge"><div class="count-num" style="color:#e44" id="cnt-failed">—</div><div class="count-lbl">Failed</div></div>
+      <div class="panel-section">
+        <p class="section-label">Jobs</p>
+        <div class="jobs-counts" id="jobs-counts">
+          <div class="count-badge"><div class="count-num" style="color:#777" id="cnt-queued">—</div><div class="count-lbl">Queued</div></div>
+          <div class="count-badge"><div class="count-num" style="color:#fa0" id="cnt-running">—</div><div class="count-lbl">Running</div></div>
+          <div class="count-badge"><div class="count-num" style="color:#2a6" id="cnt-done">—</div><div class="count-lbl">Done</div></div>
+          <div class="count-badge"><div class="count-num" style="color:#e44" id="cnt-failed">—</div><div class="count-lbl">Failed</div></div>
+        </div>
       </div>
+
+      <div style="font-size:0.66rem;color:#2a2a2a;margin-top:-16px;" id="refresh-hint">auto-refresh every 5s</div>
+
     </div>
 
-    <div style="font-size:0.66rem;color:#2a2a2a;margin-top:-16px;" id="refresh-hint">auto-refresh every 5s</div>
+    <div id="panel-right">
 
+      <div class="panel-section">
+        <p class="section-label">Server Info</p>
+        <div class="info-grid" id="server-info">
+          <div class="info-row"><span class="info-key">Hostname</span><span class="info-val" id="info-hostname">—</span></div>
+          <div class="info-row"><span class="info-key">Python</span><span class="info-val" id="info-python">—</span></div>
+          <div class="info-row"><span class="info-key">Uptime</span><span class="info-val" id="info-uptime">—</span></div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <p class="section-label">Actions</p>
+        <button id="restart-btn" class="danger" onclick="doRestart()">Restart Server</button>
+        <p class="msg" id="action-msg"></p>
+      </div>
+
+      <div class="panel-section">
+        <p class="section-label">Recent Actions</p>
+        <div id="action-log"><div class="log-entry" style="color:#2a2a2a">No actions yet.</div></div>
+      </div>
+
+    </div>
   </div>
+</div>
 
-  <div id="panel-right">
-
-    <div class="panel-section">
-      <p class="section-label">Server Info</p>
-      <div class="info-grid" id="server-info">
-        <div class="info-row"><span class="info-key">Hostname</span><span class="info-val" id="info-hostname">—</span></div>
-        <div class="info-row"><span class="info-key">Python</span><span class="info-val" id="info-python">—</span></div>
-        <div class="info-row"><span class="info-key">Uptime</span><span class="info-val" id="info-uptime">—</span></div>
+<!-- ── LLM tab ────────────────────────────────────────────────────── -->
+<div id="tab-llm" class="tab-pane" role="tabpanel">
+  <div id="panels">
+    <div id="panel-left" style="min-width:260px;max-width:320px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <p class="section-label" style="margin:0;">LLM Presets</p>
+        <button class="secondary" onclick="newLlmPreset()" style="margin:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
       </div>
+      <div id="llm-preset-list"></div>
+    </div>
+    <div id="panel-right">
+      <p class="section-label" id="llm-form-heading" style="margin-bottom:14px;">New Preset</p>
+
+      <label>Name</label>
+      <input id="llm-name" type="text" placeholder="e.g. Local Gemma">
+
+      <label>API Base URL</label>
+      <input id="llm-api-base" type="text" placeholder="http://debian1.local:11434/v1">
+
+      <label>Model</label>
+      <input id="llm-model" type="text" placeholder="gemma4">
+
+      <div class="row" style="display:flex;gap:10px;margin-top:4px;">
+        <div style="flex:1;">
+          <label>Temperature (0–2)</label>
+          <input id="llm-temp" type="number" step="0.1" min="0" max="2" value="0.7">
+        </div>
+        <div style="flex:1;">
+          <label>Max Tokens</label>
+          <input id="llm-max-tokens" type="number" min="1" value="2048">
+        </div>
+        <div style="flex:1;">
+          <label>Timeout (s)</label>
+          <input id="llm-timeout" type="number" min="1" value="120">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+        <button onclick="saveLlmPreset()">Save</button>
+        <button id="llm-default-btn" class="secondary" onclick="toggleLlmDefault()" style="display:none;">Set as Default</button>
+        <button id="llm-delete-btn"  class="danger"    onclick="deleteLlmPreset()"  style="display:none;">Delete</button>
+      </div>
+      <div id="llm-msg" class="msg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── ComfyUI tab ────────────────────────────────────────────────── -->
+<div id="tab-comfyui" class="tab-pane" role="tabpanel">
+  <div id="panels">
+    <div id="panel-left">
+      <p class="section-label">STATUS</p>
+      <div class="status-card">
+        <div class="status-row">
+          <span id="comfy-indicator" class="indicator stopped"></span>
+          <span id="comfy-label">Stopped</span>
+        </div>
+        <div class="status-detail" id="comfy-detail"></div>
+      </div>
+
+      <p class="section-label" style="margin-top:20px;">GPU</p>
+      <div class="status-card">
+        <div id="comfy-gpu-detail">—</div>
+      </div>
+
+      <p class="section-label" style="margin-top:20px;">QUEUE</p>
+      <div id="comfy-queue">—</div>
     </div>
 
-    <div class="panel-section">
-      <p class="section-label">Actions</p>
-      <button id="restart-btn" class="danger" onclick="doRestart()">Restart Server</button>
-      <p class="msg" id="action-msg"></p>
-    </div>
+    <div id="panel-right">
+      <p class="section-label">ACTIONS</p>
+      <div class="button-row" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button id="comfy-btn-start"   onclick="comfyStart()">Start</button>
+        <button id="comfy-btn-stop"    onclick="comfyStop()"    class="danger"     disabled>Stop</button>
+        <button id="comfy-btn-restart" onclick="comfyRestart()" class="secondary"  disabled>Restart</button>
+      </div>
+      <a class="comfy-editor-link" href="#" target="_blank" rel="noopener"
+         style="display:inline-block;margin-top:12px;color:#2a6;font-size:0.85rem;">
+        Open ComfyUI Editor ↗
+      </a>
 
-    <div class="panel-section">
-      <p class="section-label">Recent Actions</p>
-      <div id="action-log"><div class="log-entry" style="color:#2a2a2a">No actions yet.</div></div>
-    </div>
+      <p class="section-label" style="margin-top:24px;">ACTION LOG</p>
+      <div id="comfy-action-log" class="action-log" style="max-height:200px;overflow-y:auto;">
+        <div style="color:#2a2a2a;" class="log-entry">No actions yet.</div>
+      </div>
 
+      <p class="section-label" style="margin-top:24px;">CONFIG</p>
+      <div style="font-size:0.74rem;color:#555;margin-bottom:10px;">Changes take effect after restarting ComfyUI.</div>
+
+      <label>ComfyUI Root</label>
+      <input id="cfg-comfyui_root" type="text">
+
+      <label>Venv Python</label>
+      <input id="cfg-venv_python" type="text">
+
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;">
+          <label>Host</label>
+          <input id="cfg-host" type="text">
+        </div>
+        <div style="flex:0 0 90px;">
+          <label>Port</label>
+          <input id="cfg-port" type="number">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;">
+          <label>VRAM Mode</label>
+          <select id="cfg-vram_mode">
+            <option value="highvram">highvram</option>
+            <option value="normalvram">normalvram</option>
+            <option value="lowvram">lowvram</option>
+            <option value="novram">novram</option>
+          </select>
+        </div>
+        <div style="flex:0 0 110px;">
+          <label>Reserve VRAM (GB)</label>
+          <input id="cfg-reserve_vram_gb" type="number" step="0.5">
+        </div>
+      </div>
+
+      <label>Preview Method</label>
+      <select id="cfg-preview_method">
+        <option value="none">none</option>
+        <option value="auto">auto</option>
+        <option value="latent2rgb">latent2rgb</option>
+        <option value="taesd">taesd</option>
+      </select>
+
+      <label>Output Directory</label>
+      <input id="cfg-output_dir" type="text">
+
+      <label>Input Directory</label>
+      <input id="cfg-input_dir" type="text">
+
+      <label>Models Root</label>
+      <input id="cfg-models_root" type="text">
+
+      <label>Extra Model Paths YAML</label>
+      <input id="cfg-extra_model_paths_yaml" type="text">
+
+      <label>Default Workflow</label>
+      <input id="cfg-default_workflow" type="text" placeholder="(leave blank for none)">
+
+      <label class="check-label" style="margin-top:10px;">
+        <input id="cfg-autostart" type="checkbox">
+        Auto-start ComfyUI with server
+      </label>
+
+      <label class="check-label">
+        <input id="cfg-use_sage_attention" type="checkbox">
+        Use SageAttention (--use-sage-attention)
+      </label>
+
+      <label style="margin-top:14px;">Extra Launch Args (one per line)</label>
+      <textarea id="cfg-extra_args" rows="4" placeholder="--verbose INFO"></textarea>
+
+      <button onclick="saveComfyConfig()" style="margin-top:12px;">Save Config</button>
+      <div id="comfy-cfg-msg" class="msg"></div>
+    </div>
   </div>
 </div>
 
 <script src="/js/nav.js"></script>
+<script src="comfyui-tab.js"></script>
+<script src="llm-tab.js"></script>
 <script src="server.js"></script>
 <script src="/js/nav-mobile.js"></script>
 </body>

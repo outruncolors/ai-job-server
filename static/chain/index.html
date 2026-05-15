@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Chain Jobs · AI Job Server</title>
+  <title>Text · AI Job Server</title>
   <link rel="stylesheet" href="/css/responsive.css">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -18,64 +18,25 @@
 
       <div id="recreate-notice" class="recreate-notice" style="display:none;"></div>
       <div id="chain-tabs">
-        <button class="tab-btn active" onclick="switchTab('llm')">LLM</button>
-        <button class="tab-btn" onclick="switchTab('chain')">Chain</button>
-      </div>
-
-      <!-- ── LLM Tab ── -->
-      <div id="llm-panel">
-        <label>Preset</label>
-        <select id="chain-preset-select" onchange="applyChainPreset()">
-          <option value="">— select preset —</option>
-        </select>
-        <div class="preset-save-row" style="margin-top:6px;">
-          <input id="chain-preset-name" type="text" placeholder="Preset name…">
-          <button class="secondary" onclick="saveChainPreset()">Save</button>
-          <button class="danger" onclick="deleteChainPreset()">Del</button>
-        </div>
-
-        <div class="row" style="margin-top:14px;">
-          <div>
-            <label>API Base URL</label>
-            <input id="chain-api-base" type="text" value="http://debian1.local:11434/v1">
-          </div>
-          <div>
-            <label>Model</label>
-            <input id="chain-model" type="text" placeholder="gemma4">
-          </div>
-        </div>
-        <div class="row">
-          <div>
-            <label>Temperature (0–2)</label>
-            <input id="chain-temp" type="number" step="0.1" min="0" max="2" value="0.7">
-          </div>
-          <div>
-            <label>Max Tokens</label>
-            <input id="chain-max-tokens" type="number" min="1" value="2048">
-          </div>
-        </div>
+        <button class="tab-btn active" onclick="switchTab('chain')">Chain</button>
+        <button class="tab-btn" onclick="switchTab('sequences')">Sequences</button>
+        <button class="tab-btn" onclick="switchTab('wildcards')">Wildcards</button>
       </div>
 
       <!-- ── Chain Tab ── -->
-      <div id="chain-panel" style="display:none;">
-        <div id="seq-bar">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <span class="section-label">SEQUENCES</span>
-            <button class="secondary" onclick="_newSeq()"
-                    style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
+      <div id="chain-panel">
+
+        <!-- Sequence edit bar (shown when editing or creating a sequence) -->
+        <div id="seq-edit-bar" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #1a1a1a;">
+          <div id="seq-name-row">
+            <input id="chain-seq-name" type="text" placeholder="Sequence name…">
+            <button class="secondary" onclick="saveSeq()">Save</button>
+            <button class="secondary" onclick="_cancelSeqEdit()">Cancel</button>
           </div>
-          <div id="seq-list" style="margin-bottom:10px;"></div>
-          <div id="seq-edit-bar" style="display:none;">
-            <div id="seq-name-row">
-              <input id="chain-seq-name" type="text" placeholder="Sequence name…">
-              <button class="secondary" onclick="saveSeq()">Save</button>
-              <button class="secondary" onclick="_cancelSeqEdit()">Cancel</button>
-            </div>
-            <div id="seq-edit-msg" class="msg" style="color:#fa0;"></div>
-          </div>
+          <div id="seq-edit-msg" class="msg" style="color:#fa0;"></div>
         </div>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:8px;">
           <span class="section-label">STEPS</span>
           <button class="secondary" onclick="addChainStep()"
                   style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ Add Step</button>
@@ -83,6 +44,21 @@
         <div id="chain-steps-list"></div>
 
         <button onclick="submitChain()" style="margin-top:16px;">Run Chain</button>
+      </div>
+
+      <!-- ── Sequences Tab ── -->
+      <div id="sequences-panel" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <span class="section-label">SEQUENCES</span>
+          <button class="secondary" onclick="_newSeq()"
+                  style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
+        </div>
+        <div id="seq-list"></div>
+      </div>
+
+      <!-- ── Wildcards Tab ── -->
+      <div id="wildcards-panel" style="display:none;">
+        <p style="color:#333;font-size:0.8rem;margin-top:8px;">Wildcards — coming soon.</p>
       </div>
 
     </div>

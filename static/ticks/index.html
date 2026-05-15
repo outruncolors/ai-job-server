@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Ticks · AI Job Server</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <nav id="topnav"></nav>
+
+  <div id="panels">
+
+    <!-- Left: tick list -->
+    <div id="panel-left">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span class="section-label">TICKS</span>
+        <button class="secondary" onclick="newTick()" style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
+      </div>
+      <div id="tick-list">
+        <div id="tick-empty">No ticks yet. Click + New to create one.</div>
+      </div>
+    </div>
+
+    <!-- Right: editor form -->
+    <div id="panel-right">
+      <h2 id="form-heading" style="font-size:1rem;color:#888;font-weight:normal;margin-bottom:16px;">New Tick</h2>
+
+      <label>Name</label>
+      <input id="f-name" type="text" placeholder="e.g. Daily summary">
+
+      <label>Sequence <a href="/chain" style="color:#2a6;font-size:0.68rem;float:right;font-weight:normal;">manage ↗</a></label>
+      <select id="f-sequence">
+        <option value="">— select a sequence —</option>
+      </select>
+
+      <!-- Schedule: interval or cron -->
+      <div id="sched-bar" style="display:flex;align-items:center;gap:10px;margin-top:14px;margin-bottom:6px;">
+        <span class="section-label" style="margin:0;">SCHEDULE</span>
+        <button id="sched-mode-btn" class="secondary" onclick="toggleSchedMode()"
+                style="margin:0;padding:2px 8px;font-size:0.68rem;">cron mode</button>
+      </div>
+
+      <!-- Interval mode -->
+      <div id="sched-interval">
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <div>
+            <label>Every</label>
+            <input id="f-interval-count" type="number" min="1" value="1" style="width:64px;">
+          </div>
+          <div style="flex:1;">
+            <label>&nbsp;</label>
+            <select id="f-interval-unit">
+              <option value="minute">Minute(s)</option>
+              <option value="hour">Hour(s)</option>
+              <option value="day" selected>Day(s)</option>
+              <option value="week">Week(s)</option>
+            </select>
+          </div>
+        </div>
+        <div id="anchor-row" style="margin-top:8px;display:none;">
+          <label>At (HH:MM UTC)</label>
+          <input id="f-anchor" type="time" value="09:00">
+        </div>
+      </div>
+
+      <!-- Cron mode -->
+      <div id="sched-cron" style="display:none;">
+        <label>Cron expression</label>
+        <input id="f-cron" type="text" placeholder="0 9 * * *" oninput="previewCron()">
+        <div id="cron-preview" style="font-size:0.72rem;color:#555;margin-top:4px;min-height:1.4em;"></div>
+      </div>
+
+      <label class="check-label" style="margin-top:14px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="f-enabled" checked>
+        Enabled
+      </label>
+
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+        <button onclick="saveTick()">Save</button>
+        <button class="secondary" onclick="cancelForm()">Cancel</button>
+        <button class="danger" id="btn-delete" style="display:none;" onclick="deleteTick()">Delete</button>
+      </div>
+      <div id="form-msg" class="msg"></div>
+
+      <!-- Recent jobs (shown when editing) -->
+      <div id="recent-jobs-section" style="display:none;margin-top:28px;">
+        <p class="section-label" style="margin-bottom:8px;">RECENT JOBS</p>
+        <div id="recent-jobs-list"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/js/nav.js"></script>
+  <script src="ticks.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

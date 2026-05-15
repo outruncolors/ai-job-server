@@ -27,7 +27,12 @@ def find_job_dir(job_id: str) -> Optional[Path]:
     return None
 
 
-def create_job(job_type: str, request_data: dict[str, Any], input_text: str) -> dict[str, Any]:
+def create_job(
+    job_type: str,
+    request_data: dict[str, Any],
+    input_text: str,
+    extra_meta: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     job_dir = _today_dir() / job_id
@@ -42,8 +47,11 @@ def create_job(job_type: str, request_data: dict[str, Any], input_text: str) -> 
         "error": None,
     }
 
+    request_doc: dict[str, Any] = {"job_type": job_type, "requested": request_data}
+    if extra_meta:
+        request_doc.update(extra_meta)
     (job_dir / "request.json").write_text(
-        json.dumps({"job_type": job_type, "requested": request_data}, indent=2),
+        json.dumps(request_doc, indent=2),
         encoding="utf-8",
     )
     (job_dir / "input.txt").write_text(input_text, encoding="utf-8")

@@ -247,6 +247,22 @@
     }
   }
 
+  // ── Tab switching ──────────────────────────────────────────────────────────
+
+  let _activeTab = 'web';
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    const pane = document.getElementById('tab-' + name);
+    const btn  = document.querySelector('.tab-btn[data-tab="' + name + '"]');
+    if (pane) pane.classList.add('active');
+    if (btn)  btn.classList.add('active');
+    _activeTab = name;
+    if (name === 'comfyui') onComfyTabActive();
+    if (name === 'llm')     onLlmTabActive();
+  }
+
   // ── Auto-refresh & init ────────────────────────────────────────────────────
 
   const _statsInterval = setInterval(loadStats, 5000);
@@ -257,4 +273,6 @@
     clearTimeout(_reconnTimer);
   });
 
+  initComfyTab();
+  initLlmTab();
   loadStats();

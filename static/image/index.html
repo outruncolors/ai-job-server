@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Image · AI Job Server</title>
+  <title>Visual · AI Job Server</title>
   <link rel="stylesheet" href="/css/responsive.css">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -11,175 +11,34 @@
 
   <nav id="topnav"></nav>
 
-  <div id="tab-bar">
-    <button class="tab-btn active" data-tab="generate" onclick="switchTab('generate')">Generate</button>
-    <button class="tab-btn"        data-tab="server"   onclick="switchTab('server')">Server</button>
-    <button class="tab-btn"        data-tab="workflows" onclick="switchTab('workflows')">Workflows</button>
-    <button class="tab-btn"        data-tab="config"   onclick="switchTab('config')">Config</button>
-  </div>
+  <div id="panels">
+    <div id="panel-left">
+      <div id="recreate-notice" class="recreate-notice" style="display:none;"></div>
+      <label>Workflow</label>
+      <select id="gen-workflow" onchange="onWorkflowChange()">
+        <option value="">— select a workflow —</option>
+      </select>
 
-  <!-- ── Generate ─────────────────────────────────────────────────── -->
-  <div id="tab-generate" class="tab-pane active" role="tabpanel">
-    <div id="panels">
-      <div id="panel-left">
-        <div id="recreate-notice" class="recreate-notice" style="display:none;"></div>
-        <label>Workflow</label>
-        <select id="gen-workflow" onchange="onWorkflowChange()">
-          <option value="">— select a workflow —</option>
-        </select>
+      <label>Prompt</label>
+      <textarea id="gen-prompt" rows="4" placeholder="Describe the image…"></textarea>
 
-        <label>Prompt</label>
-        <textarea id="gen-prompt" rows="4" placeholder="Describe the image…"></textarea>
+      <div id="gen-workflow-error" class="msg" style="color:#c44;display:none;"></div>
 
-        <div id="gen-workflow-error" class="msg" style="color:#c44;display:none;"></div>
-
-        <button id="gen-submit" onclick="submitGenerate()" disabled style="margin-top:20px;">
-          Generate
-        </button>
-      </div>
-      <div id="panel-right">
-        <p class="section-label">OUTPUT</p>
-        <div id="gen-status" class="msg"></div>
-        <div id="gen-images"></div>
-      </div>
+      <button id="gen-submit" onclick="submitGenerate()" disabled style="margin-top:20px;">
+        Generate
+      </button>
     </div>
-  </div>
-
-  <!-- ── Server ────────────────────────────────────────────────────── -->
-  <div id="tab-server" class="tab-pane" role="tabpanel">
-    <div id="panels">
-      <div id="panel-left">
-        <p class="section-label">STATUS</p>
-        <div id="srv-status-card" class="status-card">
-          <div class="status-row">
-            <span id="srv-indicator" class="indicator stopped"></span>
-            <span id="srv-label">Stopped</span>
-          </div>
-          <div class="status-detail" id="srv-detail"></div>
-        </div>
-
-        <p class="section-label" style="margin-top:20px;">GPU</p>
-        <div id="srv-gpu-card" class="status-card">
-          <div id="srv-gpu-detail">—</div>
-        </div>
-
-        <p class="section-label" style="margin-top:20px;">QUEUE</p>
-        <div id="srv-queue">—</div>
-      </div>
-
-      <div id="panel-right">
-        <p class="section-label">ACTIONS</p>
-        <div class="button-row">
-          <button id="srv-btn-start"   onclick="doStart()">Start</button>
-          <button id="srv-btn-stop"    onclick="doStop()"    class="danger" disabled>Stop</button>
-          <button id="srv-btn-restart" onclick="doRestart()" class="secondary" disabled>Restart</button>
-        </div>
-        <a id="srv-ui-link" href="#" target="_blank" rel="noopener"
-           style="display:inline-block;margin-top:12px;color:#2a6;font-size:0.85rem;">
-          Open ComfyUI Editor ↗
-        </a>
-
-        <p class="section-label" style="margin-top:24px;">ACTION LOG</p>
-        <div id="srv-action-log" class="action-log">
-          <div style="color:#2a2a2a;">No actions yet.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Workflows ─────────────────────────────────────────────────── -->
-  <div id="tab-workflows" class="tab-pane" role="tabpanel">
-    <div id="wf-header" style="padding:16px 20px 0;">
-      <p style="margin:0 0 6px;color:#888;font-size:0.82rem;">
-        Save API-format workflow JSON files to <code>config/comfyui-workflows/</code> to register them.
-        <a id="wf-editor-link" href="#" target="_blank" rel="noopener" style="color:#2a6;">
-          Open ComfyUI Editor ↗
-        </a>
-      </p>
-    </div>
-    <div id="wf-list" style="padding:12px 20px;"></div>
-  </div>
-
-  <!-- ── Config ────────────────────────────────────────────────────── -->
-  <div id="tab-config" class="tab-pane" role="tabpanel">
-    <div id="panels">
-      <div id="panel-left">
-        <div class="info-banner">Changes take effect after restarting ComfyUI.</div>
-
-        <label>ComfyUI Root</label>
-        <input id="cfg-comfyui_root" type="text">
-
-        <label>Venv Python</label>
-        <input id="cfg-venv_python" type="text">
-
-        <label>Host</label>
-        <input id="cfg-host" type="text">
-
-        <label>Port</label>
-        <input id="cfg-port" type="number">
-
-        <label>VRAM Mode</label>
-        <select id="cfg-vram_mode">
-          <option value="highvram">highvram</option>
-          <option value="normalvram">normalvram</option>
-          <option value="lowvram">lowvram</option>
-          <option value="novram">novram</option>
-        </select>
-
-        <label>Reserve VRAM (GB)</label>
-        <input id="cfg-reserve_vram_gb" type="number" step="0.5">
-
-        <label>Preview Method</label>
-        <select id="cfg-preview_method">
-          <option value="none">none</option>
-          <option value="auto">auto</option>
-          <option value="latent2rgb">latent2rgb</option>
-          <option value="taesd">taesd</option>
-        </select>
-
-        <label>Output Directory</label>
-        <input id="cfg-output_dir" type="text">
-
-        <label>Input Directory</label>
-        <input id="cfg-input_dir" type="text">
-
-        <label>Models Root</label>
-        <input id="cfg-models_root" type="text">
-
-        <label>Extra Model Paths YAML</label>
-        <input id="cfg-extra_model_paths_yaml" type="text">
-
-        <label>Default Workflow</label>
-        <input id="cfg-default_workflow" type="text" placeholder="(leave blank for none)">
-      </div>
-
-      <div id="panel-right">
-        <label class="check-label" style="margin-top:0;">
-          <input id="cfg-autostart" type="checkbox">
-          Auto-start ComfyUI with server
-        </label>
-
-        <label class="check-label">
-          <input id="cfg-use_sage_attention" type="checkbox">
-          Use SageAttention (--use-sage-attention)
-        </label>
-
-        <label style="margin-top:24px;">Extra Launch Args (one per line)</label>
-        <textarea id="cfg-extra_args" rows="4" placeholder="--verbose INFO"></textarea>
-
-        <button onclick="saveConfig()" style="margin-top:20px;">Save Config</button>
-        <div id="cfg-msg" class="msg" style="margin-top:10px;"></div>
-      </div>
+    <div id="panel-right">
+      <p class="section-label">OUTPUT</p>
+      <div id="gen-status" class="msg"></div>
+      <div id="gen-images"></div>
     </div>
   </div>
 
   <div id="toast-stack"></div>
 
   <script src="/js/nav.js"></script>
-  <script src="server-tab.js"></script>
   <script src="generate-tab.js"></script>
-  <script src="workflows-tab.js"></script>
-  <script src="config-tab.js"></script>
   <script src="image.js"></script>
   <script src="/js/nav-mobile.js"></script>
 </body>

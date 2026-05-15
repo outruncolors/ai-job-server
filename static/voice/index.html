@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Voice · AI Job Server</title>
+  <title>Audio · AI Job Server</title>
   <link rel="stylesheet" href="/css/responsive.css">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -18,16 +18,14 @@
 
       <div id="recreate-notice" class="recreate-notice" style="display:none;"></div>
       <div id="voice-tabs">
-        <button class="tab-btn active" onclick="switchTab('create')">Create Voice</button>
+        <button class="tab-btn active" onclick="switchTab('design')">Design Voice</button>
+        <button class="tab-btn" onclick="switchTab('clone')">Clone Voice</button>
         <button class="tab-btn" onclick="switchTab('use')">Use Voice</button>
-        <button class="tab-btn" onclick="switchTab('preprocess')">Pre-Processing Prompt</button>
-        <button class="tab-btn" onclick="switchTab('segment-prompt')">Segmentation Prompt</button>
+        <button class="tab-btn" onclick="switchTab('utility')">Utility Prompts</button>
       </div>
 
-      <!-- ── Create Voice tab ── -->
-      <div id="create-panel">
-
-        <!-- Design subsection -->
+      <!-- ── Design Voice tab ── -->
+      <div id="design-panel">
         <details open>
           <summary>Design Voice</summary>
           <div style="margin-top:10px;">
@@ -157,9 +155,11 @@
             <div id="create-job-msg" class="msg"></div>
           </div>
         </details>
+      </div><!-- /design-panel -->
 
-        <!-- Upload subsection -->
-        <details style="margin-top:12px;">
+      <!-- ── Clone Voice tab ── -->
+      <div id="clone-panel" style="display:none;">
+        <details open>
           <summary>Upload Sample</summary>
           <fieldset style="margin-top:8px;">
             <legend>Save .wav as preset</legend>
@@ -177,14 +177,13 @@
             <div id="upload-msg" class="msg"></div>
           </fieldset>
         </details>
-
-      </div><!-- /create-panel -->
+      </div><!-- /clone-panel -->
 
       <!-- ── Use Voice tab ── -->
       <div id="use-panel" style="display:none;">
 
         <label style="margin-top:0;">Voice Preset</label>
-        <div id="use-empty-msg">No voice presets yet — create one in the <strong>Create Voice</strong> tab.</div>
+        <div id="use-empty-msg">No voice presets yet — create one in the <strong>Design Voice</strong> tab.</div>
         <div id="use-preset-row">
           <select id="use-preset-select"></select>
           <button class="danger" onclick="deleteSelectedPreset()" style="margin-top:6px;padding:4px 10px;font-size:0.76rem;">Delete Preset</button>
@@ -257,31 +256,30 @@
 
       </div><!-- /use-panel -->
 
-      <!-- ── Pre-Processing Prompt tab ── -->
-      <div id="preprocess-panel" style="display:none;">
+      <!-- ── Utility Prompts tab ── -->
+      <div id="utility-panel" style="display:none;">
+
         <label>Pre-Processing Prompt
           <span style="color:#383838;font-size:0.7rem;">(overrides built-in default — leave empty to use built-in)</span>
         </label>
-        <textarea id="preprocess-prompt-input" style="min-height:220px;"></textarea>
+        <textarea id="preprocess-prompt-input" style="min-height:180px;"></textarea>
         <div style="display:flex;gap:8px;margin-top:6px;">
           <button onclick="savePreprocessPrompt()">Save</button>
           <button class="secondary" onclick="resetPreprocessPrompt()">Reset to Default</button>
         </div>
         <div class="msg" id="preprocess-msg"></div>
-      </div><!-- /preprocess-panel -->
 
-      <!-- ── Segmentation Prompt tab ── -->
-      <div id="segment-prompt-panel" style="display:none;">
-        <label>Segmentation Prompt
+        <label style="margin-top:24px;">Segmentation Prompt
           <span style="color:#383838;font-size:0.7rem;">(overrides built-in default — leave empty to use built-in)</span>
         </label>
-        <textarea id="segment-prompt-input" style="min-height:160px;"></textarea>
+        <textarea id="segment-prompt-input" style="min-height:140px;"></textarea>
         <div style="display:flex;gap:8px;margin-top:6px;">
           <button onclick="saveSegmentConfig()">Save</button>
           <button class="secondary" onclick="resetSegmentPrompt()">Reset Prompt</button>
         </div>
         <div class="msg" id="segment-prompt-msg"></div>
-      </div><!-- /segment-prompt-panel -->
+
+      </div><!-- /utility-panel -->
 
     </div><!-- /panel-left -->
 
@@ -289,7 +287,7 @@
     <div id="panel-right">
       <p class="section-label" style="margin-bottom:14px;">OUTPUT</p>
 
-      <!-- Create output -->
+      <!-- Design output -->
       <div id="create-output">
         <audio id="create-audio" controls></audio>
         <div id="duration-badge"></div>

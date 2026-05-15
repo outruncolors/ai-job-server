@@ -67,24 +67,6 @@ function toastSetCountdown(id, text) {
   if (el) el.textContent = text;
 }
 
-// ── Tab switching ────────────────────────────────────────────────────────────
-
-let _activeTab = 'generate';
-
-function switchTab(name) {
-  document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  const pane = document.getElementById('tab-' + name);
-  const btn  = document.querySelector(`.tab-btn[data-tab="${name}"]`);
-  if (pane) pane.classList.add('active');
-  if (btn)  btn.classList.add('active');
-  _activeTab = name;
-  if (name === 'server')    onServerTabActive();
-  if (name === 'workflows') onWorkflowsTabActive();
-  if (name === 'config')    onConfigTabActive();
-}
-
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 initGenerateTab();
-initServerTab();

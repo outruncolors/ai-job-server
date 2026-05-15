@@ -14,7 +14,7 @@
 
     // ── Presets ──────────────────────────────────────────────────────
     let _presets = [];
-    let _activeTab = 'create';
+    let _activeTab = 'design';
 
     async function loadPresets() {
       try {
@@ -63,16 +63,16 @@
     // ── Tabs ─────────────────────────────────────────────────────────
     function switchTab(tab) {
       _activeTab = tab;
-      const _tabOrder = ['create', 'use', 'preprocess', 'segment-prompt'];
+      const _tabOrder = ['design', 'clone', 'use', 'utility'];
       document.querySelectorAll('.tab-btn').forEach((b, i) =>
         b.classList.toggle('active', _tabOrder[i] === tab)
       );
-      document.getElementById('create-panel').style.display        = tab === 'create'         ? '' : 'none';
-      document.getElementById('use-panel').style.display           = tab === 'use'            ? '' : 'none';
-      document.getElementById('preprocess-panel').style.display    = tab === 'preprocess'     ? '' : 'none';
-      document.getElementById('segment-prompt-panel').style.display = tab === 'segment-prompt' ? '' : 'none';
-      document.getElementById('create-output').style.display    = tab === 'create' ? '' : 'none';
-      document.getElementById('use-output').style.display       = tab === 'use'    ? '' : 'none';
+      document.getElementById('design-panel').style.display  = tab === 'design'  ? '' : 'none';
+      document.getElementById('clone-panel').style.display   = tab === 'clone'   ? '' : 'none';
+      document.getElementById('use-panel').style.display     = tab === 'use'     ? '' : 'none';
+      document.getElementById('utility-panel').style.display = tab === 'utility' ? '' : 'none';
+      document.getElementById('create-output').style.display = tab === 'design'  ? '' : 'none';
+      document.getElementById('use-output').style.display    = tab === 'use'     ? '' : 'none';
     }
 
     // ── Create: Design ───────────────────────────────────────────────
@@ -372,31 +372,32 @@
       document.getElementById('preprocess-msg').textContent = 'Cleared — save to use built-in default.';
     }
 
-    // ── Segmentation LLM Preset (inline dropdown, same data as chain page) ───
+    // ── Segmentation LLM Preset (server-side) ────────────────────────
     let _segPreset = null;
+    let _segAllPresets = [];
 
-    function _loadSegPresets() {
-      const sel = document.getElementById('use-seg-preset-select');
-      const presets = JSON.parse(localStorage.getItem('chain_llm_presets') || '[]');
-      const savedId = localStorage.getItem('chain_llm_preset_selected') || '';
-      while (sel.options.length > 1) sel.remove(1);
-      for (const p of presets) {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = p.name;
-        sel.appendChild(opt);
-      }
-      if (savedId) sel.value = savedId;
-      if (!sel.value && presets.length > 0) sel.value = presets[0].id;
-      _segPreset = presets.find(p => p.id === sel.value) || presets[0] || null;
+    async function _loadSegPresets() {
+      try {
+        const data = await api('/llm-presets');
+        _segAllPresets = data.presets || [];
+        const sel = document.getElementById('use-seg-preset-select');
+        while (sel.options.length > 1) sel.remove(1);
+        for (const p of _segAllPresets) {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.name;
+          sel.appendChild(opt);
+        }
+        if (data.default_preset_id) sel.value = data.default_preset_id;
+        if (!sel.value && _segAllPresets.length > 0) sel.value = _segAllPresets[0].id;
+        _segPreset = _segAllPresets.find(p => p.id === sel.value) || _segAllPresets[0] || null;
+      } catch (_) {}
     }
 
     function applySegPreset() {
       const id = document.getElementById('use-seg-preset-select').value;
       if (!id) return;
-      localStorage.setItem('chain_llm_preset_selected', id);
-      const presets = JSON.parse(localStorage.getItem('chain_llm_presets') || '[]');
-      _segPreset = presets.find(p => p.id === id) || null;
+      _segPreset = _segAllPresets.find(p => p.id === id) || null;
     }
 
     function _getSegPreset() {

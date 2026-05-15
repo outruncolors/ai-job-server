@@ -9,6 +9,9 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .llm_config import delete_preset, list_presets, save_preset, set_default
+from .ticks.persistence import delete_tick, get_tick, list_ticks, save_tick, update_tick_fields
+from .ticks.scheduler import get_scheduler, start_scheduler, stop_scheduler
 from .chain.context_library import (
     create_item,
     delete_item,
@@ -59,7 +62,9 @@ async def lifespan(app: FastAPI):
             await get_comfy_manager().start()
         except Exception as exc:
             print(f"ComfyUI autostart skipped: {exc}")
+    await start_scheduler()
     yield
+    await stop_scheduler()
 
 
 app = FastAPI(title="ai-job-server", version="0.1.0", lifespan=lifespan)
@@ -236,6 +241,111 @@ def remove_context_item(item_id: str):
     if not delete_item(item_id):
         raise HTTPException(status_code=404, detail="Context item not found")
     return {"ok": True}
+
+
+@app.get("/v1/llm-presets")
+def get_llm_presets():
+    return list_presets()
+
+
+@app.post("/v1/llm-presets", status_code=200)
+async def upsert_llm_preset(body: dict):
+    try:
+        return save_preset(body).model_dump()
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.delete("/v1/llm-presets/{preset_id}", status_code=200)
+def remove_llm_preset(preset_id: str):
+    if not delete_preset(preset_id):
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"ok": True}
+
+
+@app.put("/v1/llm-presets/default", status_code=200)
+async def set_llm_default(body: dict):
+    preset_id = body.get("id")
+    if not set_default(preset_id):
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"ok": True}
+
+
+@app.get("/v1/ticks")
+def get_ticks():
+    return {"ticks": list_ticks()}
+
+
+@app.post("/v1/ticks", status_code=200)
+async def upsert_tick(body: dict):
+    try:
+        return save_tick(body)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.delete("/v1/ticks/{tick_id}", status_code=200)
+def remove_tick(tick_id: str):
+    if not delete_tick(tick_id):
+        raise HTTPException(status_code=404, detail="Tick not found")
+    return {"ok": True}
+
+
+@app.post("/v1/ticks/{tick_id}/enable", status_code=200)
+async def set_tick_enabled(tick_id: str, body: dict):
+    result = update_tick_fields(tick_id, enabled=bool(body.get("enabled", True)))
+    if result is None:
+        raise HTTPException(status_code=404, detail="Tick not found")
+    return result
+
+
+@app.post("/v1/ticks/{tick_id}/fire", status_code=200)
+async def fire_tick_now(tick_id: str, force: bool = False):
+    tick = get_tick(tick_id)
+    if tick is None:
+        raise HTTPException(status_code=404, detail="Tick not found")
+    job_id = await get_scheduler().fire_tick(tick_id, force=force)
+    if job_id is None:
+        tick = get_tick(tick_id)
+        reason = tick.get("last_skip_reason", "unknown") if tick else "unknown"
+        return {"fired": False, "skip_reason": reason}
+    return {"fired": True, "job_id": job_id}
+
+
+@app.get("/v1/ticks/{tick_id}/recent-jobs")
+def get_tick_recent_jobs(tick_id: str, limit: int = 10):
+    jobs = [
+        j for j in list_jobs()
+        if _job_fired_by_tick(j, tick_id)
+    ]
+    jobs.sort(key=lambda j: j.get("created_at", ""), reverse=True)
+    return {"jobs": jobs[:limit]}
+
+
+def _job_fired_by_tick(job_status: dict, tick_id: str) -> bool:
+    job_dir = find_job_dir(job_status["job_id"])
+    if job_dir is None:
+        return False
+    req_file = job_dir / "request.json"
+    if not req_file.exists():
+        return False
+    try:
+        data = __import__("json").loads(req_file.read_text(encoding="utf-8"))
+        return data.get("fired_by_tick") == tick_id
+    except Exception:
+        return False
+
+
+@app.post("/v1/ticks/preview", status_code=200)
+async def preview_cron(body: dict):
+    from croniter import croniter
+    cron_expr = body.get("cron", "")
+    try:
+        it = croniter(cron_expr, datetime.now(timezone.utc))
+        nexts = [it.get_next(datetime).replace(tzinfo=timezone.utc).isoformat() for _ in range(3)]
+        return {"next": nexts}
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @app.get("/v1/server/stats", response_model=ServerStatsResponse)

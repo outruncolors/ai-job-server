@@ -16,87 +16,27 @@
     // ── Tabs ─────────────────────────────────────────────────────────
     function switchTab(tab) {
       _activeTab = tab;
-      localStorage.setItem(_TAB_KEY, tab);
+      const _tabs = ['chain', 'sequences', 'wildcards'];
       document.querySelectorAll('#chain-tabs .tab-btn').forEach((b, i) =>
-        b.classList.toggle('active', (i === 0) === (tab === 'llm'))
+        b.classList.toggle('active', _tabs[i] === tab)
       );
-      document.getElementById('llm-panel').style.display   = tab === 'llm'   ? '' : 'none';
-      document.getElementById('chain-panel').style.display = tab === 'chain' ? '' : 'none';
+      document.getElementById('chain-panel').style.display     = tab === 'chain'     ? '' : 'none';
+      document.getElementById('sequences-panel').style.display = tab === 'sequences' ? '' : 'none';
+      document.getElementById('wildcards-panel').style.display = tab === 'wildcards' ? '' : 'none';
     }
 
-    // ── Chain Presets (localStorage) ─────────────────────────────────
-    const _PRESETS_KEY          = 'chain_llm_presets';
-    const _PRESET_SELECTED_KEY  = 'chain_llm_preset_selected';
-    const _SEQ_SELECTED_KEY     = 'chain_sequence_selected';
-    const _TAB_KEY              = 'chain_active_tab';
-    let _currentSeqId           = null;
-    let _activeTab              = 'llm';
+    // ── LLM Presets (server-side, used silently at submit time) ──────
+    let _currentSeqId    = null;
+    let _activeTab       = 'chain';
+    let _chainPresets    = [];
+    let _defaultPresetId = null;
 
-    function _loadChainPresets() {
-      const sel = document.getElementById('chain-preset-select');
-      const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
-      const savedId = localStorage.getItem(_PRESET_SELECTED_KEY) || '';
-      while (sel.options.length > 1) sel.remove(1);
-      for (const p of presets) {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = p.name;
-        sel.appendChild(opt);
-      }
-      if (savedId) {
-        sel.value = savedId;
-        applyChainPreset();
-      }
-    }
-
-    function applyChainPreset() {
-      const id = document.getElementById('chain-preset-select').value;
-      if (!id) { localStorage.removeItem(_PRESET_SELECTED_KEY); return; }
-      const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
-      const p = presets.find(x => x.id === id);
-      if (!p) return;
-      localStorage.setItem(_PRESET_SELECTED_KEY, id);
-      document.getElementById('chain-api-base').value   = p.api_base;
-      document.getElementById('chain-model').value      = p.model;
-      document.getElementById('chain-temp').value       = p.temperature;
-      document.getElementById('chain-max-tokens').value = p.max_tokens;
-    }
-
-    function saveChainPreset() {
-      const name = document.getElementById('chain-preset-name').value.trim();
-      if (!name) { alert('Enter a preset name first.'); return; }
-      const entry = {
-        api_base:    document.getElementById('chain-api-base').value.trim(),
-        model:       document.getElementById('chain-model').value.trim(),
-        temperature: parseFloat(document.getElementById('chain-temp').value),
-        max_tokens:  parseInt(document.getElementById('chain-max-tokens').value),
-      };
-      const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
-      const existing = presets.find(x => x.name === name);
-      if (existing) {
-        Object.assign(existing, entry);
-      } else {
-        const id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-          const r = Math.random() * 16 | 0;
-          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-        });
-        presets.push({ id, name, ...entry });
-      }
-      localStorage.setItem(_PRESETS_KEY, JSON.stringify(presets));
-      _loadChainPresets();
-      const saved = JSON.parse(localStorage.getItem(_PRESETS_KEY)).find(x => x.name === name);
-      if (saved) document.getElementById('chain-preset-select').value = saved.id;
-    }
-
-    function deleteChainPreset() {
-      const id = document.getElementById('chain-preset-select').value;
-      if (!id) { alert('Select a preset to delete.'); return; }
-      const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
-      const p = presets.find(x => x.id === id);
-      if (!p || !confirm('Delete preset "' + p.name + '"?')) return;
-      localStorage.setItem(_PRESETS_KEY, JSON.stringify(presets.filter(x => x.id !== id)));
-      localStorage.removeItem(_PRESET_SELECTED_KEY);
-      _loadChainPresets();
+    async function _loadChainPresets() {
+      try {
+        const data = await api('/llm-presets');
+        _chainPresets    = data.presets || [];
+        _defaultPresetId = data.default_preset_id || null;
+      } catch (_) {}
     }
 
     // ── Sequences ─────────────────────────────────────────────────────
@@ -133,12 +73,11 @@
         if (usedBy[s.id] && usedBy[s.id].length > 0)
           depParts.push('used by: ' + usedBy[s.id].join(', '));
         const depStr = depParts.join(' · ');
-        html += '<div class="seq-row' + (isActive ? ' is-active' : '') + '">' +
+        html += '<div class="seq-row' + (isActive ? ' is-active' : '') + '" onclick="_editSeq(\'' + s.id + '\')" style="cursor:pointer;">' +
           '<span class="seq-row-name" title="' + _escHtml(s.name) + '">' + _escHtml(s.name) + '</span>' +
           (depStr ? '<span class="seq-row-deps" title="' + _escHtml(depStr) + '">' + _escHtml(depStr) + '</span>' : '') +
           '<span class="seq-row-actions">' +
-            '<button class="secondary" onclick="_editSeq(\'' + s.id + '\')">Edit</button>' +
-            '<button class="danger" onclick="_deleteSeq(\'' + s.id + '\')">Del</button>' +
+            '<button class="danger" onclick="event.stopPropagation();_deleteSeq(\'' + s.id + '\')">Del</button>' +
           '</span>' +
           '</div>';
       }
@@ -155,13 +94,14 @@
 
     function _newSeq() {
       _currentSeqId = null;
-      localStorage.removeItem(_SEQ_SELECTED_KEY);
       document.getElementById('chain-seq-name').value = '';
       document.getElementById('seq-edit-msg').textContent = '';
       document.getElementById('chain-steps-list').innerHTML = '';
       _chainStepCounter = 0;
       addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
       document.getElementById('seq-edit-bar').style.display = '';
+      switchTab('chain');
+      history.replaceState(null, '', '/chain');
       _renderSeqList();
     }
 
@@ -169,17 +109,20 @@
       const seq = _allSeqs.find(s => s.id === id);
       if (!seq) return;
       _currentSeqId = id;
-      localStorage.setItem(_SEQ_SELECTED_KEY, id);
       document.getElementById('chain-seq-name').value = seq.name;
       document.getElementById('seq-edit-msg').textContent = '';
       loadStepsIntoForm(seq.steps);
       document.getElementById('seq-edit-bar').style.display = '';
+      switchTab('chain');
+      history.replaceState(null, '', '/chain?sequence=' + id);
       _renderSeqList();
     }
 
     function _cancelSeqEdit() {
       document.getElementById('seq-edit-bar').style.display = 'none';
       document.getElementById('seq-edit-msg').textContent = '';
+      _currentSeqId = null;
+      history.replaceState(null, '', '/chain');
     }
 
     async function _deleteSeq(id) {
@@ -189,11 +132,11 @@
         await api('/chain-sequences/' + id, 'DELETE');
         if (_currentSeqId === id) {
           _currentSeqId = null;
-          localStorage.removeItem(_SEQ_SELECTED_KEY);
           document.getElementById('chain-steps-list').innerHTML = '';
           _chainStepCounter = 0;
           addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
           document.getElementById('seq-edit-bar').style.display = 'none';
+          history.replaceState(null, '', '/chain');
         }
         await loadSeqs();
       } catch(e) { alert('Error: ' + e.message); }
@@ -209,7 +152,7 @@
       try {
         const saved = await api('/chain-sequences', 'POST', { name, steps });
         _currentSeqId = saved.id;
-        localStorage.setItem(_SEQ_SELECTED_KEY, saved.id);
+        history.replaceState(null, '', '/chain?sequence=' + saved.id);
         msgEl.style.color = '#2a6'; msgEl.textContent = 'Saved.';
         await loadSeqs();
       } catch(e) {
@@ -657,13 +600,19 @@
         msg.style.color = '#e44'; msg.textContent = 'Select a sequence for every sequence step.'; return;
       }
 
+      const _defPreset = _chainPresets.find(p => p.id === _defaultPresetId) || _chainPresets[0] || null;
+      if (!_defPreset) {
+        msg.style.color = '#e44';
+        msg.textContent = 'No LLM preset configured — add one in Server → LLM.';
+        return;
+      }
       const body = {
         input: '',
         llm: {
-          api_base:    document.getElementById('chain-api-base').value.trim(),
-          model:       document.getElementById('chain-model').value.trim(),
-          temperature: parseFloat(document.getElementById('chain-temp').value),
-          max_tokens:  parseInt(document.getElementById('chain-max-tokens').value),
+          api_base:    _defPreset.api_base,
+          model:       _defPreset.model,
+          temperature: _defPreset.temperature,
+          max_tokens:  _defPreset.max_tokens,
         },
         steps,
       };
@@ -982,21 +931,6 @@
         return;
       }
 
-      // Populate LLM fields
-      if (req.llm) {
-        document.getElementById('chain-api-base').value   = req.llm.api_base || '';
-        document.getElementById('chain-model').value      = req.llm.model || '';
-        document.getElementById('chain-temp').value       = req.llm.temperature != null ? req.llm.temperature : 0.7;
-        document.getElementById('chain-max-tokens').value = req.llm.max_tokens || 2048;
-        const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
-        const match = presets.find(p =>
-          p.api_base === req.llm.api_base && p.model === req.llm.model &&
-          parseFloat(p.temperature) === parseFloat(req.llm.temperature) &&
-          parseInt(p.max_tokens)    === parseInt(req.llm.max_tokens)
-        );
-        document.getElementById('chain-preset-select').value = match ? match.id : '';
-      }
-
       // Rebuild steps and collect missing references
       const missing = [];
       const ctxIds  = new Set((_ctxItems  || []).map(c => c.id));
@@ -1031,24 +965,21 @@
     }
 
     // ── Init ─────────────────────────────────────────────────────────
-    _loadChainPresets();
-    Promise.all([loadContextItems(), loadVoicePresets(), loadSeqs(), loadMcpTools()]).then(() => {
+    Promise.all([_loadChainPresets(), loadContextItems(), loadVoicePresets(), loadSeqs(), loadMcpTools()]).then(() => {
       if (_recreateId) {
         _hydrateFromRecreate(_recreateId);
         switchTab('chain');
         return;
       }
-      const savedSeqId = localStorage.getItem(_SEQ_SELECTED_KEY);
-      if (savedSeqId) {
-        const seq = _allSeqs.find(s => s.id === savedSeqId);
+      const params = new URLSearchParams(window.location.search);
+      const seqParam = params.get('sequence');
+      if (seqParam) {
+        const seq = _allSeqs.find(s => s.id === seqParam);
         if (seq) {
-          _editSeq(savedSeqId);
-        } else {
-          addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
+          _editSeq(seqParam);
+          return;
         }
-      } else {
-        addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
       }
-      const savedTab = localStorage.getItem(_TAB_KEY) || 'llm';
-      switchTab(savedTab);
+      addChainStep({ prompt: 'Create five bullet points for the following task:\n\n' });
+      switchTab('chain');
     });

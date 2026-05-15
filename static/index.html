@@ -17,17 +17,35 @@
       height: 100vh; width: 100%; position: relative;
       display: flex; flex-direction: column;
       justify-content: center; padding: 0 72px;
-      cursor: pointer; transition: background 0.22s;
     }
-    .slide:hover { background: #141414; }
-    .slide:hover .slide-arrow { opacity: 1; transform: translateX(6px); }
     .slide + .slide { border-top: 1px solid #1a1a1a; }
 
-    .slide-label { font-size: 3rem; font-weight: 700; color: #2a6; letter-spacing: 0.02em; margin-bottom: 14px; }
-    .slide-desc  { font-size: 1.25rem; color: #666; line-height: 1.6; }
+    .slide-group-label {
+      font-size: 0.68rem; font-weight: 700; color: #333;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+
+    .slide-row {
+      display: flex; gap: 0; align-items: stretch;
+    }
+
+    .slide-card {
+      flex: 1; padding: 28px 32px; cursor: pointer;
+      border: 1px solid #1a1a1a; border-radius: 2px; margin: 0 6px;
+      transition: background 0.2s, border-color 0.2s;
+      position: relative; display: flex; flex-direction: column;
+    }
+    .slide-card:first-child { margin-left: 0; }
+    .slide-card:last-child  { margin-right: 0; }
+    .slide-card:hover { background: #141414; border-color: #2a2a2a; }
+    .slide-card:hover .slide-arrow { opacity: 1; transform: translateX(4px); }
+
+    .slide-label { font-size: 2rem; font-weight: 700; color: #2a6; letter-spacing: 0.02em; margin-bottom: 10px; }
+    .slide-desc  { font-size: 1rem; color: #555; line-height: 1.6; flex: 1; }
     .slide-arrow {
-      position: absolute; right: 72px; top: 50%; transform: translateY(-50%);
-      font-size: 1.8rem; color: #2a6; opacity: 0;
+      position: absolute; right: 18px; bottom: 18px;
+      font-size: 1.2rem; color: #2a6; opacity: 0;
       transition: opacity 0.2s, transform 0.2s;
     }
 
@@ -40,6 +58,15 @@
     .nav-arr.hidden { opacity: 0; pointer-events: none; }
     #nav-up   { top: 50px; }
     #nav-down { bottom: 7px; }
+
+    @media (max-width: 768px) {
+      .slide { padding: 0 20px !important; justify-content: flex-start; padding-top: 80px !important; }
+      .slide-row { flex-direction: column; gap: 10px; }
+      .slide-card { margin: 0 !important; padding: 18px 20px; }
+      .slide-label { font-size: 1.4rem; margin-bottom: 6px; }
+      .slide-desc { font-size: 0.85rem; }
+      .nav-arr { display: none !important; }
+    }
   </style>
   <link rel="stylesheet" href="/css/responsive.css">
 </head>
@@ -49,46 +76,73 @@
   <div id="nav-down" class="nav-arr"        onclick="goToSlide(currentSlide+1)">&#8681;</div>
 
   <div id="slides-wrap">
-    <div class="slide" onclick="location.href='/chain'">
-      <div class="slide-label">Chain</div>
-      <div class="slide-desc">Sequential LLM pipelines.<br>Each step feeds the next.</div>
-      <div class="slide-arrow">&#8594;</div>
+
+    <!-- Slide 1: Generative -->
+    <div class="slide">
+      <div class="slide-group-label">Generative</div>
+      <div class="slide-row">
+        <div class="slide-card" onclick="location.href='/chain'">
+          <div class="slide-label">Text</div>
+          <div class="slide-desc">Sequential LLM pipelines.<br>Each step feeds the next.</div>
+          <div class="slide-arrow">&#8594;</div>
+        </div>
+        <div class="slide-card" onclick="location.href='/voice'">
+          <div class="slide-label">Audio</div>
+          <div class="slide-desc">Neural speech synthesis.<br>Design or clone a voice.</div>
+          <div class="slide-arrow">&#8594;</div>
+        </div>
+        <div class="slide-card" onclick="location.href='/image'">
+          <div class="slide-label">Visual</div>
+          <div class="slide-desc">AI image generation.<br>ComfyUI on the local network.</div>
+          <div class="slide-arrow">&#8594;</div>
+        </div>
+      </div>
     </div>
-    <div class="slide" onclick="location.href='/context/'">
-      <div class="slide-label">Context</div>
-      <div class="slide-desc">Manage context documents.<br>Attach them to chain steps.</div>
-      <div class="slide-arrow">&#8594;</div>
+
+    <!-- Slide 2: Tools -->
+    <div class="slide">
+      <div class="slide-group-label">Tools</div>
+      <div class="slide-row">
+        <div class="slide-card" onclick="location.href='/context/'">
+          <div class="slide-label">Context</div>
+          <div class="slide-desc">Manage context documents.<br>Attach them to chain steps.</div>
+          <div class="slide-arrow">&#8594;</div>
+        </div>
+        <div class="slide-card" onclick="location.href='/ticks'">
+          <div class="slide-label">Ticks</div>
+          <div class="slide-desc">Schedule chains to fire<br>on a recurring interval.</div>
+          <div class="slide-arrow">&#8594;</div>
+        </div>
+        <div class="slide-card" onclick="location.href='/mcp'">
+          <div class="slide-label">MCP</div>
+          <div class="slide-desc">Tool registry for agentic chain steps.<br>Inspect and test available tools.</div>
+          <div class="slide-arrow">&#8594;</div>
+        </div>
+      </div>
     </div>
-    <div class="slide" onclick="location.href='/voice'">
-      <div class="slide-label">Voice</div>
-      <div class="slide-desc">Neural speech synthesis.<br>Design or clone a voice.</div>
-      <div class="slide-arrow">&#8594;</div>
+
+    <!-- Slide 3: Management -->
+    <div class="slide">
+      <div class="slide-group-label">Management</div>
+      <div class="slide-row">
+        <div class="slide-card" onclick="location.href='/server'">
+          <div class="slide-label">Server</div>
+          <div class="slide-desc">Resource usage, LLM presets,<br>ComfyUI, and hot-restart controls.</div>
+          <div class="slide-arrow">&#8594;</div>
+        </div>
+        <div class="slide-card" onclick="location.href='/jobs'">
+          <div class="slide-label">Jobs</div>
+          <div class="slide-desc">Browse, inspect, and manage<br>all submitted jobs.</div>
+          <div class="slide-arrow">&#8594;</div>
+        </div>
+      </div>
     </div>
-    <div class="slide" onclick="location.href='/image'">
-      <div class="slide-label">Image</div>
-      <div class="slide-desc">AI image generation.<br>ComfyUI on the local network.</div>
-      <div class="slide-arrow">&#8594;</div>
-    </div>
-    <div class="slide" onclick="location.href='/jobs'">
-      <div class="slide-label">Jobs</div>
-      <div class="slide-desc">Browse, inspect, and manage<br>all submitted jobs.</div>
-      <div class="slide-arrow">&#8594;</div>
-    </div>
-    <div class="slide" onclick="location.href='/server'">
-      <div class="slide-label">Server</div>
-      <div class="slide-desc">Resource usage, job counts,<br>and hot-restart controls.</div>
-      <div class="slide-arrow">&#8594;</div>
-    </div>
-    <div class="slide" onclick="location.href='/mcp'">
-      <div class="slide-label">MCP</div>
-      <div class="slide-desc">Tool registry for agentic chain steps.<br>Inspect and test available tools.</div>
-      <div class="slide-arrow">&#8594;</div>
-    </div>
+
   </div>
 
   <script>
     let currentSlide = 0;
-    const SLIDE_COUNT = 7;
+    const SLIDE_COUNT = 3;
     let isAnimating   = false;
     const navUp   = document.getElementById('nav-up');
     const navDown = document.getElementById('nav-down');
@@ -112,7 +166,7 @@
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown' || e.key === 'PageDown') goToSlide(currentSlide + 1);
-      if (e.key === 'ArrowUp'   || e.key === 'PageUp'  ) goToSlide(currentSlide - 1);
+      if (e.key === 'ArrowUp'   || e.key === 'PageUp'   ) goToSlide(currentSlide - 1);
     });
 
     let _touchY = 0;

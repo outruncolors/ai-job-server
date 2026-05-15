@@ -13,7 +13,24 @@ button.danger { background: #7a2222; }
 button.danger:hover { background: #992828; }
 .msg { font-size: 0.76rem; min-height: 1.1em; margin-top: 6px; }
 
-#panels { display: flex; height: 100vh; padding-top: 44px; }
+/* ── Tab bar ── */
+#tab-bar {
+  position: fixed; top: 44px; left: 0; right: 0;
+  display: flex; gap: 0; border-bottom: 1px solid #1a1a1a;
+  background: #111; z-index: 90;
+}
+.tab-btn {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: #555; padding: 9px 18px; cursor: pointer; font-family: monospace;
+  font-size: 0.78rem; letter-spacing: 0.06em; margin-top: 0;
+  border-radius: 0; transition: color 0.15s;
+}
+.tab-btn:hover { color: #888; background: none; }
+.tab-btn.active { color: #ccc; border-bottom-color: #2a6; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+#panels { display: flex; height: 100vh; padding-top: 88px; }
 #panel-left  { flex: 0 0 380px; overflow-y: auto; padding: 24px 28px; border-right: 1px solid #1a1a1a; }
 #panel-right { flex: 1; overflow-y: auto; padding: 24px 28px; }
 
@@ -49,6 +66,26 @@ button.danger:hover { background: #992828; }
 .log-time { color: #333; margin-right: 8px; }
 .log-ok { color: #2a6; }
 .log-err { color: #e44; }
+
+/* ComfyUI status card */
+.status-card { background: #141414; border: 1px solid #1e1e1e; border-radius: 3px; padding: 14px 16px; }
+.status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.status-detail { font-size: 0.72rem; color: #555; }
+.indicator { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.indicator.running { background: #2a6; box-shadow: 0 0 6px #2a6; }
+.indicator.stopped { background: #444; }
+.vram-bar-wrap { height: 5px; background: #1e1e1e; border-radius: 2px; overflow: hidden; margin: 6px 0; }
+.vram-bar { height: 100%; background: #2a6; border-radius: 2px; transition: width 0.4s; }
+.vram-bar.warn   { background: #fa0; }
+.vram-bar.danger { background: #e44; }
+
+/* LLM preset list */
+.llm-preset-item { padding: 9px 10px; border-radius: 3px; cursor: pointer; border: 1px solid transparent; margin-bottom: 4px; }
+.llm-preset-item:hover { background: #141414; border-color: #1e1e1e; }
+.llm-preset-item.selected { background: #141414; border-color: #2a6; }
+.llm-preset-name { font-size: 0.82rem; color: #ccc; margin-bottom: 2px; }
+.llm-preset-sub  { font-size: 0.70rem; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.llm-default-badge { display: inline-block; font-size: 0.62rem; padding: 1px 5px; background: #0d2a18; color: #2a6; border-radius: 2px; vertical-align: middle; margin-left: 4px; letter-spacing: 0.04em; }
 
 /* Toast stack */
 #toast-stack {
