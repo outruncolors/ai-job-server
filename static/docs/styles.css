@@ -2,19 +2,30 @@
 #panel-left  { width: 220px; min-width: 160px; padding: 16px 12px; flex-shrink: 0; }
 #panel-right { padding: 28px 36px; }
 
-/* ── Doc list items ────────────────────────────────────────────────────────── */
-.doc-item {
-  display: block; width: 100%; padding: 8px 10px; margin-bottom: 2px;
+/* ── Doc tree ──────────────────────────────────────────────────────────────── */
+.doc-dir-row, .doc-item {
+  display: block; width: 100%; padding: 6px 8px; margin-bottom: 1px;
   background: none; border: none; border-radius: 3px;
   color: var(--color-text-dim); font-family: var(--font-family);
   font-size: 0.82rem; text-align: left; cursor: pointer; margin-top: 0;
 }
-.doc-item:hover { background: #1a1a1a; color: var(--color-text); }
+.doc-dir-row:hover, .doc-item:hover { background: #1a1a1a; color: var(--color-text); }
 .doc-item.active { background: #1e2e1e; color: var(--color-accent); }
+
+.doc-caret {
+  display: inline-block; width: 12px; color: #555;
+  font-size: 0.7rem; margin-right: 4px; transform: translateY(-1px);
+}
+.doc-dir.open > .doc-dir-row > .doc-caret { color: #888; }
+.doc-dir-title { color: #888; font-weight: 600; letter-spacing: 0.02em; }
+.doc-dir.open > .doc-dir-row > .doc-dir-title { color: var(--color-text); }
+
+.doc-children { /* nesting handled via per-row padding-left */ }
 
 .doc-item-size {
   float: right; font-size: 0.68rem; color: #444; margin-top: 1px;
 }
+.doc-item-title { display: inline-block; }
 
 /* ── Markdown render area ─────────────────────────────────────────────────── */
 #doc-content { max-width: 780px; }

@@ -1,0 +1,239 @@
+# API Reference
+
+The server listens on port `8090`. All REST routes are under `/v1/`; `/health` is the exception.
+
+## Health
+
+### `GET /health`
+
+```json
+{ "status": "ok", "timestamp": "2026-05-15T12:00:00Z" }
+```
+
+## Jobs
+
+### `POST /v1/jobs/image` → 202
+
+Submit an image job. The workflow's `PROMPT` node receives the prompt text.
+
+```json
+{ "workflow": "my-workflow", "prompt": "a cat on the moon" }
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `workflow` | string | yes | Workflow filename without `.json`, from `config/comfyui-workflows/` |
+| `prompt` | string | yes | Injected into the node titled `PROMPT` |
+
+Response: `{ "job_id", "job_type": "image", "status": "queued", "created_at" }`.
+
+### `POST /v1/jobs/voice` → 202
+
+Submit a TTS job. Use `text` for a single segment, `segments` for multi, `auto_segment` to let an LLM split.
+
+```json
+{
+  "voice_preset_id": "uuid",
+  "segments": [
+    { "text": "First sentence.", "delay_ms": 600 },
+    { "text": "Second sentence.", "delay_ms": 0 }
+  ],
+  "speed": 1.0
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `text` | string\|null | null | Provide `text`, `segments`, or `text` with `auto_segment` |
+| `segments` | `{text, delay_ms}[]` \| null | null | Ordered segments with trailing silence |
+| `auto_segment` | bool | false | Have the LLM split `text` into segments |
+| `auto_segment_llm_base_url` | string | – | Required when `auto_segment` is true |
+| `auto_segment_llm_model` | string | – | Required when `auto_segment` is true |
+| `voice_preset_id` | string\|null | null | Recommended; falls back to `voice` legacy field |
+| `voice` | string | `"default"` | Legacy; use `voice_preset_id` |
+| `speed` | float | 1.0 | 0.25–4.0 |
+| `language` | string\|null | null | |
+| `instruct` | string\|null | null | e.g. `"Female, Young Adult"` |
+| `num_step` | int\|null | null | Inference steps (4–64) |
+| `guidance_scale` | float\|null | null | 0–4 |
+
+### `POST /v1/jobs/chain` → 202
+
+See [Chain](../generation/text/chain.md) for step shapes.
+
+```json
+{
+  "input": "Write a poem about autumn.",
+  "llm": {
+    "api_base": "http://debian1.local:11434/v1",
+    "model": "gemma4",
+    "temperature": 0.7,
+    "max_tokens": 2048
+  },
+  "steps": [
+    { "name": "Write", "type": "llm", "prompt": "{{input}}" }
+  ]
+}
+```
+
+| Field | Type | Required | |
+|-------|------|----------|---|
+| `input` | string | no (default `""`) | Available as `{{input}}` |
+| `llm` | object | yes | `api_base`, `model`, `temperature`, `max_tokens`, `timeout_seconds` |
+| `steps` | array | yes | At least one step |
+
+### `GET /v1/jobs`
+
+Paginated list. Query params: `limit`, `offset`, optional `status`, `type`.
+
+```json
+{
+  "jobs": [ { "job_id", "job_type", "status", "created_at", "updated_at", "error" } ],
+  "total": 42
+}
+```
+
+### `GET /v1/jobs/{id}`
+
+Full status. 404 if missing.
+
+### `DELETE /v1/jobs/{id}` / `DELETE /v1/jobs` / `DELETE /v1/jobs/all`
+
+| Path | Removes |
+|------|---------|
+| `DELETE /v1/jobs/{id}` | One job and its files |
+| `DELETE /v1/jobs` | Queued + running jobs |
+| `DELETE /v1/jobs/all` | Everything |
+
+### `GET /v1/jobs/{id}/steps`
+
+Chain jobs only; returns the per-step status list.
+
+### `GET /v1/jobs/{id}/files/{path}`
+
+Serve any file inside the job directory. `path` may include slashes (e.g., `steps/001_Write/output.txt`).
+
+## Chain sequences
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/chain-sequences` | List |
+| POST | `/v1/chain-sequences` | Upsert by id (422 on cycle) |
+| POST | `/v1/chain-sequences/{id}/duplicate` | Copy with `(copy)` suffix |
+| DELETE | `/v1/chain-sequences/{id}` | Remove |
+
+## Context items
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/context-items` | List |
+| POST | `/v1/context-items` | Create |
+| GET | `/v1/context-items/{id}` | Fetch |
+| PUT | `/v1/context-items/{id}` | Partial update |
+| DELETE | `/v1/context-items/{id}` | Remove |
+
+## Wildcards
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/wildcards` | List |
+| POST | `/v1/wildcards` | Create |
+| PUT | `/v1/wildcards/{id}` | Update |
+| DELETE | `/v1/wildcards/{id}` | Remove |
+
+## Ticks
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/ticks` | List |
+| POST | `/v1/ticks` | Upsert |
+| DELETE | `/v1/ticks/{id}` | Remove |
+| POST | `/v1/ticks/{id}/enable` | `{enabled: bool}` |
+| POST | `/v1/ticks/{id}/fire` | Fire now (overlap-guarded unless `force=true`) |
+| GET | `/v1/ticks/{id}/recent-jobs` | Jobs fired by this tick |
+| POST | `/v1/ticks/preview` | Preview next 3 fires for a cron expression |
+
+## Voice presets
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/voice-presets` | List |
+| POST | `/v1/voice-presets` | `multipart/form-data` upload (`file`, `name`, `caption`) — 3–10 s WAV |
+| POST | `/v1/voice-presets/from-job` | `{ job_id, name, caption }` — copy from a voice job's `output.wav` |
+| DELETE | `/v1/voice-presets/{id}` | Remove |
+
+## LLM presets
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/llm-presets` | List |
+| POST | `/v1/llm-presets` | Upsert |
+| DELETE | `/v1/llm-presets/{id}` | Remove |
+| PUT | `/v1/llm-presets/default` | `{ id }` |
+
+## MCP tools
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/mcp/tools` | List with input schemas |
+| POST | `/v1/mcp/tools/{name}/call` | `{ "arguments": {...} }` |
+
+Success: `{ "result": ..., "execution_ms": N, "timestamp": "..." }`.
+Validation error: `{ "error": "...", "validation_status": "invalid_arguments" }`.
+
+## OmniVoice
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/omnivoice/status` | `{ ephemeral_available, active_voice_jobs, infer_base_command }` |
+| GET | `/v1/omnivoice/config` | Read `omnivoice.json` |
+| PUT | `/v1/omnivoice/config` | Replace and persist |
+
+## ComfyUI
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/comfyui/status` | Alive / PID / uptime / GPU / queue |
+| POST | `/v1/comfyui/start` | |
+| POST | `/v1/comfyui/stop` | Graceful (SIGTERM → SIGKILL) |
+| POST | `/v1/comfyui/restart` | |
+| GET | `/v1/comfyui/config` | |
+| PUT | `/v1/comfyui/config` | |
+| GET | `/v1/comfyui/workflows` | Includes validity info |
+| GET | `/v1/comfyui/system_stats` | Passthrough |
+
+## Server
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/server/stats` | CPU / memory / disk / jobs / hostname / python |
+| POST | `/v1/server/restart` | `os.execv` hot restart |
+
+## Docs
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/docs` | Recursive tree of `docs/` |
+| GET | `/v1/docs/{path:path}` | File contents (text/plain), `..` rejected |
+
+## curl examples
+
+```bash
+# Submit a chain job
+curl -s -X POST http://debian2.local:8090/v1/jobs/chain \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"Hello","llm":{"api_base":"http://debian1.local:11434/v1","model":"gemma4"},"steps":[{"name":"Step 1","type":"llm","prompt":"{{input}}"}]}'
+
+# Poll status
+curl -s http://debian2.local:8090/v1/jobs/<job_id> | python3 -m json.tool
+
+# Submit an image job
+curl -s -X POST http://debian2.local:8090/v1/jobs/image \
+  -H 'Content-Type: application/json' \
+  -d '{"workflow":"basic-sd","prompt":"a cat on the moon"}'
+
+# Call an MCP tool
+curl -s -X POST http://debian2.local:8090/v1/mcp/tools/random_integer/call \
+  -H 'Content-Type: application/json' \
+  -d '{"arguments":{"min":1,"max":100}}'
+```

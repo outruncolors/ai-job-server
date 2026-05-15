@@ -389,28 +389,76 @@ def server_restart(background_tasks: BackgroundTasks):
     return ServerRestartResponse(ok=True, message="Restart scheduled")
 
 
+def _doc_title(path: Path) -> str:
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            head = fh.read(512)
+        for line in head.splitlines():
+            s = line.strip()
+            if s.startswith("# "):
+                return s[2:].strip()
+    except OSError:
+        pass
+    return path.stem.replace("-", " ").replace("_", " ").title()
+
+
+def _dir_title(path: Path) -> str:
+    return path.name.replace("-", " ").replace("_", " ").title()
+
+
+def _build_doc_tree(directory: Path, rel_prefix: str = "") -> list[dict]:
+    nodes: list[dict] = []
+    try:
+        entries = list(directory.iterdir())
+    except OSError:
+        return nodes
+
+    subdirs = sorted([p for p in entries if p.is_dir() and not p.name.startswith(".")],
+                     key=lambda p: p.name.lower())
+    files = sorted([p for p in entries if p.is_file() and p.suffix == ".md"],
+                   key=lambda p: (p.name.lower() != "index.md", p.name.lower()))
+
+    for d in subdirs:
+        child_prefix = f"{rel_prefix}{d.name}/"
+        nodes.append({
+            "type": "dir",
+            "path": child_prefix.rstrip("/"),
+            "title": _dir_title(d),
+            "children": _build_doc_tree(d, child_prefix),
+        })
+
+    for f in files:
+        nodes.append({
+            "type": "doc",
+            "path": f"{rel_prefix}{f.name}",
+            "title": _doc_title(f),
+            "size": f.stat().st_size,
+        })
+
+    return nodes
+
+
 @app.get("/v1/docs")
 def list_docs():
     if not DOCS_DIR.exists():
-        return {"docs": []}
-    docs = []
-    for f in sorted(DOCS_DIR.glob("*.md")):
-        docs.append({
-            "name": f.name,
-            "title": f.stem.replace("-", " ").replace("_", " ").title(),
-            "size": f.stat().st_size,
-        })
-    return {"docs": docs}
+        return {"tree": []}
+    return {"tree": _build_doc_tree(DOCS_DIR)}
 
 
-@app.get("/v1/docs/{filename}")
-def get_doc(filename: str):
-    if ".." in filename or "/" in filename or "\\" in filename or not filename.endswith(".md"):
-        raise HTTPException(status_code=400, detail="Invalid filename")
-    path = DOCS_DIR / filename
-    if not path.exists():
+@app.get("/v1/docs/{doc_path:path}")
+def get_doc(doc_path: str):
+    if not doc_path.endswith(".md") or ".." in doc_path.split("/"):
+        raise HTTPException(status_code=400, detail="Invalid doc path")
+    try:
+        resolved = (DOCS_DIR / doc_path).resolve()
+        docs_root = DOCS_DIR.resolve()
+    except OSError:
+        raise HTTPException(status_code=400, detail="Invalid doc path")
+    if not resolved.is_relative_to(docs_root):
+        raise HTTPException(status_code=400, detail="Invalid doc path")
+    if not resolved.is_file():
         raise HTTPException(status_code=404, detail="Doc not found")
-    return PlainTextResponse(path.read_text(encoding="utf-8"))
+    return PlainTextResponse(resolved.read_text(encoding="utf-8"))
 
 
 # Serve static UI from /

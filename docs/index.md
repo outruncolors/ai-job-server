@@ -1,0 +1,20 @@
+# AI Job Server
+
+A self-hosted job runner for text, audio, and image generation, plus the tooling around it (context, wildcards, schedules, MCP tools, server controls).
+
+Use the tree on the left to navigate. Every page in the site has a matching doc; the structure here mirrors the navbar.
+
+## Sections
+
+- **[Generation](generation/index.md)** — the three creative tabs: Text (chain jobs), Audio (voice), Visual (image)
+- **[Tools](tools/index.md)** — content building blocks: context items, wildcards, ticks (schedules), MCP tools
+- **[Management](management/index.md)** — server controls, the job list, this docs viewer
+- **[Reference](reference/index.md)** — architecture, REST API, configuration, design notes, UI standards
+
+## Quick start
+
+1. Open **Text** (`/chain`) and run a one-step chain: `{{input}}` as the prompt, type "say hi" in the input box.
+2. Watch the **Jobs** page for status. Click the job to see its artifacts.
+3. From **Server → LLM**, configure the LLM endpoint that backs chain jobs.
+
+If something feels missing, it probably belongs in [Reference](reference/index.md).
