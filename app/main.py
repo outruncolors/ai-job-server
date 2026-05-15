@@ -376,12 +376,18 @@ async def create_wildcard_route(body: dict):
     return create_wildcard(
         name=body.get("name", ""),
         entries=body.get("entries", []),
+        description=body.get("description", ""),
     )
 
 
 @app.put("/v1/wildcards/{wid}", status_code=200)
 async def update_wildcard_route(wid: str, body: dict):
-    result = update_wildcard(wid, name=body.get("name", ""), entries=body.get("entries", []))
+    result = update_wildcard(
+        wid,
+        name=body.get("name", ""),
+        entries=body.get("entries", []),
+        description=body.get("description", ""),
+    )
     if result is None:
         raise HTTPException(status_code=404, detail="Wildcard not found")
     return result

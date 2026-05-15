@@ -27,15 +27,19 @@ def _write_index(entries: list[dict]) -> None:
 
 
 def list_wildcards() -> list[dict]:
-    return _read_index()
+    items = _read_index()
+    for item in items:
+        item.setdefault("description", "")
+    return items
 
 
-def create_wildcard(name: str, entries: list[dict]) -> dict:
+def create_wildcard(name: str, entries: list[dict], description: str = "") -> dict:
     items = _read_index()
     now = _now_iso()
     item = {
         "id": str(uuid.uuid4()),
         "name": name,
+        "description": description,
         "entries": entries,
         "created_at": now,
         "updated_at": now,
@@ -45,12 +49,15 @@ def create_wildcard(name: str, entries: list[dict]) -> dict:
     return item
 
 
-def update_wildcard(wid: str, name: str, entries: list[dict]) -> Optional[dict]:
+def update_wildcard(
+    wid: str, name: str, entries: list[dict], description: str = ""
+) -> Optional[dict]:
     items = _read_index()
     item = next((e for e in items if e["id"] == wid), None)
     if item is None:
         return None
     item["name"] = name
+    item["description"] = description
     item["entries"] = entries
     item["updated_at"] = _now_iso()
     _write_index(items)
