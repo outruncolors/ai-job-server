@@ -22,8 +22,11 @@ function renderList() {
   el.innerHTML = _wildcards.map(wc => {
     const sel = _editingId === wc.id ? ' selected' : '';
     const count = wc.entries ? wc.entries.length : 0;
+    const desc = (wc.description || '').trim();
+    const descHtml = desc ? `<div class="wc-item-desc">${_escHtml(desc)}</div>` : '';
     return `<div class="wc-item${sel}" onclick="editWildcard('${_escHtml(wc.id)}')">
       <div class="wc-item-name"><em>%%</em>${_escHtml(wc.name)}<em>%%</em></div>
+      ${descHtml}
       <div class="wc-item-count">${count} ${count === 1 ? 'entry' : 'entries'}</div>
     </div>`;
   }).join('');
@@ -85,6 +88,7 @@ function newWildcard() {
   document.getElementById('form-heading').textContent = 'New Wildcard';
   document.getElementById('f-name').value = '';
   document.getElementById('f-name-preview').textContent = '';
+  document.getElementById('f-description').value = '';
   document.getElementById('btn-delete').style.display = 'none';
   document.getElementById('form-msg').textContent = '';
   _renderEntries([]);
@@ -99,6 +103,7 @@ function editWildcard(id) {
   document.getElementById('form-heading').textContent = 'Edit Wildcard';
   document.getElementById('f-name').value = wc.name || '';
   document.getElementById('f-name-preview').textContent = wc.name ? `%%${wc.name}%%` : '';
+  document.getElementById('f-description').value = wc.description || '';
   document.getElementById('btn-delete').style.display = 'inline-block';
   document.getElementById('form-msg').textContent = '';
   _renderEntries(wc.entries || []);
@@ -113,17 +118,18 @@ function cancelForm() {
 async function saveWildcard() {
   const msg = document.getElementById('form-msg');
   msg.style.color = '#777'; msg.textContent = 'Saving…';
-  const name    = document.getElementById('f-name').value.trim();
-  const entries = _collectEntries();
+  const name        = document.getElementById('f-name').value.trim();
+  const description = document.getElementById('f-description').value.trim();
+  const entries     = _collectEntries();
   if (!name) { msg.style.color = '#e44'; msg.textContent = 'Name is required.'; return; }
   if (entries.length === 0) { msg.style.color = '#e44'; msg.textContent = 'Add at least one entry.'; return; }
   const emptyEntry = entries.find(e => !e.text.trim());
   if (emptyEntry) { msg.style.color = '#e44'; msg.textContent = 'All entries must have text.'; return; }
   try {
     if (_editingId) {
-      await api('/wildcards/' + _editingId, 'PUT', { name, entries });
+      await api('/wildcards/' + _editingId, 'PUT', { name, description, entries });
     } else {
-      const created = await api('/wildcards', 'POST', { name, entries });
+      const created = await api('/wildcards', 'POST', { name, description, entries });
       _editingId = created.id;
     }
     msg.style.color = '#2a6'; msg.textContent = 'Saved.';

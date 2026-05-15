@@ -4,9 +4,10 @@ Wildcards are `%%token%%` placeholders that expand to weighted random entries at
 
 ## What's on the page
 
-- **Left** — list of wildcards, each showing `%%name%%` and entry count
+- **Left** — list of wildcards, each showing `%%name%%`, the optional description (truncated to one line), and entry count
 - **Right** — editor:
   - **Name** with a live `%%name%%` preview
+  - **Description** — optional one-line note, surfaced in the list and in the `%%` autocomplete
   - **Entries** — a table of `{text, weight}` rows; weight runs 1–10 (Less often → More often, default 5)
   - **+ Add Entry** to append, remove button per row
 - **Save** / **Delete**
@@ -23,6 +24,7 @@ Stored in `config/wildcards/index.json`:
 |-------|------|-------|
 | `id` | uuid | |
 | `name` | string | the token identifier; case-sensitive |
+| `description` | string | optional one-line note shown in the list and autocomplete |
 | `entries` | `{text, weight}[]` | at least one required, no empty text |
 | `created_at`, `updated_at` | ISO 8601 | |
 
