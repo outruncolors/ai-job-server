@@ -1,0 +1,134 @@
+/* ── components.css ─────────────────────────────────────────────────────────
+   Shared component library. Load order: responsive.css → components.css → page styles.css.
+   All values use CSS custom properties defined in responsive.css.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Reset & base ─────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%; font-family: var(--font-family);
+  background: var(--color-bg); color: var(--color-text); overflow: hidden;
+}
+
+/* ── Form elements ────────────────────────────────────────────────────────── */
+label {
+  display: block; color: #777; font-size: var(--font-size-label);
+  margin-bottom: 3px; margin-top: 10px;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea, select {
+  width: 100%; padding: 6px 8px; background: var(--color-bg-input);
+  border: 1px solid var(--color-border-mid); color: var(--color-text);
+  font-family: var(--font-family); font-size: 0.82rem; border-radius: 3px;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+textarea:focus, select:focus { outline: none; border-color: #4a4a4a; }
+textarea { resize: vertical; min-height: 54px; }
+input[type="checkbox"],
+input[type="radio"]  { width: auto; accent-color: var(--color-accent); }
+input[type="range"]  { width: 100%; accent-color: var(--color-accent); cursor: pointer; padding: 0; border: none; background: none; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+button {
+  padding: var(--btn-pad); background: var(--color-accent); color: #fff; border: none;
+  border-radius: 3px; cursor: pointer; font-family: var(--font-family);
+  font-size: 0.82rem; margin-top: 10px;
+}
+button:hover               { background: var(--color-accent-hover); }
+button.secondary           { background: #333; }
+button.secondary:hover     { background: #424242; }
+button.danger              { background: var(--color-danger-bg); }
+button.danger:hover        { background: #992828; }
+button:disabled,
+button[disabled]           { opacity: 0.38; cursor: not-allowed; background: #2a2a2a; }
+
+/* ── Layout helpers ───────────────────────────────────────────────────────── */
+.row       { display: flex; gap: var(--gap-md); }
+.row > *   { flex: 1; min-width: 0; }
+
+/* ── Two-panel layout (page-specific padding/width defined per page) ───────── */
+#panels      { display: flex; height: 100vh; padding-top: 44px; }
+#panel-left  { overflow-y: auto; border-right: 1px solid var(--color-border); }
+#panel-right { overflow-y: auto; flex: 1; }
+
+/* ── Inline status / message elements ────────────────────────────────────── */
+.msg  { font-size: var(--font-size-label); min-height: 1.1em; margin-top: 6px; }
+.hint { color: var(--color-text-dim); font-size: 0.72rem; }
+
+/* ── Empty state placeholder ──────────────────────────────────────────────── */
+.empty { color: #2a2a2a; font-size: 0.82rem; padding: 20px 0; }
+
+/* ── Form action row ──────────────────────────────────────────────────────── */
+.form-actions         { display: flex; gap: var(--gap-sm); margin-top: 12px; align-items: center; }
+.form-actions button  { margin-top: 0; }
+
+/* ── Labels & status ──────────────────────────────────────────────────────── */
+.section-label {
+  color: var(--color-border-hi); font-size: var(--font-size-micro);
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.status-queued              { color: #777; }
+.status-running             { color: var(--color-warn); }
+.status-done                { color: var(--color-accent); }
+.status-failed, .status-error { color: var(--color-danger); }
+
+/* ── Disclosure triangles (details / summary) ─────────────────────────────── */
+details > summary {
+  cursor: pointer; color: #555; font-size: var(--font-size-label);
+  user-select: none; list-style: none;
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before       { content: '▸ '; }
+details[open] > summary::before { content: '▾ '; }
+
+/* Section-collapse variant: uppercase dimmed heading */
+.section-collapse > summary {
+  color: var(--color-border-hi); font-size: var(--font-size-micro);
+  letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0;
+}
+.section-collapse > summary::before       { content: '▸ '; color: var(--color-border-mid); }
+.section-collapse[open] > summary         { margin-bottom: 6px; }
+.section-collapse[open] > summary::before { content: '▾ '; }
+
+/* ── Tab buttons — underline style (canonical) ────────────────────────────── */
+.tab-btn {
+  background: none; color: #555; border: none; border-bottom: 2px solid transparent;
+  padding: 6px 14px; margin: 0; margin-bottom: -1px; border-radius: 0;
+  font-family: var(--font-family); font-size: var(--font-size-label);
+  cursor: pointer; letter-spacing: 0.04em;
+}
+.tab-btn:hover  { color: #999; background: none; }
+.tab-btn.active { color: var(--color-text); border-bottom-color: var(--color-accent); }
+
+/* ── Tab pane visibility (toggled by switchTab via .active class) ─────────── */
+.tab-pane        { display: none; }
+.tab-pane.active { display: block; }
+
+/* ── Recreate notice ──────────────────────────────────────────────────────── */
+.recreate-notice {
+  background: #1a1208; border: 1px solid #2a1d0a; color: var(--color-warn);
+  padding: 8px 10px; margin-bottom: 16px; border-radius: 3px;
+  font-size: 0.74rem; line-height: 1.5;
+}
+
+/* ── Toast notification stack ─────────────────────────────────────────────── */
+#toast-stack {
+  position: fixed; bottom: 20px; right: 20px;
+  display: flex; flex-direction: column-reverse; gap: 8px;
+  z-index: 500; pointer-events: none;
+}
+.toast {
+  min-width: 230px; max-width: 380px; padding: 10px 14px;
+  border-radius: 3px; font-size: 0.78rem; font-family: var(--font-family);
+  pointer-events: auto; border: 1px solid transparent;
+  animation: toast-in 0.18s ease; transition: opacity 0.28s ease;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+.toast-info    { background: #161622; color: #99b; border-color: #252540; }
+.toast-success { background: #0d1f14; color: #4c9; border-color: #163525; }
+.toast-warning { background: #211900; color: var(--color-warn); border-color: #3d3000; }
+.toast-error   { background: #250f0f; color: var(--color-danger); border-color: #451818; }
+.toast-msg       { display: block; }
+.toast-countdown { display: block; font-size: 0.68rem; opacity: 0.65; margin-top: 4px; }
+.toast-dismiss   { float: right; opacity: 0.4; margin-left: 10px; cursor: pointer; font-size: 0.85rem; line-height: 1; }
+.toast-dismiss:hover { opacity: 0.8; }

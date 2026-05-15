@@ -1,16 +1,5 @@
   // ── Utilities ──────────────────────────────────────────────────────────────
 
-  async function api(path, method = 'GET', body = null) {
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
-    if (body) opts.body = JSON.stringify(body);
-    const r = await fetch('/v1' + path, opts);
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
-  }
-
-  function _escHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
 
   function _fmtBytes(b) {
     if (b >= 1e9) return (b / 1e9).toFixed(1) + ' GB';
@@ -31,70 +20,6 @@
     return parts.join(' ');
   }
 
-  // ── Toast system ───────────────────────────────────────────────────────────
-
-  const _toasts = new Map(); // id → { el, timerId }
-  let _toastSeq = 0;
-
-  function toast(type, message, opts = {}) {
-    const id = opts.id || ('t' + (++_toastSeq));
-
-    const existing = _toasts.get(id);
-    if (existing) {
-      clearTimeout(existing.timerId);
-      // Update content in-place to avoid fade collision
-      existing.el.className = 'toast toast-' + type;
-      existing.el.querySelector('.toast-msg').textContent = message;
-      const cdEl = existing.el.querySelector('.toast-countdown');
-      if (cdEl && !opts.countdown) cdEl.textContent = '';
-      if (!cdEl && opts.countdown) {
-        const d = document.createElement('span');
-        d.className = 'toast-countdown';
-        d.id = 'tc-' + id;
-        existing.el.appendChild(d);
-      }
-      if (!opts.persistent) {
-        const dur = opts.duration ?? _toastDuration(type);
-        existing.timerId = setTimeout(() => toastDismiss(id), dur);
-      } else {
-        existing.timerId = null;
-      }
-      return id;
-    }
-
-    const el = document.createElement('div');
-    el.className = 'toast toast-' + type;
-    el.innerHTML =
-      '<span class="toast-dismiss" onclick="toastDismiss(\'' + id + '\')">&#x2715;</span>' +
-      '<span class="toast-msg">' + _escHtml(message) + '</span>' +
-      (opts.countdown ? '<span class="toast-countdown" id="tc-' + id + '"></span>' : '');
-    document.getElementById('toast-stack').appendChild(el);
-
-    let timerId = null;
-    if (!opts.persistent) {
-      const dur = opts.duration ?? _toastDuration(type);
-      timerId = setTimeout(() => toastDismiss(id), dur);
-    }
-    _toasts.set(id, { el, timerId });
-    return id;
-  }
-
-  function _toastDuration(type) {
-    return type === 'success' ? 3500 : type === 'error' ? 6000 : 4500;
-  }
-
-  function toastDismiss(id) {
-    const entry = _toasts.get(id);
-    if (!entry) return;
-    clearTimeout(entry.timerId);
-    entry.el.style.opacity = '0';
-    setTimeout(() => { entry.el.remove(); _toasts.delete(id); }, 300);
-  }
-
-  function toastSetCountdown(id, text) {
-    const el = document.getElementById('tc-' + id);
-    if (el) el.textContent = text;
-  }
 
   // ── Stats rendering ────────────────────────────────────────────────────────
 

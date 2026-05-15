@@ -1,24 +1,13 @@
     const _recreateId = sessionStorage.getItem('recreate_job_id');
     if (_recreateId) sessionStorage.removeItem('recreate_job_id');
 
-    async function api(path, method = 'GET', body = null) {
-      const opts = { method, headers: { 'Content-Type': 'application/json' } };
-      if (body) opts.body = JSON.stringify(body);
-      const r = await fetch('/v1' + path, opts);
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
-    }
-    function _escHtml(str) {
-      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
     function statusClass(s) { return 'status-' + s; }
 
     // ── Tabs ─────────────────────────────────────────────────────────
     function switchTab(tab) {
       _activeTab = tab;
-      const _tabs = ['chain', 'sequences'];
-      document.querySelectorAll('#chain-tabs .tab-btn').forEach((b, i) =>
-        b.classList.toggle('active', _tabs[i] === tab)
+      document.querySelectorAll('#chain-tabs .tab-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.tab === tab)
       );
       document.getElementById('chain-panel').style.display     = tab === 'chain'     ? '' : 'none';
       document.getElementById('sequences-panel').style.display = tab === 'sequences' ? '' : 'none';

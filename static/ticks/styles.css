@@ -1,55 +1,35 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; font-family: monospace; background: #111; color: #ccc; overflow: hidden; }
+/* ── Panels ── */
+#panel-left  { flex: 0 0 var(--panel-w-md); padding: 24px 20px; }
+#panel-right { padding: 24px 28px; }
 
-label { display: block; color: #777; font-size: 0.76rem; margin-bottom: 3px; margin-top: 10px; }
-input:not([type="checkbox"]), select { width: 100%; padding: 6px 8px; background: #181818; border: 1px solid #2e2e2e; color: #ccc; font-family: monospace; font-size: 0.82rem; border-radius: 3px; }
-input:focus, select:focus { outline: none; border-color: #4a4a4a; }
-button { padding: 7px 18px; background: #2a6; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-family: monospace; font-size: 0.82rem; margin-top: 10px; }
-button:hover { background: #3b7; }
-button:disabled { opacity: 0.4; cursor: not-allowed; }
-button.secondary { background: #333; }
-button.secondary:hover { background: #424242; }
-button.danger { background: #7a2222; }
-button.danger:hover { background: #992828; }
-.msg { font-size: 0.76rem; min-height: 1.1em; margin-top: 6px; }
-.section-label { color: #383838; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; }
-.check-label input[type="checkbox"] { width: auto; }
-
-#panels { display: flex; height: 100vh; padding-top: 44px; }
-#panel-left  { flex: 0 0 320px; overflow-y: auto; padding: 24px 20px; border-right: 1px solid #1a1a1a; }
-#panel-right { flex: 1; overflow-y: auto; padding: 24px 28px; }
-
-/* Tick list items */
+/* ── Tick list items ── */
 .tick-item {
   padding: 10px 12px; border: 1px solid transparent; border-radius: 3px;
   cursor: pointer; margin-bottom: 6px; transition: background 0.15s, border-color 0.15s;
 }
-.tick-item:hover     { background: #141414; border-color: #1e1e1e; }
-.tick-item.selected  { background: #141414; border-color: #2a6; }
-.tick-item.disabled  { opacity: 0.5; }
+.tick-item:hover    { background: var(--color-bg-panel); border-color: #1e1e1e; }
+.tick-item.selected { background: var(--color-bg-panel); border-color: var(--color-accent); }
+.tick-item.disabled { opacity: 0.5; }
 
-.tick-name    { font-size: 0.85rem; color: #ccc; margin-bottom: 3px; }
-.tick-sub     { font-size: 0.70rem; color: #444; }
-.tick-next    { font-size: 0.68rem; color: #2a6; margin-top: 2px; }
+.tick-name { font-size: 0.85rem; color: var(--color-text); margin-bottom: 3px; }
+.tick-sub  { font-size: 0.70rem; color: #444; }
+.tick-next { font-size: 0.68rem; color: var(--color-accent); margin-top: 2px; }
 
-.tick-item-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-}
+.tick-item-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tick-item-info { flex: 1; min-width: 0; }
 
 .tick-fire-btn {
   background: none; border: 1px solid #2a2a2a; color: #555;
-  padding: 2px 7px; font-size: 0.66rem; margin: 0; border-radius: 2px;
-  flex-shrink: 0;
+  padding: 2px 7px; font-size: 0.66rem; margin: 0; border-radius: 2px; flex-shrink: 0;
 }
 .tick-fire-btn:hover { background: #1a1a1a; color: #888; border-color: #444; }
 
-/* Recent jobs */
+/* ── Recent jobs ── */
 .recent-job { font-size: 0.75rem; padding: 5px 0; border-bottom: 1px solid #181818; color: #666; }
 .recent-job:last-child { border-bottom: none; }
-.recent-job a { color: #2a6; text-decoration: none; }
+.recent-job a { color: var(--color-accent); text-decoration: none; }
 .recent-job .job-status { font-size: 0.68rem; padding: 1px 5px; border-radius: 2px; }
-.job-status-done    { background: #0d2a18; color: #2a6; }
-.job-status-running { background: #2a2000; color: #fa0; }
+.job-status-done    { background: #0d2a18; color: var(--color-accent); }
+.job-status-running { background: #2a2000; color: var(--color-warn); }
 .job-status-queued  { background: #1a1a1a; color: #666; }
-.job-status-error   { background: #2a0f0f; color: #e44; }
+.job-status-error   { background: #2a0f0f; color: var(--color-danger); }

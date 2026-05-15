@@ -1,33 +1,14 @@
   let _tools = [];
   let _selected = null;
 
-  async function api(path, method = 'GET', body = null) {
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
-    if (body !== null) opts.body = JSON.stringify(body);
-    const r = await fetch(path, opts);
-    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-    return r.json();
-  }
-
-  function toast(msg) {
-    const el = document.createElement('div');
-    el.className = 'toast toast-error';
-    el.textContent = msg;
-    document.getElementById('toast-stack').appendChild(el);
-    setTimeout(() => el.remove(), 4000);
-  }
-
-  function _escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
 
   async function loadTools() {
     try {
-      const data = await api('/v1/mcp/tools');
+      const data = await api('/mcp/tools');
       _tools = data.tools || [];
       renderToolList();
     } catch (e) {
-      toast('Failed to load tools: ' + e.message);
+      toast('error', 'Failed to load tools: ' + e.message);
     }
   }
 
@@ -125,7 +106,7 @@
     meta.textContent = '';
 
     try {
-      const data = await api(`/v1/mcp/tools/${_selected.name}/call`, 'POST', { arguments: args });
+      const data = await api(`/mcp/tools/${_selected.name}/call`, 'POST', { arguments: args });
       if (data.validation_status) {
         box.className = 'err';
         box.textContent = data.error;

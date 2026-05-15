@@ -28,17 +28,29 @@ Every page must include:
 
 ### Shared Files
 
-Two files handle all responsive behavior and must be loaded in every HTML page:
+Every page must load these files in this exact order:
 
 ```html
-<!-- After the page's inline <style> block, so it wins on source-order ties -->
-<link rel="stylesheet" href="/css/responsive.css">
-
-<!-- Before </body> -->
-<script src="/js/nav-mobile.js"></script>
+<head>
+  <!-- CSS: responsive tokens → shared components → page overrides -->
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- JS: nav → shared utilities → page script → mobile nav -->
+  <script src="/js/nav.js"></script>
+  <!-- optional page deps (wildcards.js, voice-segments.js) -->
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/poll.js"></script>    <!-- only if page polls jobs -->
+  <script src="/js/toast.js"></script>
+  <script src="page.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
 ```
 
-`responsive.css` also defines all CSS custom properties (design tokens). `nav-mobile.js` injects the hamburger button and dropdown menu.
+`responsive.css` defines all CSS custom properties (design tokens). `components.css` provides shared component classes (buttons, inputs, labels, tabs, toast, etc.). `nav-mobile.js` injects the hamburger button and dropdown menu.
 
 ---
 
@@ -58,7 +70,7 @@ Two files handle all responsive behavior and must be loaded in every HTML page:
 ```
 
 - `#panels`: `display: flex; height: 100vh; padding-top: 44px;`
-- `#panel-left`: either `flex: 1` (chain, voice, image) or fixed width (context: 340px, jobs: 480px)
+- `#panel-left`: either `flex: 1` (chain, voice, image) or a semantic width token (see below)
 - `#panel-right`: `flex: 1`
 - `html, body`: `overflow: hidden` (panels scroll internally)
 
@@ -111,6 +123,21 @@ AI Jobs   Chain   Context   Voice   Image   Jobs   [page-specific btn]
 On mobile, `responsive.css` hides `#topnav > a:not(.nav-home)` and `#topnav > button:not(.nav-hamburger)`. Only the home link and hamburger remain visible in the bar.
 
 The dropdown closes on any item tap or outside click.
+
+### Panel Width Tokens
+
+Fixed-width left panels use semantic tokens defined in `responsive.css`:
+
+| Token            | Value  | Used by               |
+|------------------|--------|-----------------------|
+| `--panel-w-sm`   | 300px  | wildcards             |
+| `--panel-w-md`   | 360px  | context, ticks, mcp, server |
+| `--panel-w-lg`   | 420px  | (reserved)            |
+| `--panel-w-xl`   | 480px  | jobs                  |
+
+```css
+#panel-left { flex: 0 0 var(--panel-w-md); }
+```
 
 ---
 
@@ -273,17 +300,84 @@ The nav bar applies horizontal safe-area insets automatically via `responsive.cs
 
 ---
 
+## Shared JS Modules
+
+All shared modules live in `static/js/` and are loaded globally — never wrap them in IIFEs.
+
+### `api.js` — HTTP client
+
+```javascript
+const data = await api('/chain-sequences');               // GET → /v1/chain-sequences
+const saved = await api('/chain-sequences', 'POST', body); // POST with JSON body
+```
+
+Auto-prepends `/v1` unless the path already starts with `/v1`. Throws `Error` with the response body text on non-2xx.
+
+### `escape.js` — HTML escaping
+
+```javascript
+el.innerHTML = '<span>' + _escHtml(userValue) + '</span>';
+```
+
+Escapes `& < > " '`. Use whenever inserting dynamic content into `innerHTML`.
+
+### `toast.js` — Transient notifications
+
+```javascript
+toast('success', 'Saved!');
+toast('error', 'Failed: ' + e.message);
+toast('info', 'Loading…', { persistent: true, id: 'my-toast' });
+toast('info', 'Reconnecting in 3s…', { id: 'my-toast', countdown: true });
+toastSetCountdown('my-toast', '2s…');
+toastDismiss('my-toast');
+```
+
+Auto-injects `<div id="toast-stack">` on first call — no markup required. Types: `success` (3.5s), `error` (6s), others (4.5s). Pass `{ persistent: true }` for toasts that must be manually dismissed. Pass `{ id: 'x' }` to update an existing toast in place.
+
+### `poll.js` — Job polling
+
+```javascript
+const handle = pollJob(jobId, {
+  intervalMs: 3000,            // default; image page uses 800
+  onUpdate(job) { /* job.status is 'queued'|'running' */ },
+  onDone(job)   { /* terminal: done */ },
+  onError(job)  { /* terminal: error or failed */ },
+});
+// To cancel early:
+handle.stop();
+```
+
+Polls `GET /v1/jobs/<jobId>` and stops automatically on done/error/failed. Network errors are silently retried.
+
+---
+
+## Utility Classes (components.css)
+
+| Class              | Purpose                                      |
+|--------------------|----------------------------------------------|
+| `.hint`            | Muted help text (color: #383838, 0.74rem)    |
+| `.empty`           | Empty-state message (centered, dimmed)        |
+| `.form-actions`    | Button row (flex, gap 8px, margin-top 14px)  |
+| `.section-collapse`| Uppercase collapsible `<details>` block      |
+| `.recreate-notice` | Pre-filled form banner (amber, top margin)   |
+| `.badge`           | Small status chip with semantic modifiers    |
+| `.status-queued`   | Color: #777                                  |
+| `.status-running`  | Color: #fa0                                  |
+| `.status-done`     | Color: #2a6                                  |
+| `.status-failed`   | Color: #e44                                  |
+| `.tab-btn`         | Underline-style tab button                   |
+| `.tab-btn.active`  | Active tab (green bottom border)             |
+| `.tab-pane`        | Hidden by default (`display: none`)          |
+| `.tab-pane.active` | Visible tab panel                            |
+
+---
+
 ## Adding a New Page
 
-1. Copy the nav HTML from any existing page.
+1. Create `static/<page>/index.html`, `styles.css`, and `<page>.js`.
 2. Use `#panels`, `#panel-left`, `#panel-right` for the two-column layout — the responsive system handles stacking automatically.
-3. Add after your `</style>`:
-   ```html
-   <link rel="stylesheet" href="/css/responsive.css">
-   ```
-4. Add before `</body>`:
-   ```html
-   <script src="/js/nav-mobile.js"></script>
-   ```
-5. Add `viewport-fit=cover` to the viewport meta tag.
-6. Set the active nav link in JS: `document.querySelector('#topnav [data-page="your-page"]').classList.add('active');`
+3. Use this script/link order in `index.html` (see **Shared Files** above for the full template).
+4. Register the page in `NAV_ITEMS` in `static/js/nav.js`.
+5. Add a static file mount in `app/main.py` (copy pattern from existing pages).
+6. Add `viewport-fit=cover` to the viewport meta tag.
+7. The active nav link is set automatically by `nav.js` based on `window.location.pathname`.

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Ticks · AI Job Server</title>
   <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -20,7 +21,7 @@
         <button class="secondary" onclick="newTick()" style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
       </div>
       <div id="tick-list">
-        <div id="tick-empty">No ticks yet. Click + New to create one.</div>
+        <div id="tick-empty" class="empty">No ticks yet. Click + New to create one.</div>
       </div>
     </div>
 
@@ -95,6 +96,9 @@
   </div>
 
   <script src="/js/nav.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/toast.js"></script>
   <script src="ticks.js"></script>
   <script src="/js/nav-mobile.js"></script>
 </body>

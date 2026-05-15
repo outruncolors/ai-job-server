@@ -1,16 +1,6 @@
     const _recreateId = sessionStorage.getItem('recreate_job_id');
     if (_recreateId) sessionStorage.removeItem('recreate_job_id');
 
-    async function api(path, method = 'GET', body = null) {
-      const opts = { method, headers: { 'Content-Type': 'application/json' } };
-      if (body) opts.body = JSON.stringify(body);
-      const r = await fetch('/v1' + path, opts);
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
-    }
-    function _escHtml(str) {
-      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
 
     // ── Presets ──────────────────────────────────────────────────────
     let _presets = [];
@@ -63,9 +53,8 @@
     // ── Tabs ─────────────────────────────────────────────────────────
     function switchTab(tab) {
       _activeTab = tab;
-      const _tabOrder = ['design', 'clone', 'use', 'utility'];
-      document.querySelectorAll('.tab-btn').forEach((b, i) =>
-        b.classList.toggle('active', _tabOrder[i] === tab)
+      document.querySelectorAll('#voice-tabs .tab-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.tab === tab)
       );
       document.getElementById('design-panel').style.display  = tab === 'design'  ? '' : 'none';
       document.getElementById('clone-panel').style.display   = tab === 'clone'   ? '' : 'none';
@@ -77,7 +66,7 @@
 
     // ── Create: Design ───────────────────────────────────────────────
     let _createJobId   = null;
-    let _createPollTimer = null;
+    let _createPollHandle = null;
 
     function _buildInstruct() {
       const ids = ['create-gender','create-age','create-pitch','create-style','create-accent','create-dialect'];
@@ -119,31 +108,27 @@
         hint.style.display = 'none';
         const job = await api('/jobs/voice', 'POST', body);
         msg.style.color = '#fa0'; msg.textContent = 'Generating sample…';
-        if (_createPollTimer) clearInterval(_createPollTimer);
-        _createPollTimer = setInterval(() => _pollCreateJob(job.job_id), 3000);
+        if (_createPollHandle) { _createPollHandle.stop(); _createPollHandle = null; }
+        _createPollHandle = pollJob(job.job_id, {
+          onUpdate(j) {
+            document.getElementById('create-job-msg').textContent = 'Generating… (' + j.status + ')';
+          },
+          onDone(j) {
+            const msg   = document.getElementById('create-job-msg');
+            const audio = document.getElementById('create-audio');
+            msg.style.color = '#2a6'; msg.textContent = 'Sample ready';
+            _createJobId = j.job_id;
+            audio.src = '/v1/jobs/' + j.job_id + '/files/output.wav';
+            audio.style.display = 'block'; audio.load();
+          },
+          onError(j) {
+            const msg = document.getElementById('create-job-msg');
+            msg.style.color = '#e44'; msg.textContent = 'Error: ' + (j.error || 'unknown');
+          }
+        });
       } catch(e) {
         msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
-    }
-
-    async function _pollCreateJob(jobId) {
-      try {
-        const job   = await api('/jobs/' + jobId);
-        const msg   = document.getElementById('create-job-msg');
-        const audio = document.getElementById('create-audio');
-        if (job.status === 'done') {
-          clearInterval(_createPollTimer); _createPollTimer = null;
-          msg.style.color = '#2a6'; msg.textContent = 'Sample ready';
-          _createJobId = jobId;
-          audio.src = '/v1/jobs/' + jobId + '/files/output.wav';
-          audio.style.display = 'block'; audio.load();
-        } else if (job.status === 'error') {
-          clearInterval(_createPollTimer); _createPollTimer = null;
-          msg.style.color = '#e44'; msg.textContent = 'Error: ' + (job.error || 'unknown');
-        } else {
-          msg.textContent = 'Generating… (' + job.status + ')';
-        }
-      } catch(e) {}
     }
 
     document.getElementById('create-audio').addEventListener('loadedmetadata', function() {
@@ -236,7 +221,7 @@
     }
 
     // ── Use Voice ────────────────────────────────────────────────────
-    let _usePollTimer = null;
+    let _usePollHandle = null;
 
     function toggleAutoSegment() {
       const on = document.getElementById('use-auto-segment').checked;
@@ -292,32 +277,28 @@
         hint.style.display = 'none';
         const job = await api('/jobs/voice', 'POST', body);
         msg.style.color = '#fa0'; msg.textContent = 'Synthesizing…';
-        if (_usePollTimer) clearInterval(_usePollTimer);
-        _usePollTimer = setInterval(() => _pollUseJob(job.job_id), 3000);
+        if (_usePollHandle) { _usePollHandle.stop(); _usePollHandle = null; }
+        _usePollHandle = pollJob(job.job_id, {
+          onUpdate(j) {
+            document.getElementById('use-job-msg').textContent = 'Synthesizing… (' + j.status + ')';
+          },
+          onDone(j) {
+            const msg   = document.getElementById('use-job-msg');
+            const audio = document.getElementById('use-audio');
+            msg.style.color = '#2a6'; msg.textContent = 'Done';
+            audio.src = '/v1/jobs/' + j.job_id + '/files/output.wav';
+            audio.style.display = 'block'; audio.load();
+            _showUseSegments(j.job_id);
+          },
+          onError(j) {
+            const msg = document.getElementById('use-job-msg');
+            msg.style.color = '#e44'; msg.textContent = 'Error: ' + (j.error || 'unknown');
+            _showUseSegments(j.job_id);
+          }
+        });
       } catch(e) {
         msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
-    }
-
-    async function _pollUseJob(jobId) {
-      try {
-        const job   = await api('/jobs/' + jobId);
-        const msg   = document.getElementById('use-job-msg');
-        const audio = document.getElementById('use-audio');
-        if (job.status === 'done') {
-          clearInterval(_usePollTimer); _usePollTimer = null;
-          msg.style.color = '#2a6'; msg.textContent = 'Done';
-          audio.src = '/v1/jobs/' + jobId + '/files/output.wav';
-          audio.style.display = 'block'; audio.load();
-          _showUseSegments(jobId);
-        } else if (job.status === 'error') {
-          clearInterval(_usePollTimer); _usePollTimer = null;
-          msg.style.color = '#e44'; msg.textContent = 'Error: ' + (job.error || 'unknown');
-          _showUseSegments(jobId);
-        } else {
-          msg.textContent = 'Synthesizing… (' + job.status + ')';
-        }
-      } catch(e) {}
     }
 
     async function _showUseSegments(jobId) {

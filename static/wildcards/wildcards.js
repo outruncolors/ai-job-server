@@ -1,17 +1,6 @@
 let _wildcards = [];
 let _editingId = null;
 
-async function api(path, method = 'GET', body = null) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
-  if (body !== null) opts.body = JSON.stringify(body);
-  const r = await fetch('/v1' + path, opts);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-function _escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
 
 async function loadWildcards() {
   try {

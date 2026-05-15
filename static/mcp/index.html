@@ -5,11 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>MCP · AI Job Server</title>
   <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
-<div id="toast-stack"></div>
 
 <nav id="topnav"></nav>
 
@@ -19,7 +18,7 @@
     <div id="tool-list"></div>
   </div>
   <div id="panel-right">
-    <div id="try-empty">Select a tool to try it.</div>
+    <div id="try-empty" class="empty">Select a tool to try it.</div>
     <div id="try-panel">
       <div id="try-title"></div>
       <div id="try-desc"></div>
@@ -45,6 +44,9 @@
 </div>
 
 <script src="/js/nav.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/escape.js"></script>
+<script src="/js/toast.js"></script>
 <script src="mcp.js"></script>
 <script src="/js/nav-mobile.js"></script>
 </body>

@@ -1,7 +1,7 @@
 // Generate tab — workflow picker, prompt input, job submission + polling.
 
 let _workflows = [];  // [{name, filename, valid, promptNodeId, error}]
-let _pollTimer = null;
+let _pollHandle = null;
 let _currentJobId = null;
 const _recreateId = sessionStorage.getItem('recreate_job_id');
 if (_recreateId) sessionStorage.removeItem('recreate_job_id');
@@ -104,52 +104,49 @@ async function submitGenerate() {
   statusEl.style.color = '#888';
   statusEl.textContent = 'Submitting…';
 
-  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  if (_pollHandle) { _pollHandle.stop(); _pollHandle = null; }
 
   try {
     const job = await api('/jobs/image', 'POST', { workflow, prompt });
     _currentJobId = job.job_id;
     statusEl.textContent = 'Job ' + job.job_id + ' — queued';
-    _pollTimer = setInterval(() => _pollJob(_currentJobId), 800);
+    _pollHandle = pollJob(_currentJobId, {
+      intervalMs: 800,
+      onUpdate(j) {
+        const statusEl = document.getElementById('gen-status');
+        statusEl.style.color = '#fa0';
+        statusEl.textContent = 'Job ' + _currentJobId + ' — ' + j.status;
+      },
+      async onDone(j) {
+        const statusEl = document.getElementById('gen-status');
+        const imagesEl = document.getElementById('gen-images');
+        statusEl.style.color = '#2a6';
+        statusEl.textContent = 'Done';
+        try {
+          const artifactsResp = await fetch('/v1/jobs/' + _currentJobId + '/files/artifacts.json');
+          if (artifactsResp.ok) {
+            const artifacts = await artifactsResp.json();
+            imagesEl.innerHTML = '';
+            artifacts.forEach(a => {
+              if (/\.(png|jpg|jpeg|webp|gif)$/i.test(a.filename)) {
+                const img = document.createElement('img');
+                img.src = '/v1/jobs/' + _currentJobId + '/files/' + encodeURIComponent(a.filename);
+                img.alt = a.filename;
+                img.title = a.filename;
+                imagesEl.appendChild(img);
+              }
+            });
+          }
+        } catch (_) {}
+      },
+      onError(j) {
+        const statusEl = document.getElementById('gen-status');
+        statusEl.style.color = '#c44';
+        statusEl.textContent = 'Error: ' + (j.error || 'unknown');
+      }
+    });
   } catch (e) {
     statusEl.style.color = '#c44';
     statusEl.textContent = 'Error: ' + e.message;
   }
-}
-
-async function _pollJob(jobId) {
-  try {
-    const job = await api('/jobs/' + jobId);
-    const statusEl = document.getElementById('gen-status');
-    const imagesEl = document.getElementById('gen-images');
-
-    if (job.status === 'done') {
-      clearInterval(_pollTimer); _pollTimer = null;
-      statusEl.style.color = '#2a6';
-      statusEl.textContent = 'Done';
-      try {
-        const artifactsResp = await fetch('/v1/jobs/' + jobId + '/files/artifacts.json');
-        if (artifactsResp.ok) {
-          const artifacts = await artifactsResp.json();
-          imagesEl.innerHTML = '';
-          artifacts.forEach(a => {
-            if (/\.(png|jpg|jpeg|webp|gif)$/i.test(a.filename)) {
-              const img = document.createElement('img');
-              img.src = '/v1/jobs/' + jobId + '/files/' + encodeURIComponent(a.filename);
-              img.alt = a.filename;
-              img.title = a.filename;
-              imagesEl.appendChild(img);
-            }
-          });
-        }
-      } catch (_) {}
-    } else if (job.status === 'error') {
-      clearInterval(_pollTimer); _pollTimer = null;
-      statusEl.style.color = '#c44';
-      statusEl.textContent = 'Error: ' + (job.error || 'unknown');
-    } else {
-      statusEl.style.color = '#fa0';
-      statusEl.textContent = 'Job ' + jobId + ' — ' + job.status;
-    }
-  } catch (_) {}
 }

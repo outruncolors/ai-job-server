@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Audio · AI Job Server</title>
   <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -18,10 +19,10 @@
 
       <div id="recreate-notice" class="recreate-notice" style="display:none;"></div>
       <div id="voice-tabs">
-        <button class="tab-btn active" onclick="switchTab('design')">Design Voice</button>
-        <button class="tab-btn" onclick="switchTab('clone')">Clone Voice</button>
-        <button class="tab-btn" onclick="switchTab('use')">Use Voice</button>
-        <button class="tab-btn" onclick="switchTab('utility')">Utility Prompts</button>
+        <button class="tab-btn active" data-tab="design"  onclick="switchTab('design')">Design Voice</button>
+        <button class="tab-btn"        data-tab="clone"   onclick="switchTab('clone')">Clone Voice</button>
+        <button class="tab-btn"        data-tab="use"     onclick="switchTab('use')">Use Voice</button>
+        <button class="tab-btn"        data-tab="utility" onclick="switchTab('utility')">Utility Prompts</button>
       </div>
 
       <!-- ── Design Voice tab ── -->
@@ -136,14 +137,14 @@
               <div style="margin-top:10px;">
                 <label>
                   Inference Steps: <strong id="create-steps-val">32</strong>
-                  <span style="color:#383838;font-size:0.7rem;"> (4–64)</span>
+                  <span class="hint"> (4–64)</span>
                 </label>
                 <input id="create-steps" type="range" min="4" max="64" step="1" value="32"
                        oninput="document.getElementById('create-steps-val').textContent=this.value"
                        style="margin-top:4px;">
                 <label style="margin-top:10px;">
                   Guidance Scale: <strong id="create-cfg-val">2.0</strong>
-                  <span style="color:#383838;font-size:0.7rem;"> (0–4)</span>
+                  <span class="hint"> (0–4)</span>
                 </label>
                 <input id="create-cfg" type="range" min="0" max="4" step="0.1" value="2.0"
                        oninput="document.getElementById('create-cfg-val').textContent=parseFloat(this.value).toFixed(1)"
@@ -260,7 +261,7 @@
       <div id="utility-panel" style="display:none;">
 
         <label>Pre-Processing Prompt
-          <span style="color:#383838;font-size:0.7rem;">(overrides built-in default — leave empty to use built-in)</span>
+          <span class="hint">(overrides built-in default — leave empty to use built-in)</span>
         </label>
         <textarea id="preprocess-prompt-input" style="min-height:180px;"></textarea>
         <div style="display:flex;gap:8px;margin-top:6px;">
@@ -270,7 +271,7 @@
         <div class="msg" id="preprocess-msg"></div>
 
         <label style="margin-top:24px;">Segmentation Prompt
-          <span style="color:#383838;font-size:0.7rem;">(overrides built-in default — leave empty to use built-in)</span>
+          <span class="hint">(overrides built-in default — leave empty to use built-in)</span>
         </label>
         <textarea id="segment-prompt-input" style="min-height:140px;"></textarea>
         <div style="display:flex;gap:8px;margin-top:6px;">
@@ -302,7 +303,7 @@
           </div>
           <div id="save-msg" class="msg"></div>
         </fieldset>
-        <div id="create-right-hint" style="color:#222;font-size:0.74rem;margin-top:8px;">
+        <div id="create-right-hint" class="hint" style="margin-top:8px;">
           Generate a sample to hear output here.
         </div>
       </div>
@@ -314,7 +315,7 @@
           <summary style="cursor:pointer;font-size:0.8rem;color:#aaa;">Segments</summary>
           <pre id="use-seg-result" style="font-size:0.75rem;margin-top:6px;white-space:pre-wrap;word-break:break-word;"></pre>
         </details>
-        <div id="use-right-hint" style="color:#222;font-size:0.74rem;margin-top:8px;">
+        <div id="use-right-hint" class="hint" style="margin-top:8px;">
           Synthesize to hear output here.
         </div>
       </div>
@@ -326,6 +327,10 @@
   <script src="/js/nav.js"></script>
   <script src="/js/wildcards.js"></script>
   <script src="/js/voice-segments.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/poll.js"></script>
+  <script src="/js/toast.js"></script>
   <script src="voice.js"></script>
   <script src="/js/nav-mobile.js"></script>
 </body>

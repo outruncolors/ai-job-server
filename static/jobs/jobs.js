@@ -4,19 +4,7 @@
     let _activeJobId = null;
     let _selectedJobs = new Set();
 
-    async function api(path, method = 'GET', body = null) {
-      const opts = { method, headers: { 'Content-Type': 'application/json' } };
-      if (body) opts.body = JSON.stringify(body);
-      const r = await fetch('/v1' + path, opts);
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
-    }
-
     function statusClass(s) { return 'status-' + s; }
-
-    function _escHtml(s) {
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
 
     // ── Jobs table ──────────────────────────────────────────────────
     function _renderJobsPage() {

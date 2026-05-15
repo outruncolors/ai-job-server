@@ -1,14 +1,3 @@
-async function api(path, method, body) {
-  const opts = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
-  if (body) opts.body = JSON.stringify(body);
-  const r = await fetch('/v1' + path, opts);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-function _escHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
