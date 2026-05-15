@@ -6,7 +6,7 @@ The Generate tab submits a prompt against a ComfyUI workflow and shows the resul
 
 - **Workflow** — dropdown populated from `GET /v1/comfyui/workflows`. Only workflows tagged "Ready" appear; invalid ones are listed but disabled.
 - **Prompt** — the text injected into the workflow's `PROMPT` node.
-- **Save / Load saved prompt** — small toolbar above the textarea. **Save** prompts for a name and POSTs the current textarea + workflow selection to `/v1/image-prompts`. The **Load** dropdown lists previously saved prompts (with the workflow shown as a tag); selecting one fills the textarea and, if the saved workflow still exists, also reselects it.
+- **Save / Load saved prompt** — small toolbar above the textarea. **Save** asks for a name and POSTs the current textarea + workflow selection to `/v1/image-prompts`. The **Load** dropdown lists previously saved prompts (with the workflow shown in parentheses); selecting one fills the textarea and, if the saved workflow still exists, also reselects it. See [Saved Image Prompts](prompts.md) for the full library and CRUD UI.
 - **Generate** — submits the job.
 
 ## How it works
