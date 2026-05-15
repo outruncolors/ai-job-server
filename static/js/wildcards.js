@@ -53,7 +53,7 @@ async function _wc_fetch() {
 
 // ── Autocomplete ─────────────────────────────────────────────────────────────
 
-const _wcAC = { el: null, input: null, items: [], sel: 0, names: [] };
+const _wcAC = { el: null, input: null, items: [], sel: 0, wcs: [] };
 
 function _wcEsc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -88,8 +88,10 @@ function _wcInitAC() {
     if (e.target === _wcAC.input) setTimeout(_wcHide, 150);
   }, true);
 
-  // Pre-fetch names for autocomplete
-  _wc_fetch().then(wcs => { _wcAC.names = wcs.map(w => w.name); });
+  // Pre-fetch {name, description} for autocomplete
+  _wc_fetch().then(wcs => {
+    _wcAC.wcs = wcs.map(w => ({ name: w.name, description: w.description || '' }));
+  });
 }
 
 function _wcOnInput(e) {
@@ -98,9 +100,9 @@ function _wcOnInput(e) {
   const before = el.value.slice(0, el.selectionStart);
   const m = before.match(/%%([^%\n]*)$/);
   if (!m) { _wcHide(); return; }
-  if (!_wcAC.names.length) return;
+  if (!_wcAC.wcs.length) return;
   const q = m[1].toLowerCase();
-  const matches = _wcAC.names.filter(n => !q || n.toLowerCase().startsWith(q));
+  const matches = _wcAC.wcs.filter(w => !q || w.name.toLowerCase().startsWith(q));
   if (!matches.length) { _wcHide(); return; }
   _wcAC.input = el;
   _wcAC.items = matches;
@@ -125,11 +127,15 @@ function _wcMove(dir) {
 }
 
 function _wcRender() {
-  _wcAC.el.innerHTML = _wcAC.items.map((name, i) => {
+  _wcAC.el.innerHTML = _wcAC.items.map((wc, i) => {
     const active = i === _wcAC.sel;
+    const descHtml = wc.description
+      ? `<div style="color:#666;font-size:0.68rem;margin-top:1px;` +
+        `overflow:hidden;text-overflow:ellipsis;max-width:260px;">${_wcEsc(wc.description)}</div>`
+      : '';
     return `<div data-idx="${i}" style="padding:6px 10px;cursor:pointer;white-space:nowrap;` +
       `color:${active ? '#6c6' : '#4a8'};background:${active ? '#1a2a1a' : 'transparent'};">` +
-      `%%${_wcEsc(name)}%%</div>`;
+      `%%${_wcEsc(wc.name)}%%${descHtml}</div>`;
   }).join('');
   const sel = _wcAC.el.children[_wcAC.sel];
   if (sel) sel.scrollIntoView({ block: 'nearest' });
@@ -156,9 +162,10 @@ function _wcHide() {
   _wcAC.input = null;
 }
 
-function _wcFill(name) {
+function _wcFill(wc) {
   const input = _wcAC.input;
-  if (!input) return;
+  if (!input || !wc) return;
+  const name   = wc.name;
   const val    = input.value;
   const pos    = input.selectionStart;
   const before = val.slice(0, pos);
