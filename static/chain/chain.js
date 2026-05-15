@@ -1,3 +1,6 @@
+    const _recreateId = sessionStorage.getItem('recreate_job_id');
+    if (_recreateId) sessionStorage.removeItem('recreate_job_id');
+
     async function api(path, method = 'GET', body = null) {
       const opts = { method, headers: { 'Content-Type': 'application/json' } };
       if (body) opts.body = JSON.stringify(body);
@@ -222,6 +225,8 @@
           type: s.type, prompt: s.prompt || '', context_ids: s.context_ids || [],
           tools: s.tools || [],
           voice_preset_id: s.voice_preset_id || '',
+          voice_pre: s.voice_pre || '', voice_post: s.voice_post || '',
+          voice_preprocess: !!s.voice_preprocess, voice_auto_segment: !!s.voice_auto_segment,
           ctx_name: s.ctx_name || '', ctx_description: s.ctx_description || '',
           ctx_tags: s.ctx_tags || [], ctx_pre: s.ctx_pre || '', ctx_post: s.ctx_post || '',
           ctx_overwrite: !!s.ctx_overwrite,
@@ -958,9 +963,81 @@
       } catch (e) {}
     }
 
+    // ── Recreate hydration ────────────────────────────────────────────
+    async function _hydrateFromRecreate(jobId) {
+      const notice = document.getElementById('recreate-notice');
+      let req;
+      try {
+        const r = await fetch('/v1/jobs/' + jobId + '/files/request.json');
+        if (!r.ok) {
+          notice.textContent = 'Could not load original request (job not found).';
+          notice.style.display = 'block';
+          return;
+        }
+        const data = await r.json();
+        req = data.requested;
+      } catch(e) {
+        notice.textContent = 'Could not load original request: ' + e.message;
+        notice.style.display = 'block';
+        return;
+      }
+
+      // Populate LLM fields
+      if (req.llm) {
+        document.getElementById('chain-api-base').value   = req.llm.api_base || '';
+        document.getElementById('chain-model').value      = req.llm.model || '';
+        document.getElementById('chain-temp').value       = req.llm.temperature != null ? req.llm.temperature : 0.7;
+        document.getElementById('chain-max-tokens').value = req.llm.max_tokens || 2048;
+        const presets = JSON.parse(localStorage.getItem(_PRESETS_KEY) || '[]');
+        const match = presets.find(p =>
+          p.api_base === req.llm.api_base && p.model === req.llm.model &&
+          parseFloat(p.temperature) === parseFloat(req.llm.temperature) &&
+          parseInt(p.max_tokens)    === parseInt(req.llm.max_tokens)
+        );
+        document.getElementById('chain-preset-select').value = match ? match.id : '';
+      }
+
+      // Rebuild steps and collect missing references
+      const missing = [];
+      const ctxIds  = new Set((_ctxItems  || []).map(c => c.id));
+      const vpIds   = new Set((_voicePresets || []).map(p => p.id));
+      const seqIds  = new Set((_allSeqs   || []).map(s => s.id));
+      const toolNms = new Set((_mcpTools  || []).map(t => t.name));
+
+      document.getElementById('chain-steps-list').innerHTML = '';
+      _chainStepCounter = 0;
+
+      for (const step of (req.steps || [])) {
+        if (step.type === 'sequence' && step.sequence_id && !seqIds.has(step.sequence_id)) {
+          missing.push('sequence "' + step.sequence_id + '"');
+        }
+        if (step.type === 'voice' && step.voice_preset_id && !vpIds.has(step.voice_preset_id)) {
+          missing.push('voice preset "' + step.voice_preset_id + '"');
+        }
+        for (const cid of (step.context_ids || [])) {
+          if (!ctxIds.has(cid)) missing.push('context item "' + cid + '"');
+        }
+        for (const tn of (step.tools || [])) {
+          if (!toolNms.has(tn)) missing.push('tool "' + tn + '"');
+        }
+        addChainStep(step);
+      }
+
+      if (missing.length > 0) {
+        notice.innerHTML = 'Recreate notice — these references no longer exist:<br>· ' +
+          missing.map(m => _escHtml(m)).join('<br>· ');
+        notice.style.display = 'block';
+      }
+    }
+
     // ── Init ─────────────────────────────────────────────────────────
     _loadChainPresets();
     Promise.all([loadContextItems(), loadVoicePresets(), loadSeqs(), loadMcpTools()]).then(() => {
+      if (_recreateId) {
+        _hydrateFromRecreate(_recreateId);
+        switchTab('chain');
+        return;
+      }
       const savedSeqId = localStorage.getItem(_SEQ_SELECTED_KEY);
       if (savedSeqId) {
         const seq = _allSeqs.find(s => s.id === savedSeqId);

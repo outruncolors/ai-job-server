@@ -18,16 +18,18 @@
       <div id="jobs-toolbar">
         <span class="toolbar-label">All Jobs</span>
         <button class="secondary" onclick="loadJobs()">Refresh</button>
+        <button id="clear-selected-btn" class="danger" disabled onclick="clearSelectedJobs()">Clear</button>
+        <button id="clear-all-btn" class="danger" disabled onclick="clearAllJobs()">Clear All</button>
       </div>
       <div id="jobs-table-wrap">
         <table id="jobs-table">
           <thead>
             <tr>
+              <th class="chk-cell"><input type="checkbox" id="select-all-chk" onchange="toggleSelectAll(this.checked)"></th>
               <th>Job ID</th>
               <th>Type</th>
               <th>Status</th>
               <th>Created</th>
-              <th class="del-cell"></th>
             </tr>
           </thead>
           <tbody id="jobs-body">
@@ -54,7 +56,8 @@
           <div class="raw-links" id="detail-raw-links"></div>
         </div>
 
-        <div id="detail-delete-wrap">
+        <div id="detail-actions-wrap">
+          <button id="detail-recreate-btn" onclick="recreateCurrentJob()" style="display:none;">Recreate</button>
           <button class="danger" id="detail-delete-btn" onclick="deleteCurrentJob()">Delete Job</button>
         </div>
       </div>

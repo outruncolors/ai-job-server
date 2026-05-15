@@ -1,3 +1,6 @@
+    const _recreateId = sessionStorage.getItem('recreate_job_id');
+    if (_recreateId) sessionStorage.removeItem('recreate_job_id');
+
     async function api(path, method = 'GET', body = null) {
       const opts = { method, headers: { 'Content-Type': 'application/json' } };
       if (body) opts.body = JSON.stringify(body);
@@ -441,8 +444,63 @@
       document.getElementById('segment-prompt-msg').textContent = 'Cleared — save to use built-in default.';
     }
 
+    // ── Recreate hydration ────────────────────────────────────────────
+    async function _hydrateFromRecreate(jobId) {
+      const notice = document.getElementById('recreate-notice');
+      let req;
+      try {
+        const r = await fetch('/v1/jobs/' + jobId + '/files/request.json');
+        if (!r.ok) {
+          notice.textContent = 'Could not load original request (job not found).';
+          notice.style.display = 'block';
+          return;
+        }
+        const data = await r.json();
+        req = data.requested;
+      } catch(e) {
+        notice.textContent = 'Could not load original request: ' + e.message;
+        notice.style.display = 'block';
+        return;
+      }
+
+      switchTab('use');
+      const missing = [];
+
+      // Voice preset
+      if (req.voice_preset_id) {
+        document.getElementById('use-preset-select').value = req.voice_preset_id;
+        if (!_presets.some(p => p.id === req.voice_preset_id)) {
+          missing.push('voice preset "' + req.voice_preset_id + '"');
+        }
+      }
+
+      // Text or segments
+      const container = document.getElementById('use-segments-list');
+      if (req.segments && req.segments.length > 0) {
+        container.innerHTML = '';
+        for (const s of req.segments) {
+          vsAddSegment(container, s.text, s.delay_ms);
+        }
+        document.getElementById('use-auto-segment').checked = false;
+      } else if (req.text) {
+        document.getElementById('use-auto-text').value = req.text;
+        document.getElementById('use-auto-segment').checked = true;
+      }
+      toggleAutoSegment();
+
+      // Optional numeric/text fields
+      if (req.speed     != null) document.getElementById('use-spd').value   = req.speed;
+      if (req.num_step  != null) document.getElementById('use-steps').value = req.num_step;
+      if (req.guidance_scale != null) document.getElementById('use-cfg').value = req.guidance_scale;
+
+      if (missing.length > 0) {
+        notice.innerHTML = 'Recreate notice — these references no longer exist:<br>· ' +
+          missing.map(m => m.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')).join('<br>· ');
+        notice.style.display = 'block';
+      }
+    }
+
     // ── Init ─────────────────────────────────────────────────────────
-    loadPresets();
     loadPreprocessPrompt();
     loadSegmentPrompt();
     _loadSegPresets();
@@ -450,3 +508,6 @@
       vsAddSegment(document.getElementById('use-segments-list'));
     });
     vsAddSegment(document.getElementById('use-segments-list'));
+    loadPresets().then(() => {
+      if (_recreateId) _hydrateFromRecreate(_recreateId);
+    });

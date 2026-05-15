@@ -10,6 +10,7 @@ button.secondary { background: #333; }
 button.secondary:hover { background: #424242; }
 button.danger { background: #7a2222; }
 button.danger:hover { background: #992828; }
+button[disabled] { opacity: 0.38; cursor: not-allowed; background: #2a2a2a; }
 .status-queued  { color: #777; }
 .status-running { color: #fa0; }
 .status-done    { color: #2a6; }
@@ -31,12 +32,8 @@ button.danger:hover { background: #992828; }
 #jobs-table td { padding: 5px 10px; border-bottom: 1px solid #171717; }
 #jobs-table tr.clickable:hover td { background: #181818; cursor: pointer; }
 #jobs-table tr.active-row td { background: #141c14; }
-#jobs-table .del-cell { width: 32px; text-align: center; }
-.del-btn {
-  background: none; border: none; color: #383838; cursor: pointer; font-size: 0.9rem;
-  padding: 0 4px; margin-top: 0; line-height: 1; transition: color 0.15s;
-}
-.del-btn:hover { color: #e44; background: none; }
+#jobs-table .chk-cell { width: 30px; text-align: center; padding: 5px 4px; }
+#jobs-table .chk-cell input[type="checkbox"] { cursor: pointer; accent-color: #2a6; }
 #jobs-pagination { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-top: 1px solid #1a1a1a; font-size: 0.72rem; color: #555; }
 #jobs-pagination button { padding: 3px 10px; font-size: 0.72rem; margin-top: 0; }
 #jobs-pagination .page-info { flex: 1; text-align: center; }
@@ -62,4 +59,5 @@ audio { width: 100%; margin-top: 4px; }
 .raw-links { display: flex; flex-wrap: wrap; gap: 10px; }
 .raw-links a { color: #446; font-size: 0.74rem; text-decoration: none; }
 .raw-links a:hover { color: #6680aa; }
-#detail-delete-wrap { margin-top: 24px; padding-top: 16px; border-top: 1px solid #1a1a1a; }
+#detail-actions-wrap { display: flex; gap: 10px; margin-top: 24px; padding-top: 16px; border-top: 1px solid #1a1a1a; }
+#detail-actions-wrap button { margin-top: 0; }

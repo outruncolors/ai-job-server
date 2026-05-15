@@ -113,3 +113,10 @@ button.danger:hover { background: #992828; }
 .toast-info    { border-color: #46a; }
 .toast-dismiss { float: right; cursor: pointer; color: #555; margin-left: 8px; }
 .toast-countdown { display: block; color: #555; font-size: 0.73rem; margin-top: 2px; }
+
+/* ── Recreate notice ── */
+.recreate-notice {
+  background: #1a1208; border: 1px solid #2a1d0a; color: #fa0;
+  padding: 8px 10px; margin-bottom: 16px; border-radius: 3px;
+  font-size: 0.74rem; line-height: 1.5;
+}

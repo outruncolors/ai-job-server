@@ -3,6 +3,8 @@
 let _workflows = [];  // [{name, filename, valid, promptNodeId, error}]
 let _pollTimer = null;
 let _currentJobId = null;
+const _recreateId = sessionStorage.getItem('recreate_job_id');
+if (_recreateId) sessionStorage.removeItem('recreate_job_id');
 
 function initGenerateTab() {
   loadWorkflowList();
@@ -26,6 +28,47 @@ async function loadWorkflowList() {
       onWorkflowChange();
     }
   } catch (_) {}
+  if (_recreateId) _hydrateFromRecreate(_recreateId);
+}
+
+async function _hydrateFromRecreate(jobId) {
+  const notice = document.getElementById('recreate-notice');
+  let req;
+  try {
+    const r = await fetch('/v1/jobs/' + jobId + '/files/request.json');
+    if (!r.ok) {
+      notice.textContent = 'Could not load original request (job not found).';
+      notice.style.display = 'block';
+      return;
+    }
+    const data = await r.json();
+    req = data.requested;
+  } catch(e) {
+    notice.textContent = 'Could not load original request: ' + e.message;
+    notice.style.display = 'block';
+    return;
+  }
+
+  const missing = [];
+
+  if (req.workflow) {
+    document.getElementById('gen-workflow').value = req.workflow;
+    const wf = _workflows.find(w => w.name === req.workflow);
+    if (!wf) {
+      missing.push('workflow "' + req.workflow + '"');
+    }
+    onWorkflowChange();
+  }
+
+  if (req.prompt != null) {
+    document.getElementById('gen-prompt').value = req.prompt;
+  }
+
+  if (missing.length > 0) {
+    notice.innerHTML = 'Recreate notice — these references no longer exist:<br>· ' +
+      missing.map(m => String(m).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')).join('<br>· ');
+    notice.style.display = 'block';
+  }
 }
 
 function onWorkflowChange() {

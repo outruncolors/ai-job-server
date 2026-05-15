@@ -101,6 +101,22 @@ def clear_pending_jobs() -> int:
     return removed
 
 
+def clear_all_jobs() -> int:
+    import shutil
+    if not JOBS_BASE.exists():
+        return 0
+    removed = 0
+    for date_dir in JOBS_BASE.iterdir():
+        if not date_dir.is_dir():
+            continue
+        for job_dir in date_dir.iterdir():
+            if not job_dir.is_dir():
+                continue
+            shutil.rmtree(job_dir)
+            removed += 1
+    return removed
+
+
 def get_job_file(job_id: str, filename: str) -> Optional[Path]:
     job_dir = find_job_dir(job_id)
     if job_dir is None:

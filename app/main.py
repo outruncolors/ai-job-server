@@ -24,6 +24,7 @@ from .comfyui.manager import get_manager as get_comfy_manager
 from .comfyui.router import router as comfyui_router
 from .comfyui.runner import execute_image_job
 from .jobs import (
+    clear_all_jobs,
     clear_pending_jobs,
     create_job,
     execute_voice_job,
@@ -129,6 +130,12 @@ def get_jobs():
 @app.delete("/v1/jobs", status_code=200)
 def clear_queue():
     removed = clear_pending_jobs()
+    return {"removed": removed}
+
+
+@app.delete("/v1/jobs/all", status_code=200)
+def clear_all():
+    removed = clear_all_jobs()
     return {"removed": removed}
 
 

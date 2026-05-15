@@ -2,6 +2,7 @@
     let _allJobs   = [];
     let _jobsPage  = 0;
     let _activeJobId = null;
+    let _selectedJobs = new Set();
 
     async function api(path, method = 'GET', body = null) {
       const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -25,27 +26,70 @@
       const start = _jobsPage * JOBS_PAGE_SIZE;
       const page  = _allJobs.slice(start, start + JOBS_PAGE_SIZE);
 
+      const masterChk = document.getElementById('select-all-chk');
+
       if (page.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="color:#333;padding:10px;">No jobs yet.</td></tr>';
         pager.innerHTML = '';
+        if (masterChk) { masterChk.checked = false; masterChk.indeterminate = false; }
+        _updateClearBtns();
         return;
       }
 
       tbody.innerHTML = page.map(j => `
         <tr class="clickable${_activeJobId === j.job_id ? ' active-row' : ''}" data-job-id="${j.job_id}" onclick="openDetail('${j.job_id}')">
+          <td class="chk-cell" onclick="event.stopPropagation()">
+            <input type="checkbox" class="job-chk" data-job-id="${j.job_id}"
+              ${_selectedJobs.has(j.job_id) ? 'checked' : ''}
+              onchange="onJobCheckChange(this)">
+          </td>
           <td style="color:#555">${j.job_id.slice(0,8)}&hellip;</td>
           <td style="color:#666">${j.job_type}</td>
           <td class="${statusClass(j.status)}">${j.status}</td>
           <td style="color:#555">${new Date(j.created_at).toLocaleString()}</td>
-          <td class="del-cell">
-            <button class="del-btn" title="Delete job" onclick="deleteJob(event,'${j.job_id}')">&#10005;</button>
-          </td>
         </tr>`).join('');
+
+      // Sync master checkbox
+      if (masterChk) {
+        const pageIds = page.map(j => j.job_id);
+        masterChk.checked = pageIds.every(id => _selectedJobs.has(id));
+        masterChk.indeterminate = !masterChk.checked && pageIds.some(id => _selectedJobs.has(id));
+      }
 
       pager.innerHTML = totalPages <= 1 ? '' : `
         <button class="secondary" onclick="_jobsGo(-1)" ${_jobsPage === 0 ? 'disabled' : ''}>&#8592; Prev</button>
         <span class="page-info">${_jobsPage + 1} / ${totalPages}</span>
         <button class="secondary" onclick="_jobsGo(1)" ${_jobsPage >= totalPages - 1 ? 'disabled' : ''}>Next &#8594;</button>`;
+
+      _updateClearBtns();
+    }
+
+    function onJobCheckChange(chk) {
+      const jobId = chk.getAttribute('data-job-id');
+      if (chk.checked) _selectedJobs.add(jobId);
+      else             _selectedJobs.delete(jobId);
+      const page = _allJobs.slice(_jobsPage * JOBS_PAGE_SIZE, (_jobsPage + 1) * JOBS_PAGE_SIZE);
+      const masterChk = document.getElementById('select-all-chk');
+      if (masterChk) {
+        masterChk.checked = page.length > 0 && page.every(j => _selectedJobs.has(j.job_id));
+        masterChk.indeterminate = !masterChk.checked && page.some(j => _selectedJobs.has(j.job_id));
+      }
+      _updateClearBtns();
+    }
+
+    function toggleSelectAll(checked) {
+      const page = _allJobs.slice(_jobsPage * JOBS_PAGE_SIZE, (_jobsPage + 1) * JOBS_PAGE_SIZE);
+      page.forEach(j => {
+        if (checked) _selectedJobs.add(j.job_id);
+        else         _selectedJobs.delete(j.job_id);
+      });
+      document.querySelectorAll('.job-chk').forEach(chk => { chk.checked = checked; });
+      _updateClearBtns();
+    }
+
+    function _updateClearBtns() {
+      document.getElementById('clear-selected-btn').disabled = _selectedJobs.size === 0;
+      document.getElementById('clear-all-btn').disabled      = _allJobs.length === 0;
     }
 
     function _jobsGo(delta) {
@@ -60,9 +104,42 @@
         const data = await api('/jobs');
         _allJobs = (data.jobs || []).slice().sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
         _jobsPage = 0;
+        _selectedJobs.clear();
         _renderJobsPage();
       } catch(e) {
         tbody.innerHTML = `<tr><td colspan="5" style="color:#e44;padding:10px;">Error: ${_escHtml(e.message)}</td></tr>`;
+      }
+    }
+
+    // ── Bulk clear ───────────────────────────────────────────────────
+    async function clearSelectedJobs() {
+      const ids = [..._selectedJobs];
+      if (ids.length === 0) return;
+      if (!window.confirm(`Delete ${ids.length} selected job${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+      try {
+        await Promise.all(ids.map(id => fetch('/v1/jobs/' + id, { method: 'DELETE' })));
+        if (_activeJobId && ids.includes(_activeJobId)) {
+          _activeJobId = null;
+          document.getElementById('detail-view').style.display = 'none';
+          document.getElementById('detail-empty').style.display = 'block';
+        }
+        await loadJobs();
+      } catch(e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function clearAllJobs() {
+      if (_allJobs.length === 0) return;
+      if (!window.confirm('Delete ALL jobs? This cannot be undone.')) return;
+      try {
+        await fetch('/v1/jobs/all', { method: 'DELETE' });
+        _activeJobId = null;
+        document.getElementById('detail-view').style.display = 'none';
+        document.getElementById('detail-empty').style.display = 'block';
+        await loadJobs();
+      } catch(e) {
+        alert('Error: ' + e.message);
       }
     }
 
@@ -79,6 +156,8 @@
       document.getElementById('detail-artifacts').innerHTML = '';
       document.getElementById('detail-raw-links').innerHTML = '';
       document.getElementById('detail-delete-btn').dataset.jobId = jobId;
+      document.getElementById('detail-recreate-btn').dataset.jobId = jobId;
+      document.getElementById('detail-recreate-btn').style.display = 'none';
 
       try {
         const job = await api('/jobs/' + jobId);
@@ -103,6 +182,13 @@
       document.getElementById('detail-meta').innerHTML = rows.map(([k,v]) =>
         `<div class="detail-meta-row"><span class="detail-meta-key">${k}</span><span class="detail-meta-val">${v}</span></div>`
       ).join('');
+
+      // Show Recreate button for known job types
+      const recreateBtn = document.getElementById('detail-recreate-btn');
+      if (['chain', 'voice', 'image'].includes(job.job_type)) {
+        recreateBtn.dataset.jobType = job.job_type;
+        recreateBtn.style.display = '';
+      }
     }
 
     async function _renderArtifacts(jobId) {
@@ -180,14 +266,27 @@
       ).join('');
     }
 
+    // ── Recreate ──────────────────────────────────────────────────────
+    function recreateCurrentJob() {
+      const btn = document.getElementById('detail-recreate-btn');
+      const jobId   = btn.dataset.jobId;
+      const jobType = btn.dataset.jobType;
+      if (!jobId || !jobType) return;
+      const routes = { chain: '/chain', voice: '/voice', image: '/image' };
+      const route = routes[jobType];
+      if (!route) return;
+      sessionStorage.setItem('recreate_job_id', jobId);
+      location.href = route;
+    }
+
     // ── Delete ────────────────────────────────────────────────────────
-    async function deleteJob(evt, jobId) {
-      evt.stopPropagation();
+    async function deleteJob(jobId) {
       if (!window.confirm('Delete this job and all its files? This cannot be undone.')) return;
       try {
         const r = await fetch('/v1/jobs/' + jobId, { method: 'DELETE' });
         if (!r.ok) throw new Error(await r.text());
         _allJobs = _allJobs.filter(j => j.job_id !== jobId);
+        _selectedJobs.delete(jobId);
         if (_jobsPage > 0 && _jobsPage * JOBS_PAGE_SIZE >= _allJobs.length) {
           _jobsPage = Math.max(0, _jobsPage - 1);
         }
@@ -205,7 +304,7 @@
     function deleteCurrentJob() {
       const jobId = document.getElementById('detail-delete-btn').dataset.jobId;
       if (!jobId) return;
-      deleteJob({ stopPropagation: () => {} }, jobId);
+      deleteJob(jobId);
     }
 
     // ── Init ──────────────────────────────────────────────────────────

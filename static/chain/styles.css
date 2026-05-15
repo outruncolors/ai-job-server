@@ -157,3 +157,10 @@ details[open] > summary::before { content: '▾ '; }
 .ctx-entry.is-checked .ctx-entry-title { color: #4a8; }
 .ctx-entry-desc  { color: #484848; font-size: 0.67rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ctx-empty { color: #333; font-size: 0.72rem; padding: 4px 0; }
+
+/* ── Recreate notice ── */
+.recreate-notice {
+  background: #1a1208; border: 1px solid #2a1d0a; color: #fa0;
+  padding: 8px 10px; margin-bottom: 16px; border-radius: 3px;
+  font-size: 0.74rem; line-height: 1.5;
+}
