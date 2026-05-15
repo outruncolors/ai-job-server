@@ -32,6 +32,10 @@ Stored in `config/wildcards/index.json`:
 
 Expansion is applied to: chain step prompts, `ctx_pre`/`ctx_post`, image prompts, voice manual segments, and the input to voice auto-segmentation. What's saved into the job's `request.json` is the expanded text — re-running a job won't re-roll the wildcards.
 
+### Composition
+
+Entries may themselves contain `%%name%%` tokens, so wildcards compose. After an entry is picked, its text is re-scanned and any nested tokens are resolved (each occurrence picked independently). Cycles are detected at resolve time: a token whose name is already being expanded higher up the stack is left literal and a warning is logged to the browser console, so direct (`%%a%%` references `%%a%%`) and indirect (`a → b → a`) cycles cannot hang the page. A hard depth cap of 16 acts as a final safety net.
+
 ## Endpoints
 
 | Method | Path | Purpose |

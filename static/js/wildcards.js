@@ -1,13 +1,32 @@
 // ── Wildcard resolution ──────────────────────────────────────────────────────
 
+const _WC_MAX_DEPTH = 16;
+
 async function resolveWildcards(text) {
   if (!text || !text.includes('%%')) return text;
   const wildcards = await _wc_fetch();
   const map = Object.fromEntries(wildcards.map(w => [w.name.toLowerCase(), w]));
+  return _wc_resolve(text, map, new Set(), 0);
+}
+
+function _wc_resolve(text, map, visiting, depth) {
+  if (!text || !text.includes('%%')) return text;
+  if (depth >= _WC_MAX_DEPTH) {
+    console.warn('resolveWildcards: max depth reached; leaving remaining tokens literal');
+    return text;
+  }
   return text.replace(/%%([^%]+)%%/g, (match, name) => {
-    const wc = map[name.toLowerCase()];
+    const key = name.toLowerCase();
+    const wc  = map[key];
     if (!wc || !wc.entries.length) return match;
-    return _wc_pickWeighted(wc.entries);
+    if (visiting.has(key)) {
+      console.warn(`resolveWildcards: cycle detected at %%${name}%%; leaving literal`);
+      return match;
+    }
+    const picked = _wc_pickWeighted(wc.entries);
+    const next   = new Set(visiting);
+    next.add(key);
+    return _wc_resolve(picked, map, next, depth + 1);
   });
 }
 
