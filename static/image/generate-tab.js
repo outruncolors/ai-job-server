@@ -1,6 +1,7 @@
 // Generate tab — workflow picker, prompt input, job submission + polling.
 
 let _workflows = [];  // [{name, filename, valid, promptNodeId, error}]
+let _savedPrompts = [];  // [{id, name, prompt, workflow, ...}]
 let _pollHandle = null;
 let _currentJobId = null;
 const _recreateId = sessionStorage.getItem('recreate_job_id');
@@ -8,6 +9,7 @@ if (_recreateId) sessionStorage.removeItem('recreate_job_id');
 
 function initGenerateTab() {
   loadWorkflowList();
+  loadSavedPromptList();
 }
 
 async function loadWorkflowList() {
@@ -89,6 +91,68 @@ function onWorkflowChange() {
   } else {
     submitBtn.disabled = false;
     errEl.style.display = 'none';
+  }
+}
+
+async function loadSavedPromptList() {
+  try {
+    const data = await api('/image-prompts');
+    _savedPrompts = data.prompts || [];
+    const sel = document.getElementById('gen-prompt-load');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— load saved prompt —</option>';
+    _savedPrompts.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      const tag = p.workflow ? ' (' + p.workflow + ')' : '';
+      opt.textContent = p.name + tag;
+      sel.appendChild(opt);
+    });
+  } catch (_) {}
+}
+
+function onLoadSavedPrompt() {
+  const sel = document.getElementById('gen-prompt-load');
+  const pid = sel.value;
+  if (!pid) return;
+  const p = _savedPrompts.find(x => x.id === pid);
+  if (!p) return;
+  document.getElementById('gen-prompt').value = p.prompt || '';
+  if (p.workflow && _workflows.find(w => w.name === p.workflow)) {
+    document.getElementById('gen-workflow').value = p.workflow;
+    onWorkflowChange();
+  }
+  // Reset dropdown so the same prompt can be reloaded again later.
+  sel.value = '';
+}
+
+async function savePromptDialog() {
+  const promptText = (document.getElementById('gen-prompt').value || '').trim();
+  if (!promptText) {
+    const statusEl = document.getElementById('gen-status');
+    statusEl.style.color = '#c44';
+    statusEl.textContent = 'Nothing to save — prompt is empty.';
+    return;
+  }
+  const workflow = document.getElementById('gen-workflow').value || null;
+  const name = window.prompt('Name for this prompt?');
+  if (name == null) return;
+  const trimmedName = name.trim();
+  if (!trimmedName) return;
+  try {
+    await api('/image-prompts', 'POST', {
+      name: trimmedName,
+      prompt: promptText,
+      workflow: workflow,
+    });
+    await loadSavedPromptList();
+    const statusEl = document.getElementById('gen-status');
+    statusEl.style.color = '#2a6';
+    statusEl.textContent = 'Saved prompt "' + trimmedName + '".';
+  } catch (e) {
+    const statusEl = document.getElementById('gen-status');
+    statusEl.style.color = '#c44';
+    statusEl.textContent = 'Save failed: ' + e.message;
   }
 }
 

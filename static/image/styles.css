@@ -27,6 +27,15 @@
 .log-ok     { color: var(--color-accent); }
 .log-err    { color: #c44; }
 
+/* ── Prompt save/load toolbar ── */
+.prompt-toolbar {
+  display: flex; gap: 8px; align-items: stretch; margin-bottom: 6px;
+}
+.prompt-toolbar select { flex: 1; min-width: 0; }
+.prompt-toolbar button {
+  padding: 2px 14px; font-size: 0.82rem; white-space: nowrap;
+}
+
 /* ── Generated images ── */
 #gen-images     { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
 #gen-images img { max-width: 100%; border: 1px solid #333; border-radius: 3px; cursor: pointer; }

@@ -21,6 +21,12 @@
       </select>
 
       <label>Prompt</label>
+      <div class="prompt-toolbar">
+        <select id="gen-prompt-load" onchange="onLoadSavedPrompt()">
+          <option value="">— load saved prompt —</option>
+        </select>
+        <button id="gen-prompt-save" type="button" onclick="savePromptDialog()">Save</button>
+      </div>
       <textarea id="gen-prompt" rows="4" placeholder="Describe the image…"></textarea>
 
       <div id="gen-workflow-error" class="msg" style="color:#c44;display:none;"></div>
