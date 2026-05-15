@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Docs · AI Job Server</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <nav id="topnav"></nav>
+
+  <div id="panels">
+
+    <!-- Left: doc file list -->
+    <div id="panel-left">
+      <div style="margin-bottom:12px;">
+        <span class="section-label">DOCS</span>
+      </div>
+      <div id="doc-list">
+        <div class="empty">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Right: rendered markdown -->
+    <div id="panel-right">
+      <div id="doc-content">
+        <div class="doc-placeholder">Select a document from the list.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/js/nav.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="/js/marked.min.js"></script>
+  <script src="docs.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

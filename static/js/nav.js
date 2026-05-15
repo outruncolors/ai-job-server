@@ -10,6 +10,7 @@
     { href: '/mcp',      label: 'MCP',      page: 'mcp',    groupEnd: true },
     { href: '/server',   label: 'Server',   page: 'server'  },
     { href: '/jobs',     label: 'Jobs',     page: 'jobs'    },
+    { href: '/docs/',    label: 'Docs',     page: 'docs'    },
   ];
 
   const nav = document.getElementById('topnav');

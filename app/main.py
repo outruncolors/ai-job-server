@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from .llm_config import delete_preset, list_presets, save_preset, set_default
@@ -71,6 +71,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ai-job-server", version="0.1.0", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
+DOCS_DIR = Path(__file__).parent.parent / "docs"
 
 app.include_router(comfyui_router)
 app.include_router(omnivoice_router)
@@ -386,6 +387,30 @@ def server_stats():
 def server_restart(background_tasks: BackgroundTasks):
     background_tasks.add_task(schedule_restart)
     return ServerRestartResponse(ok=True, message="Restart scheduled")
+
+
+@app.get("/v1/docs")
+def list_docs():
+    if not DOCS_DIR.exists():
+        return {"docs": []}
+    docs = []
+    for f in sorted(DOCS_DIR.glob("*.md")):
+        docs.append({
+            "name": f.name,
+            "title": f.stem.replace("-", " ").replace("_", " ").title(),
+            "size": f.stat().st_size,
+        })
+    return {"docs": docs}
+
+
+@app.get("/v1/docs/{filename}")
+def get_doc(filename: str):
+    if ".." in filename or "/" in filename or "\\" in filename or not filename.endswith(".md"):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    path = DOCS_DIR / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Doc not found")
+    return PlainTextResponse(path.read_text(encoding="utf-8"))
 
 
 # Serve static UI from /
