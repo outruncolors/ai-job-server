@@ -131,8 +131,13 @@ async function saveWildcard() {
     document.getElementById('btn-delete').style.display = 'inline-block';
     document.getElementById('form-heading').textContent = 'Edit Wildcard';
   } catch(e) {
-    msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
+    msg.style.color = '#e44'; msg.textContent = 'Error: ' + _wcErrDetail(e);
   }
+}
+
+function _wcErrDetail(e) {
+  try { return JSON.parse(e.message).detail || e.message; }
+  catch { return e.message; }
 }
 
 async function deleteWildcard() {

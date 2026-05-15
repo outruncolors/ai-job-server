@@ -34,7 +34,10 @@ Expansion is applied to: chain step prompts, `ctx_pre`/`ctx_post`, image prompts
 
 ### Composition
 
-Entries may themselves contain `%%name%%` tokens, so wildcards compose. After an entry is picked, its text is re-scanned and any nested tokens are resolved (each occurrence picked independently). Cycles are detected at resolve time: a token whose name is already being expanded higher up the stack is left literal and a warning is logged to the browser console, so direct (`%%a%%` references `%%a%%`) and indirect (`a → b → a`) cycles cannot hang the page. A hard depth cap of 16 acts as a final safety net.
+Entries may themselves contain `%%name%%` tokens, so wildcards compose. After an entry is picked, its text is re-scanned and any nested tokens are resolved (each occurrence picked independently). Cycles are blocked in two places:
+
+- **At save time** — POST/PUT `/v1/wildcards` walks the reference graph (entry texts → token names, lowercased) and returns HTTP 422 with a `detail` describing the cycle path if saving would introduce a self-reference or transitive cycle. The wildcards editor surfaces the `detail` in its status line.
+- **At resolve time** — a token whose name is already being expanded higher up the stack is left literal and a warning is logged to the browser console, so anything that slipped past the save check (e.g. wildcards added out of order to `config/wildcards/index.json` by hand) still can't hang the page. A hard depth cap of 16 acts as a final safety net.
 
 ## Endpoints
 
