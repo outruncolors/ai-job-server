@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Tickets · AI Job Server</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <nav id="topnav"></nav>
+
+  <div id="panels">
+
+    <!-- Left: ticket list -->
+    <div id="panel-left">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span class="section-label">QUEUE</span>
+        <button class="secondary" onclick="newTicket()"
+                style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
+      </div>
+      <div class="hint" style="font-size:0.65rem;margin-bottom:8px;opacity:0.6;">Drag to reorder priority.</div>
+      <ul id="ticket-list">
+        <li id="empty-state" class="empty">No tickets yet. Click + New to create one.</li>
+      </ul>
+    </div>
+
+    <!-- Right: form -->
+    <div id="panel-right">
+      <div id="form-title-bar">
+        <h2 id="form-heading">New Ticket</h2>
+      </div>
+
+      <label>Title</label>
+      <input id="f-title" type="text" placeholder="Imperative summary, e.g. Add /about page…">
+
+      <label>Description</label>
+      <textarea id="f-desc" style="min-height:80px;" placeholder="What needs to be done and why…"></textarea>
+
+      <label>Status</label>
+      <select id="f-status">
+        <option value="todo">todo</option>
+        <option value="in-progress">in-progress</option>
+        <option value="done">done</option>
+      </select>
+
+      <label>File hints <span class="hint">(one path per line — paths to read first)</span></label>
+      <textarea id="f-hints" style="min-height:90px;font-family:monospace;" placeholder="app/main.py&#10;static/foo/foo.js"></textarea>
+
+      <label>Branch <span class="hint">(set by work-next-ticket skill)</span></label>
+      <input id="f-branch" type="text" readonly placeholder="—">
+
+      <div id="form-actions">
+        <button onclick="saveTicket()">Save</button>
+        <button class="secondary" onclick="cancelForm()">Cancel</button>
+        <button class="danger" id="btn-delete" style="display:none;" onclick="deleteTicket()">Delete</button>
+        <span id="form-msg" class="msg"></span>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/js/nav.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="tickets.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+/* ── Panels ── */
+#panel-left  { width: var(--panel-w-md); flex-shrink: 0; padding: 20px 22px; }
+#panel-right { padding: 24px 32px; }
+
+/* ── Ticket list ── */
+#ticket-list { list-style: none; padding: 0; margin: 0; }
+.ticket-item {
+  border: 1px solid #1e1e1e; border-radius: 3px; padding: 10px 12px; margin-bottom: 6px;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.ticket-item:hover { border-color: #333; background: var(--color-bg-panel); }
+.ticket-item.selected { border-color: var(--color-accent); background: #101810; }
+.ticket-item.dragging { opacity: 0.4; }
+.ticket-item.drop-target { border-top: 2px solid var(--color-accent); }
+
+.ticket-prio {
+  color: #555; font-size: 0.7rem; min-width: 22px; text-align: right;
+  user-select: none; padding-top: 1px;
+}
+.ticket-body { flex: 1; min-width: 0; }
+.ticket-title { color: #bbb; font-size: 0.82rem; margin-bottom: 3px; }
+.ticket-desc  { color: #555; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticket-meta  { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+
+.ticket-status {
+  font-size: 0.62rem; padding: 1px 6px; border-radius: 2px;
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+.ticket-status.todo        { background: #1a1a1a; color: #888; border: 1px solid #2a2a2a; }
+.ticket-status.in-progress { background: #2a2410; color: #db4; border: 1px solid #443; }
+.ticket-status.done        { background: #1a2a1a; color: #4a8; border: 1px solid #243; }
+
+.ticket-hint-count {
+  font-size: 0.62rem; color: #555; border: 1px solid #2a2a2a;
+  padding: 1px 6px; border-radius: 2px;
+}
+
+/* ── Form header ── */
+#form-title-bar {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+}
+#form-title-bar h2 { color: #555; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
+
+/* ── Form actions ── */
+#form-actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+#form-actions button { margin-top: 0; }
+#form-msg { font-size: 0.75rem; flex: 1; }
+
+/* ── Empty state ── */
+#empty-state { padding: 20px 0; list-style: none; }

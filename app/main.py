@@ -22,6 +22,15 @@ from .chain.context_library import (
 from .chain.executor import execute_chain_job, list_chain_steps, patch_initial_chain_status
 from .chain.models import ChainJobRequest
 from .chain.sequences import delete_sequence, duplicate_sequence, list_sequences, save_sequence
+from .tickets.store import (
+    create_ticket,
+    delete_ticket,
+    get_ticket,
+    list_tickets,
+    next_ticket,
+    reorder_tickets,
+    update_ticket,
+)
 from .wildcards import create_wildcard, delete_wildcard, list_wildcards, update_wildcard
 from .comfyui.config import get_config as get_comfy_config
 from .comfyui.manager import get_manager as get_comfy_manager
@@ -205,6 +214,68 @@ def dup_chain_sequence(seq_id: str):
     if result is None:
         raise HTTPException(status_code=404, detail="Sequence not found")
     return result
+
+
+@app.get("/v1/tickets")
+def get_tickets():
+    return {"tickets": list_tickets()}
+
+
+@app.get("/v1/tickets/next")
+def get_next_ticket():
+    t = next_ticket()
+    if t is None:
+        raise HTTPException(status_code=404, detail="No todo tickets")
+    return t
+
+
+@app.post("/v1/tickets", status_code=201)
+async def create_ticket_route(body: dict):
+    try:
+        return create_ticket(
+            title=body.get("title", ""),
+            description=body.get("description", ""),
+            file_hints=body.get("file_hints") or [],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/v1/tickets/reorder", status_code=200)
+async def reorder_tickets_route(body: dict):
+    ids = body.get("ids")
+    if not isinstance(ids, list):
+        raise HTTPException(status_code=422, detail="ids must be a list")
+    try:
+        return {"tickets": reorder_tickets(ids)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/v1/tickets/{tid}")
+def get_ticket_route(tid: str):
+    t = get_ticket(tid)
+    if t is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return t
+
+
+@app.patch("/v1/tickets/{tid}", status_code=200)
+async def update_ticket_route(tid: str, body: dict):
+    try:
+        result = update_ticket(tid, **body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if result is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return result
+
+
+@app.delete("/v1/tickets/{tid}", status_code=200)
+def delete_ticket_route(tid: str):
+    if not delete_ticket(tid):
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return {"ok": True}
 
 
 @app.get("/v1/context-items")
