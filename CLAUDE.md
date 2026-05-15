@@ -49,7 +49,7 @@ Each page under `static/<page>/` has three files (minimum):
 - `styles.css` — page-specific styles only
 - `<page>.js` — shared utilities + init (loaded last so tab modules can call its globals from handlers)
 
-Pages can split into multiple JS modules. Script load order: `nav.js` → (page deps / tab modules) → `<page>.js` → `nav-mobile.js`. The voice page loads `voice-segments.js` before `voice.js`. The image page loads `server-tab.js`, `generate-tab.js`, `workflows-tab.js`, `config-tab.js` before `image.js`.
+Pages can split into multiple JS modules. Script load order: `nav.js` → (page deps / tab modules) → `<page>.js` → `nav-mobile.js`. The voice page loads `voice-segments.js` before `voice.js`. The image page loads `generate-tab.js`, `prompts-tab.js` before `image.js`.
 
 ## Architecture
 

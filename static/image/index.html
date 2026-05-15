@@ -12,33 +12,85 @@
 
   <nav id="topnav"></nav>
 
-  <div id="panels">
-    <div id="panel-left">
-      <div id="recreate-notice" class="recreate-notice" style="display:none;"></div>
-      <label>Workflow</label>
-      <select id="gen-workflow" onchange="onWorkflowChange()">
-        <option value="">— select a workflow —</option>
-      </select>
+  <div id="tab-bar">
+    <button class="tab-btn active" data-tab="generate" onclick="switchTab('generate')">Generate</button>
+    <button class="tab-btn"        data-tab="prompts"  onclick="switchTab('prompts')">Prompts</button>
+  </div>
 
-      <label>Prompt</label>
-      <div class="prompt-toolbar">
-        <select id="gen-prompt-load" onchange="onLoadSavedPrompt()">
-          <option value="">— load saved prompt —</option>
+  <!-- ── Generate tab ───────────────────────────────────────────────── -->
+  <div id="tab-generate" class="tab-pane active" role="tabpanel">
+    <div id="panels">
+      <div id="panel-left">
+        <div id="recreate-notice" class="recreate-notice" style="display:none;"></div>
+        <label>Workflow</label>
+        <select id="gen-workflow" onchange="onWorkflowChange()">
+          <option value="">— select a workflow —</option>
         </select>
-        <button id="gen-prompt-save" type="button" onclick="savePromptDialog()">Save</button>
+
+        <label>Prompt</label>
+        <div class="prompt-toolbar">
+          <select id="gen-prompt-load" onchange="onLoadSavedPrompt()">
+            <option value="">— load saved prompt —</option>
+          </select>
+          <button id="gen-prompt-save" type="button" onclick="savePromptDialog()">Save</button>
+        </div>
+        <textarea id="gen-prompt" rows="4" placeholder="Describe the image…"></textarea>
+
+        <div id="gen-workflow-error" class="msg" style="color:#c44;display:none;"></div>
+
+        <button id="gen-submit" onclick="submitGenerate()" disabled style="margin-top:20px;">
+          Generate
+        </button>
       </div>
-      <textarea id="gen-prompt" rows="4" placeholder="Describe the image…"></textarea>
-
-      <div id="gen-workflow-error" class="msg" style="color:#c44;display:none;"></div>
-
-      <button id="gen-submit" onclick="submitGenerate()" disabled style="margin-top:20px;">
-        Generate
-      </button>
+      <div id="panel-right">
+        <p class="section-label">OUTPUT</p>
+        <div id="gen-status" class="msg"></div>
+        <div id="gen-images"></div>
+      </div>
     </div>
-    <div id="panel-right">
-      <p class="section-label">OUTPUT</p>
-      <div id="gen-status" class="msg"></div>
-      <div id="gen-images"></div>
+  </div>
+
+  <!-- ── Prompts tab ────────────────────────────────────────────────── -->
+  <div id="tab-prompts" class="tab-pane" role="tabpanel">
+    <div id="panels">
+
+      <!-- Left: prompt list -->
+      <div id="panel-left">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <span class="section-label">PROMPTS</span>
+          <button class="secondary" onclick="newPrompt()"
+                  style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
+        </div>
+        <div id="prompt-list">
+          <div id="prompt-empty-state" class="empty">No saved prompts yet. Click + New to create one.</div>
+        </div>
+      </div>
+
+      <!-- Right: form -->
+      <div id="panel-right">
+        <div id="prompt-form-title-bar">
+          <h2 id="prompt-form-heading">New Prompt</h2>
+        </div>
+
+        <label>Name</label>
+        <input id="pf-name" type="text" placeholder="Prompt name…">
+
+        <label>Workflow <span class="hint">(optional — leave blank for generic)</span></label>
+        <select id="pf-workflow">
+          <option value="">— any workflow —</option>
+        </select>
+
+        <label>Prompt</label>
+        <textarea id="pf-prompt" style="min-height:220px;" placeholder="Describe the image…"></textarea>
+
+        <div id="prompt-form-actions">
+          <button onclick="savePrompt()">Save</button>
+          <button class="secondary" onclick="cancelPromptForm()">Cancel</button>
+          <button class="danger" id="pf-btn-delete" style="display:none;" onclick="deletePrompt()">Delete</button>
+          <span id="prompt-form-msg" class="msg"></span>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -49,6 +101,7 @@
   <script src="/js/poll.js"></script>
   <script src="/js/toast.js"></script>
   <script src="generate-tab.js"></script>
+  <script src="prompts-tab.js"></script>
   <script src="image.js"></script>
   <script src="/js/nav-mobile.js"></script>
 </body>
