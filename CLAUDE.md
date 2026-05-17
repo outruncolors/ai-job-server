@@ -41,6 +41,7 @@
 | `app/profiles/exporter.py` | `build_master_profile(name, description)` snapshots live config; `list_required_assets(profile)` returns binary asset paths (voice WAVs) |
 | `app/profiles/importer.py` | `apply_master_profile(profile, mode='replace'\|'merge', asset_source)` writes every domain back to its on-disk store (atomic per-domain), copies referenced WAVs, returns an `ImportReport` |
 | `app/profiles/bundle.py` | `pack_profile(profile, out_path)` and `unpack_profile(zip_path)` — `.zip` bundle with `master.json` + `assets/voice_presets/<wav>`; unpack validates `schema_version`, zip-slip-safe, returns flat asset dir for importer |
+| `app/profiles/store.py` | Named-profile store: `save_profile`, `list_profiles`, `get_profile`, `delete_profile`, `set_active`, `get_active`; profiles live under `config/profiles/<id>/{master.json,assets/}` with `index.json` + `active.json` markers |
 | `app/server.py` | `get_server_stats()`, `schedule_restart()`, 5s job-count cache (`_get_job_counts()`) |
 | `static/js/nav.js` | Builds top nav from `NAV_ITEMS` array; auto-marks active page by pathname |
 | `static/js/voice-segments.js` | Reusable segment list widget (`vsAddSegment`, `vsCollectSegments`) |
