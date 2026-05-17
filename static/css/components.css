@@ -32,7 +32,7 @@ input[type="range"]  { width: 100%; accent-color: var(--color-accent); cursor: p
 button {
   padding: var(--btn-pad); background: var(--color-accent); color: #fff; border: none;
   border-radius: 3px; cursor: pointer; font-family: var(--font-family);
-  font-size: 0.82rem; margin-top: 10px;
+  font-size: 0.82rem;
 }
 button:hover               { background: var(--color-accent-hover); }
 button.secondary           { background: #333; }
