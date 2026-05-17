@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .exporter import build_master_profile, list_required_assets
+from .importer import ImportReport, apply_master_profile
 from .models import (
     SCHEMA_VERSION,
     ChainSequenceEntry,
@@ -21,6 +22,8 @@ __all__ = [
     "ProfileAsset",
     "VoicePresetEntry",
     "WildcardEntry",
+    "ImportReport",
+    "apply_master_profile",
     "build_master_profile",
     "list_required_assets",
 ]
