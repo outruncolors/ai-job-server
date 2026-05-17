@@ -148,6 +148,10 @@
   border-radius: 3px;
 }
 .resolved-prompt .resolved-block + .resolved-block { margin-top: 8px; }
+.resolved-prompt .resolved-empty {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
 .resolved-prompt .resolved-label {
   font-size: var(--font-size-label);
   letter-spacing: 0.08em;
