@@ -135,20 +135,19 @@
 /* ── Resolved-prompt block (shown above voice / image output) ──────────── */
 
 .resolved-prompt {
-  margin-bottom: 16px;
-  padding: 10px 12px;
-  background: var(--color-bg-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 3px;
+  margin-bottom: 18px;
   font-family: var(--font-family);
   font-size: var(--font-size-sm);
   display: none;
 }
-.resolved-prompt .resolved-block + .resolved-block {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--color-border);
+.resolved-prompt .resolved-section-label { margin-bottom: 8px; }
+.resolved-prompt .resolved-block {
+  padding: 10px 12px;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
 }
+.resolved-prompt .resolved-block + .resolved-block { margin-top: 8px; }
 .resolved-prompt .resolved-label {
   font-size: var(--font-size-label);
   letter-spacing: 0.08em;

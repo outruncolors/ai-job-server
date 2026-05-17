@@ -8,7 +8,13 @@
 function renderResolvedPrompt(container, items) {
   if (!container || !items || !items.length) return;
   container.innerHTML = '';
-  container.style.display = '';
+  container.style.display = 'block';
+
+  const header = document.createElement('p');
+  header.className = 'section-label resolved-section-label';
+  header.textContent = 'INPUT';
+  container.appendChild(header);
+
   items.forEach((item, i) => {
     const block = document.createElement('div');
     block.className = 'resolved-block';
