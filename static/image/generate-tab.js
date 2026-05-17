@@ -122,8 +122,8 @@ function onLoadSavedPrompt() {
     document.getElementById('gen-workflow').value = p.workflow;
     onWorkflowChange();
   }
-  // Reset dropdown so the same prompt can be reloaded again later.
-  sel.value = '';
+  // Keep the dropdown showing the loaded prompt so the user can see which
+  // saved prompt is currently in the textarea.
 }
 
 async function savePromptDialog() {
