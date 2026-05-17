@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
-import httpx
 import pytest
 
 
@@ -29,120 +28,38 @@ def tmp_config_path(tmp_path, monkeypatch):
 def test_default_config_created(tmp_config_path):
     from app.omnivoice.config import load_config
     config = load_config()
-    assert config.mode == "ephemeral"
     assert config.voice == "default"
     assert config.speed == 1.0
     assert config.model == "k2-fsa/OmniVoice"
     assert tmp_config_path.exists()
     saved = json.loads(tmp_config_path.read_text())
-    assert saved["mode"] == "ephemeral"
+    assert saved["model"] == "k2-fsa/OmniVoice"
 
 
 # ---------------------------------------------------------------------------
-# 2. GET /v1/omnivoice/status returns correct nested shape
+# 2. GET /v1/omnivoice/status returns the current shape
 # ---------------------------------------------------------------------------
 
 def test_status_endpoint_shape(client, tmp_config_path):
     r = client.get("/v1/omnivoice/status")
     assert r.status_code == 200
     body = r.json()
-    assert "mode" in body
-    assert "configured" in body
-    assert "persistent" in body
-    assert "ephemeral" in body
+    assert "ephemeral_available" in body
     assert "active_voice_jobs" in body
-    assert "updated_at" in body
-    p = body["persistent"]
-    assert "desired_state" in p
-    assert "process_state" in p
-    assert "api_base" in p
-    assert "health" in p
-    e = body["ephemeral"]
-    assert "available" in e
+    assert "infer_base_command" in body
 
 
 # ---------------------------------------------------------------------------
-# 3. PUT /v1/omnivoice/config rejects invalid mode
-# ---------------------------------------------------------------------------
-
-def test_put_config_invalid_mode(client, tmp_config_path):
-    r = client.put("/v1/omnivoice/config", json={"mode": "turbo"})
-    assert r.status_code == 422
-
-
-# ---------------------------------------------------------------------------
-# 4. PUT /v1/omnivoice/config rejects speed out of range
+# 3. PUT /v1/omnivoice/config rejects speed out of range
 # ---------------------------------------------------------------------------
 
 def test_put_config_speed_out_of_range(client, tmp_config_path):
-    r = client.put("/v1/omnivoice/config", json={"mode": "ephemeral", "speed": 99.0})
+    r = client.put("/v1/omnivoice/config", json={"speed": 99.0})
     assert r.status_code == 422
 
 
 # ---------------------------------------------------------------------------
-# 5. OmniVoicePersistentClient writes output bytes when httpx is mocked
-# ---------------------------------------------------------------------------
-
-async def test_persistent_client_writes_output(tmp_path):
-    from app.omnivoice.client import OmniVoicePersistentClient
-
-    output_path = tmp_path / "output.wav"
-    wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt "
-
-    mock_resp = MagicMock()
-    mock_resp.content = wav_bytes
-    mock_resp.raise_for_status = MagicMock()
-
-    mock_client = AsyncMock()
-    mock_client.post = AsyncMock(return_value=mock_resp)
-
-    with patch("httpx.AsyncClient") as MockClient:
-        MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        MockClient.return_value.__aexit__ = AsyncMock(return_value=None)
-
-        c = OmniVoicePersistentClient("http://localhost:8091")
-        await c.synthesize(
-            "hello",
-            output_path,
-            model="k2-fsa/OmniVoice",
-            voice="default",
-            response_format="wav",
-            speed=1.0,
-        )
-
-    assert output_path.read_bytes() == wav_bytes
-
-
-# ---------------------------------------------------------------------------
-# 6. OmniVoicePersistentClient raises RuntimeError on ConnectError
-# ---------------------------------------------------------------------------
-
-async def test_persistent_client_connect_error(tmp_path):
-    from app.omnivoice.client import OmniVoicePersistentClient
-
-    output_path = tmp_path / "output.wav"
-
-    mock_client = AsyncMock()
-    mock_client.post = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
-
-    with patch("httpx.AsyncClient") as MockClient:
-        MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        MockClient.return_value.__aexit__ = AsyncMock(return_value=None)
-
-        c = OmniVoicePersistentClient("http://localhost:8091")
-        with pytest.raises(RuntimeError, match="not reachable"):
-            await c.synthesize(
-                "hello",
-                output_path,
-                model="k2-fsa/OmniVoice",
-                voice="default",
-                response_format="wav",
-                speed=1.0,
-            )
-
-
-# ---------------------------------------------------------------------------
-# 7. OmniVoiceEphemeralRunner.build_command() produces correct arg list
+# 4. OmniVoiceEphemeralRunner.build_command() produces correct arg list
 # ---------------------------------------------------------------------------
 
 def test_ephemeral_runner_build_command():
@@ -218,8 +135,9 @@ async def test_voice_job_stores_requested_and_effective(client, tmp_path):
     assert req_data["requested"]["text"] == "test synthesis"
     assert req_data["requested"]["voice"] == "test-voice"
     assert "effective" in req_data
-    assert req_data["effective"]["mode"] in ("persistent", "ephemeral")
     assert "model" in req_data["effective"]
+    assert req_data["effective"]["voice"] == "test-voice"
+    assert req_data["effective"]["speed"] == 1.5
 
 
 # ---------------------------------------------------------------------------

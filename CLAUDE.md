@@ -6,7 +6,6 @@
 - **Tests**: `.venv/bin/pytest` — `asyncio_mode = auto`, tmp_path + monkeypatch for I/O
 - **Syntax check**: `.venv/bin/python -m py_compile <file>`
 - **Dev server**: `.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8090`
-- **Known pre-existing failures**: `tests/test_omnivoice.py`, `tests/test_voice_presets.py` — unrelated to chain/context work, ignore unless touching voice
 
 ## Key files
 

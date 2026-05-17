@@ -1,6 +1,21 @@
 from __future__ import annotations
 
+import io
+import wave
+
 import pytest
+
+
+def _wav_bytes(duration_s: float = 5.0, sample_rate: int = 8000) -> bytes:
+    """Generate a minimal valid mono PCM WAV of the requested duration."""
+    n_frames = int(duration_s * sample_rate)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(b"\x00\x00" * n_frames)
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +154,7 @@ def test_post_preset(client):
     r = client.post(
         "/v1/voice-presets",
         data={"name": "Test", "caption": "hello there"},
-        files={"file": ("voice.wav", b"RIFF_fake", "audio/wav")},
+        files={"file": ("voice.wav", _wav_bytes(), "audio/wav")},
     )
     assert r.status_code == 201
     body = r.json()
@@ -147,6 +162,15 @@ def test_post_preset(client):
     assert body["caption"] == "hello there"
     assert "id" in body
     assert body["wav_filename"].endswith(".wav")
+
+
+def test_post_preset_rejects_wav_out_of_duration_range(client):
+    r = client.post(
+        "/v1/voice-presets",
+        data={"name": "TooShort", "caption": "tiny"},
+        files={"file": ("voice.wav", _wav_bytes(duration_s=1.0), "audio/wav")},
+    )
+    assert r.status_code == 422
 
 
 def test_post_preset_non_wav_rejected(client):
@@ -162,12 +186,12 @@ def test_post_preset_dedup(client):
     client.post(
         "/v1/voice-presets",
         data={"name": "Dup", "caption": "a"},
-        files={"file": ("v.wav", b"R", "audio/wav")},
+        files={"file": ("v.wav", _wav_bytes(), "audio/wav")},
     )
     r2 = client.post(
         "/v1/voice-presets",
         data={"name": "Dup", "caption": "b"},
-        files={"file": ("v.wav", b"R", "audio/wav")},
+        files={"file": ("v.wav", _wav_bytes(), "audio/wav")},
     )
     assert r2.json()["name"] == "Dup (2)"
 
@@ -176,7 +200,7 @@ def test_list_presets_after_create(client):
     client.post(
         "/v1/voice-presets",
         data={"name": "Listed", "caption": "hi"},
-        files={"file": ("v.wav", b"R", "audio/wav")},
+        files={"file": ("v.wav", _wav_bytes(), "audio/wav")},
     )
     r = client.get("/v1/voice-presets")
     assert r.status_code == 200
@@ -188,7 +212,7 @@ def test_delete_preset_endpoint(client):
     r = client.post(
         "/v1/voice-presets",
         data={"name": "ToDelete", "caption": "gone"},
-        files={"file": ("v.wav", b"RIFF", "audio/wav")},
+        files={"file": ("v.wav", _wav_bytes(), "audio/wav")},
     )
     preset_id = r.json()["id"]
     r2 = client.delete(f"/v1/voice-presets/{preset_id}")
@@ -209,7 +233,7 @@ def test_from_job_endpoint(client, tmp_path, monkeypatch):
 
     job_dir = tmp_path / "2026-05-10" / "test-job-999"
     job_dir.mkdir(parents=True)
-    (job_dir / "output.wav").write_bytes(b"RIFF_job_wav")
+    (job_dir / "output.wav").write_bytes(_wav_bytes())
     monkeypatch.setattr(jobs_module, "JOBS_BASE", tmp_path)
 
     r = client.post(
