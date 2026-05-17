@@ -153,6 +153,20 @@ Serve any file inside the job directory. `path` may include slashes (e.g., `step
 | GET | `/v1/ticks/{id}/recent-jobs` | Jobs fired by this tick |
 | POST | `/v1/ticks/preview` | Preview next 3 fires for a cron expression |
 
+## Profiles
+
+A profile is a snapshot of every declarative-config domain (LLM presets, OmniVoice config, ComfyUI config + workflows, voice presets, wildcards, context items, image prompts, chain sequences) plus the voice-cloning WAVs those presets reference. Stored profiles live under `config/profiles/<id>/{master.json,assets/voice_presets/}`. Activating a profile re-applies its contents to live config in replace mode.
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/profiles` | `{ profiles: [...], active_id }` |
+| GET | `/v1/profiles/active` | `{ active: {...} \| null }` |
+| POST | `/v1/profiles` | `{ name, description? }` — snapshot current live config as a new named profile (name auto-deduped) |
+| POST | `/v1/profiles/{id}/activate` | Apply the profile to live config in replace mode and mark active. Returns `{ active_id, domains, assets_copied, asset_warnings }` |
+| DELETE | `/v1/profiles/{id}` | Remove the profile directory; clears `active_id` if it was the active one |
+| GET | `/v1/profiles/{id}/export` | Download the profile as a `.zip` bundle (`master.json` + `assets/voice_presets/...`) with `Content-Disposition: attachment; filename="<name>.zip"` |
+| POST | `/v1/profiles/import` | `multipart/form-data` with `file` (the `.zip`), optional `name`, optional `mode`. Without `mode`: unpacks and saves as a new named profile (returns the index entry). With `mode=replace\|merge`: applies the bundle directly to live config without storing (returns the import report). Malformed bundles or unsupported `schema_version` → 422. |
+
 ## Image prompts
 
 Saved text prompts for image generation. `workflow` is optional — `null` means generic, otherwise the workflow name as context. Names are auto-deduplicated (`Foo`, `Foo (2)`, …).

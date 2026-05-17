@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import shutil
+import tempfile
+import zipfile
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from .llm_config import delete_preset, list_presets, save_preset, set_default
 from .ticks.persistence import delete_tick, get_tick, list_ticks, save_tick, update_tick_fields
@@ -69,6 +73,18 @@ from .omnivoice.manager import get_manager
 from .omnivoice.router import router as omnivoice_router
 from .voice_presets_router import router as presets_router
 from .mcp.router import router as mcp_router
+from .profiles import (
+    apply_from_zip,
+    delete_profile,
+    export_to_zip,
+    get_active,
+    get_active_id,
+    get_profile,
+    import_as_new,
+    list_profiles,
+    save_profile,
+    set_active,
+)
 
 
 @asynccontextmanager
@@ -282,6 +298,104 @@ async def update_ticket_route(tid: str, body: dict):
 def delete_ticket_route(tid: str):
     if not delete_ticket(tid):
         raise HTTPException(status_code=404, detail="Ticket not found")
+    return {"ok": True}
+
+
+@app.get("/v1/profiles")
+def list_profiles_route():
+    return {"profiles": list_profiles(), "active_id": get_active_id()}
+
+
+@app.get("/v1/profiles/active")
+def get_active_profile_route():
+    return {"active": get_active()}
+
+
+@app.post("/v1/profiles", status_code=201)
+async def create_profile_route(body: dict):
+    try:
+        return save_profile(
+            name=body.get("name", ""),
+            description=body.get("description", ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/v1/profiles/import", status_code=201)
+async def import_profile_route(
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(None),
+    mode: Optional[str] = Form(None),
+):
+    if mode is not None and mode not in ("replace", "merge"):
+        raise HTTPException(status_code=422, detail="mode must be 'replace' or 'merge'")
+
+    tmp_fd = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    try:
+        shutil.copyfileobj(file.file, tmp_fd)
+    finally:
+        tmp_fd.close()
+    zip_path = Path(tmp_fd.name)
+
+    try:
+        if mode is None:
+            try:
+                entry = import_as_new(zip_path, name=name)
+            except (ValueError, zipfile.BadZipFile) as exc:
+                raise HTTPException(status_code=422, detail=str(exc) or "malformed bundle")
+            return entry
+        try:
+            report = apply_from_zip(zip_path, mode=mode)  # type: ignore[arg-type]
+        except (ValueError, zipfile.BadZipFile) as exc:
+            raise HTTPException(status_code=422, detail=str(exc) or "malformed bundle")
+        return {
+            "applied": True,
+            "mode": report.mode,
+            "domains": report.domains,
+            "assets_copied": report.assets_copied,
+            "asset_warnings": report.asset_warnings,
+        }
+    finally:
+        zip_path.unlink(missing_ok=True)
+
+
+@app.get("/v1/profiles/{pid}/export")
+def export_profile_route(pid: str):
+    entry = get_profile(pid)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    tmp.close()
+    out_path = Path(tmp.name)
+    export_to_zip(pid, out_path)
+    safe_name = entry["name"].replace("/", "_").replace("\\", "_")
+    return FileResponse(
+        out_path,
+        media_type="application/zip",
+        filename=f"{safe_name}.zip",
+        background=BackgroundTask(out_path.unlink, missing_ok=True),
+    )
+
+
+@app.post("/v1/profiles/{pid}/activate", status_code=200)
+def activate_profile_route(pid: str):
+    try:
+        report = set_active(pid)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {
+        "active_id": pid,
+        "domains": report.domains,
+        "assets_copied": report.assets_copied,
+        "asset_warnings": report.asset_warnings,
+    }
+
+
+@app.delete("/v1/profiles/{pid}", status_code=200)
+def delete_profile_route(pid: str):
+    if not delete_profile(pid):
+        raise HTTPException(status_code=404, detail="Profile not found")
     return {"ok": True}
 
 

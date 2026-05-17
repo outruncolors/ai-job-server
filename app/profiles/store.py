@@ -20,13 +20,14 @@ from __future__ import annotations
 import json
 import shutil
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from .bundle import _ASSET_PREFIX
+from .bundle import _ASSET_PREFIX, unpack_profile
 from .exporter import build_master_profile, list_required_assets
-from .importer import ImportReport, apply_master_profile
+from .importer import ImportReport, Mode, apply_master_profile
 from .models import MasterProfile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -165,3 +166,65 @@ def _write_active(pid: str) -> None:
 def clear_active() -> None:
     if ACTIVE_PATH.exists():
         ACTIVE_PATH.unlink()
+
+
+def export_to_zip(pid: str, out_path: Path) -> Path:
+    """Pack a stored profile dir into a .zip bundle at `out_path`."""
+    if not _master_path(pid).exists():
+        raise FileNotFoundError(f"profile {pid!r} not found")
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.write(_master_path(pid), arcname="master.json")
+        asset_dir = _asset_dir(pid)
+        if asset_dir.exists():
+            for path in sorted(asset_dir.iterdir()):
+                if path.is_file():
+                    zf.write(path, arcname=f"{ASSETS_SUBDIR}/{path.name}")
+    return out_path
+
+
+def import_as_new(zip_path: Path, *, name: Optional[str] = None) -> dict:
+    """Unpack a bundle and save it as a new named profile."""
+    profile, asset_dir = unpack_profile(zip_path)
+    extraction_root = asset_dir.parent.parent  # cleanup target for the temp tree
+    try:
+        base_name = (name or profile.name or "imported").strip()
+        if not base_name:
+            raise ValueError("name is required")
+        entries = _read_index()
+        final_name = _unique_name(base_name, [e["name"] for e in entries])
+        profile.name = final_name
+
+        pid = str(uuid.uuid4())
+        new_asset_dir = _asset_dir(pid)
+        new_asset_dir.mkdir(parents=True, exist_ok=True)
+        _master_path(pid).write_text(profile.model_dump_json(indent=2), encoding="utf-8")
+        if asset_dir.exists():
+            for src in asset_dir.iterdir():
+                if src.is_file():
+                    shutil.copyfile(src, new_asset_dir / src.name)
+
+        now = _now_iso()
+        entry = {
+            "id": pid,
+            "name": final_name,
+            "description": profile.description or "",
+            "created_at": now,
+            "updated_at": now,
+        }
+        entries.append(entry)
+        _write_index(entries)
+        return entry
+    finally:
+        shutil.rmtree(extraction_root, ignore_errors=True)
+
+
+def apply_from_zip(zip_path: Path, *, mode: Mode = "replace") -> ImportReport:
+    """Unpack a bundle and apply it directly without persisting a named profile."""
+    profile, asset_dir = unpack_profile(zip_path)
+    extraction_root = asset_dir.parent.parent
+    try:
+        return apply_master_profile(profile, mode=mode, asset_source=asset_dir)
+    finally:
+        shutil.rmtree(extraction_root, ignore_errors=True)
