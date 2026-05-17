@@ -167,6 +167,8 @@ A profile is a snapshot of every declarative-config domain (LLM presets, OmniVoi
 | GET | `/v1/profiles/{id}/export` | Download the profile as a `.zip` bundle (`master.json` + `assets/voice_presets/...`) with `Content-Disposition: attachment; filename="<name>.zip"` |
 | POST | `/v1/profiles/import` | `multipart/form-data` with `file` (the `.zip`), optional `name`, optional `mode`. Without `mode`: unpacks and saves as a new named profile (returns the index entry). With `mode=replace\|merge`: applies the bundle directly to live config without storing (returns the import report). Malformed bundles or unsupported `schema_version` → 422. |
 
+The profile widget in the top-right of every page (`static/js/profiles-widget.js`) wraps these routes — desktop renders as a dropdown, mobile as a slide-in drawer.
+
 ## Image prompts
 
 Saved text prompts for image generation. `workflow` is optional — `null` means generic, otherwise the workflow name as context. Names are auto-deduplicated (`Foo`, `Foo (2)`, …).
