@@ -3,8 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!nav) return;
 
   // Collect all nav items except the home link (links + page-specific buttons).
-  // The profile widget is handled separately by its own drawer, so skip it.
-  const items = [...nav.querySelectorAll(':scope > a:not(.nav-home), :scope > button:not(.nav-hamburger):not(.nav-profile-btn)')];
+  const items = [...nav.querySelectorAll(':scope > a:not(.nav-home), :scope > button:not(.nav-hamburger)')];
   if (items.length === 0) return;
 
   // Build mobile dropdown from cloned nav items

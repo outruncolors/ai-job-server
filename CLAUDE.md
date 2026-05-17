@@ -44,7 +44,7 @@
 | `app/server.py` | `get_server_stats()`, `schedule_restart()`, 5s job-count cache (`_get_job_counts()`) |
 | `static/js/nav.js` | Builds top nav from `NAV_ITEMS` array; auto-marks active page by pathname |
 | `static/js/voice-segments.js` | Reusable segment list widget (`vsAddSegment`, `vsCollectSegments`) |
-| `static/js/profiles-widget.js` | Profile dropdown + slide-in mobile drawer; injects `#nav-profile-btn` into `#topnav`; self-contained (works without api/toast/escape); loaded after `nav.js` on every page |
+| `static/js/profiles-widget.js` | Profile widget pinned to right of `#topnav` on every page: `[select ▾] [💾] [⬇] [⬆]`; select-change activates, save overwrites or expands to `[name ✓ ✗]` for `(new profile)`; self-contained (works without api/toast/escape) |
 | `static/css/responsive.css` | Shared responsive styles (dark theme, breakpoints, `#topnav`) |
 
 ### Frontend page layout

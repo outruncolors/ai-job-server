@@ -82,6 +82,7 @@ from .profiles import (
     get_profile,
     import_as_new,
     list_profiles,
+    overwrite_profile,
     save_profile,
     set_active,
 )
@@ -376,6 +377,14 @@ def export_profile_route(pid: str):
         filename=f"{safe_name}.zip",
         background=BackgroundTask(out_path.unlink, missing_ok=True),
     )
+
+
+@app.post("/v1/profiles/{pid}/overwrite", status_code=200)
+def overwrite_profile_route(pid: str):
+    entry = overwrite_profile(pid)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return entry
 
 
 @app.post("/v1/profiles/{pid}/activate", status_code=200)

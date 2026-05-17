@@ -163,11 +163,12 @@ A profile is a snapshot of every declarative-config domain (LLM presets, OmniVoi
 | GET | `/v1/profiles/active` | `{ active: {...} \| null }` |
 | POST | `/v1/profiles` | `{ name, description? }` — snapshot current live config as a new named profile (name auto-deduped) |
 | POST | `/v1/profiles/{id}/activate` | Apply the profile to live config in replace mode and mark active. Returns `{ active_id, domains, assets_copied, asset_warnings }` |
+| POST | `/v1/profiles/{id}/overwrite` | Re-snapshot current live config into the existing slot (preserves id/name; bumps `updated_at`). Does NOT touch live config or the active marker. |
 | DELETE | `/v1/profiles/{id}` | Remove the profile directory; clears `active_id` if it was the active one |
 | GET | `/v1/profiles/{id}/export` | Download the profile as a `.zip` bundle (`master.json` + `assets/voice_presets/...`) with `Content-Disposition: attachment; filename="<name>.zip"` |
 | POST | `/v1/profiles/import` | `multipart/form-data` with `file` (the `.zip`), optional `name`, optional `mode`. Without `mode`: unpacks and saves as a new named profile (returns the index entry). With `mode=replace\|merge`: applies the bundle directly to live config without storing (returns the import report). Malformed bundles or unsupported `schema_version` → 422. |
 
-The profile widget in the top-right of every page (`static/js/profiles-widget.js`) wraps these routes — desktop renders as a dropdown, mobile as a slide-in drawer.
+The profile widget pinned to the right edge of every page's nav (`static/js/profiles-widget.js`) wraps these routes as an inline group: `[ select ▾ ] [ 💾 save ] [ ⬇ export ] [ ⬆ import ]`. Changing the select calls `activate`; Save calls `overwrite` on an existing profile or expands into a name input + ✓/✗ for `(new profile)`; Export navigates to the bundle download; Import uploads a `.zip` and saves it as a new named profile.
 
 ## Image prompts
 

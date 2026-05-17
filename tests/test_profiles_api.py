@@ -198,6 +198,30 @@ def test_import_rejects_unsupported_schema_version(api_client):
     assert "schema_version" in r.json()["detail"]
 
 
+def test_overwrite_route_updates_existing_profile(api_client):
+    _seed_v1()
+    saved = api_client.post("/v1/profiles", json={"name": "snap"}).json()
+
+    # Mutate live state.
+    _seed_v2()
+
+    r = api_client.post(f"/v1/profiles/{saved['id']}/overwrite")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == saved["id"]
+    assert body["name"] == "snap"
+
+    # Re-activating snaps live state back to the v2 snapshot.
+    api_client.post(f"/v1/profiles/{saved['id']}/activate")
+    omnivoice_cfg._config = None
+    assert omnivoice_cfg.get_config().speed == 1.7
+
+
+def test_overwrite_unknown_returns_404(api_client):
+    r = api_client.post("/v1/profiles/missing/overwrite")
+    assert r.status_code == 404
+
+
 def test_import_rejects_bad_mode_value(api_client):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:

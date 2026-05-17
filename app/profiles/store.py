@@ -168,6 +168,31 @@ def clear_active() -> None:
         ACTIVE_PATH.unlink()
 
 
+def overwrite_profile(pid: str) -> Optional[dict]:
+    """Re-snapshot current live config into an existing profile slot.
+
+    Preserves the profile's id, name, and description; rewrites master.json,
+    drops and re-copies the asset bundle, bumps `updated_at`. Does NOT touch
+    active_profile or live config — this is a save-to-slot, not an activate.
+    """
+    entries = _read_index()
+    entry = next((e for e in entries if e["id"] == pid), None)
+    if entry is None:
+        return None
+    profile = build_master_profile(entry["name"], entry.get("description", ""))
+    asset_dir = _asset_dir(pid)
+    if asset_dir.exists():
+        shutil.rmtree(asset_dir)
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    _master_path(pid).write_text(profile.model_dump_json(indent=2), encoding="utf-8")
+    for src in list_required_assets(profile):
+        if src.exists():
+            shutil.copyfile(src, asset_dir / src.name)
+    entry["updated_at"] = _now_iso()
+    _write_index(entries)
+    return entry
+
+
 def export_to_zip(pid: str, out_path: Path) -> Path:
     """Pack a stored profile dir into a .zip bundle at `out_path`."""
     if not _master_path(pid).exists():

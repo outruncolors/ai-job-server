@@ -165,3 +165,39 @@ def test_save_rejects_blank_name(isolated_profiles):
 def test_get_active_returns_none_when_unset(isolated_profiles):
     assert store.get_active_id() is None
     assert store.get_active() is None
+
+
+def test_overwrite_re_snapshots_existing_slot(isolated_profiles):
+    # Snapshot v1, mutate live, overwrite the same slot.
+    _seed_live_config_v1()
+    v1 = store.save_profile("v1")
+
+    _seed_live_config_v2()
+    updated = store.overwrite_profile(v1["id"])
+    assert updated is not None
+    assert updated["id"] == v1["id"]
+    assert updated["name"] == "v1"  # name preserved
+    assert updated["updated_at"] >= v1["updated_at"]
+
+    # The on-disk master.json now reflects v2 state.
+    master = store.load_profile_master(v1["id"])
+    assert master.omnivoice.speed == 1.7
+    assert sorted(p.name for p in master.image_prompts) == ["alpha", "beta"]
+
+    # Overwrite did NOT touch active_id (still None).
+    assert store.get_active_id() is None
+
+
+def test_overwrite_preserves_active_marker(isolated_profiles):
+    _seed_live_config_v1()
+    v1 = store.save_profile("v1")
+    store.set_active(v1["id"])
+    assert store.get_active_id() == v1["id"]
+
+    _seed_live_config_v2()
+    store.overwrite_profile(v1["id"])
+    assert store.get_active_id() == v1["id"]  # still active
+
+
+def test_overwrite_unknown_returns_none(isolated_profiles):
+    assert store.overwrite_profile("does-not-exist") is None

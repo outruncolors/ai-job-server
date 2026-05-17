@@ -1,6 +1,9 @@
-/* Profile widget: dropdown on desktop, slide-in drawer on mobile.
-   Self-contained — works on any page that loads nav.js, even ones without
-   the shared toast/api/escape modules. */
+/* Profile widget: inline group at the right edge of #topnav on every page.
+   Layout:  [ select ▾ ] [ 💾 save ] [ ⬇ export ] [ ⬆ import ]
+   When the select shows "(new profile)" and Save is clicked, the save area
+   swaps to:  [ name input ] [ ✓ confirm ] [ ✗ cancel ] until the user
+   confirms or cancels.
+   Self-contained — works on pages that don't load api.js/toast.js. */
 
 (function () {
   const esc = (typeof _escHtml === 'function')
@@ -11,7 +14,6 @@
 
   function notify(type, msg) {
     if (typeof toast === 'function') return toast(type, msg);
-    // minimal fallback toast
     let stack = document.getElementById('toast-stack');
     if (!stack) {
       stack = document.createElement('div');
@@ -37,277 +39,240 @@
     return r.json();
   }
 
-  const state = { profiles: [], active_id: null, open: false, view: 'menu' };
-  let btn, panel, overlay;
+  const NEW = '__new__';
+  const state = { profiles: [], active_id: null, mode: 'idle' /* | 'naming' */ };
+  let groupEl, selectEl, saveArea, exportBtn, importFileEl;
 
   async function refresh() {
     try {
       const data = await apiJson('/profiles');
       state.profiles = data.profiles || [];
       state.active_id = data.active_id || null;
-    } catch (e) {
+    } catch (_) {
       state.profiles = [];
       state.active_id = null;
     }
   }
 
-  function activeProfile() {
-    return state.profiles.find(p => p.id === state.active_id) || null;
-  }
-
-  function activeLabel() {
-    const a = activeProfile();
-    return a ? a.name : 'No profile';
-  }
-
   function build() {
     const nav = document.getElementById('topnav');
     if (!nav) return;
-    if (document.getElementById('nav-profile-btn')) return;  // already built
+    if (document.getElementById('nav-profile-group')) return;
 
-    btn = document.createElement('button');
-    btn.id = 'nav-profile-btn';
-    btn.className = 'nav-profile-btn';
-    btn.type = 'button';
-    btn.setAttribute('aria-label', 'Profiles');
-    btn.innerHTML =
-      '<span class="profile-icon">👤</span>' +
-      '<span class="profile-name">' + esc(activeLabel()) + '</span>' +
-      '<span class="profile-caret">▾</span>';
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.open ? close() : open();
-    });
-    nav.appendChild(btn);
+    groupEl = document.createElement('div');
+    groupEl.id = 'nav-profile-group';
+    groupEl.className = 'nav-profile-group';
 
-    overlay = document.createElement('div');
-    overlay.id = 'profile-overlay';
-    overlay.className = 'profile-overlay';
-    overlay.addEventListener('click', close);
-    document.body.appendChild(overlay);
+    selectEl = document.createElement('select');
+    selectEl.id = 'profile-select';
+    selectEl.title = 'Active profile';
+    selectEl.addEventListener('change', onSelectChange);
+    groupEl.appendChild(selectEl);
 
-    panel = document.createElement('div');
-    panel.id = 'profile-panel';
-    panel.className = 'profile-panel';
-    panel.setAttribute('role', 'dialog');
-    panel.addEventListener('click', (e) => e.stopPropagation());
-    document.body.appendChild(panel);
+    saveArea = document.createElement('span');
+    saveArea.className = 'profile-save-area';
+    groupEl.appendChild(saveArea);
 
-    // Close on outside click anywhere (desktop dropdown has no overlay).
-    document.addEventListener('click', (e) => {
-      if (!state.open) return;
-      if (panel.contains(e.target) || btn.contains(e.target)) return;
-      close();
-    });
+    exportBtn = document.createElement('button');
+    exportBtn.id = 'profile-export';
+    exportBtn.className = 'profile-icon-btn';
+    exportBtn.type = 'button';
+    exportBtn.title = 'Export selected profile';
+    exportBtn.textContent = '⬇';
+    exportBtn.addEventListener('click', onExport);
+    groupEl.appendChild(exportBtn);
 
-    // Keyboard: Esc closes
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && state.open) close();
-    });
+    const importBtn = document.createElement('button');
+    importBtn.id = 'profile-import';
+    importBtn.className = 'profile-icon-btn';
+    importBtn.type = 'button';
+    importBtn.title = 'Import profile bundle (.zip)';
+    importBtn.textContent = '⬆';
+    importBtn.addEventListener('click', () => importFileEl.click());
+    groupEl.appendChild(importBtn);
 
-    refresh().then(updateLabel);
-  }
+    importFileEl = document.createElement('input');
+    importFileEl.type = 'file';
+    importFileEl.accept = '.zip,application/zip';
+    importFileEl.style.display = 'none';
+    importFileEl.addEventListener('change', onImportFile);
+    groupEl.appendChild(importFileEl);
 
-  function updateLabel() {
-    if (!btn) return;
-    const nameSpan = btn.querySelector('.profile-name');
-    if (nameSpan) nameSpan.textContent = activeLabel();
-  }
+    nav.appendChild(groupEl);
 
-  async function open() {
-    state.open = true;
-    state.view = 'menu';
-    await refresh();
-    render();
-    updateLabel();
-  }
-
-  function close() {
-    state.open = false;
-    if (panel) panel.classList.remove('open');
-    if (overlay) overlay.classList.remove('open');
+    refresh().then(render);
   }
 
   function render() {
-    if (!panel) return;
-    panel.innerHTML = (state.view === 'save')
-      ? saveFormHtml()
-      : (state.view === 'import') ? importFormHtml() : menuHtml();
-    wire();
-    panel.classList.add('open');
-    overlay.classList.add('open');
+    renderSelect();
+    renderSaveArea();
+    updateExportEnabled();
   }
 
-  function menuHtml() {
-    const active = activeProfile();
-    const rows = state.profiles.length
-      ? state.profiles.map(p => `
-          <li class="profile-row${p.id === state.active_id ? ' active' : ''}">
-            <button class="profile-pick" data-id="${esc(p.id)}" type="button">
-              <span class="profile-row-name">${esc(p.name)}</span>
-              ${p.id === state.active_id ? '<span class="profile-row-tag">active</span>' : ''}
-            </button>
-          </li>`).join('')
-      : '<li class="profile-empty">No saved profiles yet.</li>';
+  function renderSelect() {
+    selectEl.innerHTML = '';
+    for (const p of state.profiles) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.id === state.active_id ? p.name + ' ●' : p.name;
+      selectEl.appendChild(opt);
+    }
+    const newOpt = document.createElement('option');
+    newOpt.value = NEW;
+    newOpt.textContent = '(new profile)';
+    selectEl.appendChild(newOpt);
 
-    return `
-      <div class="profile-header">
-        <span class="profile-header-title">Profiles</span>
-        <button class="profile-close" type="button" aria-label="Close">×</button>
-      </div>
-      <div class="profile-body">
-        <ul class="profile-list">${rows}</ul>
-        <div class="profile-actions">
-          <button class="profile-action" data-act="save"   type="button">Save current as new profile…</button>
-          <button class="profile-action" data-act="import" type="button">Import bundle…</button>
-          <button class="profile-action" data-act="export" type="button" ${active ? '' : 'disabled'}>Export active</button>
-          <button class="profile-action danger" data-act="delete" type="button" ${active ? '' : 'disabled'}>Delete active…</button>
-        </div>
-      </div>`;
-  }
-
-  function saveFormHtml() {
-    return `
-      <div class="profile-header">
-        <button class="profile-back" type="button" aria-label="Back">←</button>
-        <span class="profile-header-title">Save current</span>
-        <button class="profile-close" type="button" aria-label="Close">×</button>
-      </div>
-      <div class="profile-body">
-        <label for="pw-save-name">Name</label>
-        <input id="pw-save-name" type="text" placeholder="e.g. friday-baseline" autocomplete="off">
-        <label for="pw-save-desc">Description (optional)</label>
-        <textarea id="pw-save-desc" rows="3" placeholder=""></textarea>
-        <button class="profile-primary" data-act="save-submit" type="button">Save profile</button>
-      </div>`;
-  }
-
-  function importFormHtml() {
-    return `
-      <div class="profile-header">
-        <button class="profile-back" type="button" aria-label="Back">←</button>
-        <span class="profile-header-title">Import bundle</span>
-        <button class="profile-close" type="button" aria-label="Close">×</button>
-      </div>
-      <div class="profile-body">
-        <label for="pw-import-file">Bundle (.zip)</label>
-        <input id="pw-import-file" type="file" accept=".zip,application/zip">
-        <label for="pw-import-name">Profile name (optional — defaults to the bundle's own name)</label>
-        <input id="pw-import-name" type="text" placeholder="" autocomplete="off">
-        <fieldset class="profile-mode">
-          <legend>Mode</legend>
-          <label><input type="radio" name="pw-mode" value="new" checked> Save as new profile</label>
-          <label><input type="radio" name="pw-mode" value="replace"> Apply directly (overwrites live config)</label>
-        </fieldset>
-        <button class="profile-primary" data-act="import-submit" type="button">Upload</button>
-      </div>`;
-  }
-
-  function wire() {
-    panel.querySelectorAll('.profile-close').forEach(b => b.addEventListener('click', close));
-    panel.querySelectorAll('.profile-back').forEach(b => b.addEventListener('click', () => {
-      state.view = 'menu';
-      render();
-    }));
-
-    panel.querySelectorAll('.profile-pick').forEach(b => b.addEventListener('click', () => {
-      activate(b.dataset.id);
-    }));
-
-    panel.querySelectorAll('.profile-action').forEach(b => b.addEventListener('click', () => {
-      const act = b.dataset.act;
-      if (act === 'save')   { state.view = 'save';   render(); }
-      if (act === 'import') { state.view = 'import'; render(); }
-      if (act === 'export') exportActive();
-      if (act === 'delete') deleteActive();
-    }));
-
-    const saveBtn = panel.querySelector('[data-act="save-submit"]');
-    if (saveBtn) saveBtn.addEventListener('click', saveCurrent);
-
-    const importBtn = panel.querySelector('[data-act="import-submit"]');
-    if (importBtn) importBtn.addEventListener('click', importBundle);
-  }
-
-  async function activate(id) {
-    const p = state.profiles.find(x => x.id === id);
-    if (!p) return;
-    if (id === state.active_id) { close(); return; }
-    if (!confirm(`Switch active profile to "${p.name}"? This overwrites every live config domain.`)) return;
-    try {
-      await apiJson(`/profiles/${id}/activate`, 'POST');
-      notify('success', `Activated "${p.name}"`);
-      await refresh();
-      updateLabel();
-      close();
-    } catch (e) {
-      notify('error', 'Activation failed: ' + e.message);
+    if (state.mode === 'naming') {
+      selectEl.value = NEW;
+      selectEl.disabled = true;
+    } else {
+      selectEl.disabled = false;
+      if (state.active_id && state.profiles.some(p => p.id === state.active_id)) {
+        selectEl.value = state.active_id;
+      } else {
+        selectEl.value = NEW;
+      }
     }
   }
 
-  async function saveCurrent() {
-    const name = (panel.querySelector('#pw-save-name').value || '').trim();
-    if (!name) { notify('error', 'Name is required'); return; }
-    const description = panel.querySelector('#pw-save-desc').value || '';
+  function renderSaveArea() {
+    saveArea.innerHTML = '';
+    if (state.mode === 'naming') {
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'profile-name-input';
+      nameInput.placeholder = 'profile name';
+      nameInput.autocomplete = 'off';
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitNew(nameInput.value); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancelNew(); }
+      });
+      saveArea.appendChild(nameInput);
+
+      const ok = document.createElement('button');
+      ok.className = 'profile-icon-btn profile-confirm';
+      ok.type = 'button';
+      ok.title = 'Save new profile';
+      ok.textContent = '✓';
+      ok.addEventListener('click', () => commitNew(nameInput.value));
+      saveArea.appendChild(ok);
+
+      const cancel = document.createElement('button');
+      cancel.className = 'profile-icon-btn';
+      cancel.type = 'button';
+      cancel.title = 'Cancel';
+      cancel.textContent = '✗';
+      cancel.addEventListener('click', cancelNew);
+      saveArea.appendChild(cancel);
+
+      setTimeout(() => nameInput.focus(), 0);
+    } else {
+      const save = document.createElement('button');
+      save.className = 'profile-icon-btn';
+      save.type = 'button';
+      save.title = selectEl.value === NEW
+        ? 'Save current live config as a new profile'
+        : 'Save current live config over the selected profile';
+      save.textContent = '💾';
+      save.addEventListener('click', onSave);
+      saveArea.appendChild(save);
+    }
+  }
+
+  function updateExportEnabled() {
+    const canExport = selectEl.value && selectEl.value !== NEW;
+    exportBtn.disabled = !canExport;
+  }
+
+  async function onSelectChange() {
+    if (state.mode === 'naming') return;
+    const v = selectEl.value;
+    updateExportEnabled();
+    renderSaveArea();  // refresh save button title to reflect new vs overwrite
+    if (v === NEW || v === '' || v === state.active_id) return;
+    const p = state.profiles.find(x => x.id === v);
+    if (!p) return;
     try {
-      const entry = await apiJson('/profiles', 'POST', { name, description });
-      notify('success', `Saved profile "${entry.name}"`);
+      await apiJson(`/profiles/${v}/activate`, 'POST');
+      notify('success', `Activated "${p.name}"`);
       await refresh();
-      updateLabel();
-      state.view = 'menu';
+      render();
+    } catch (e) {
+      notify('error', 'Activation failed: ' + e.message);
+      await refresh();
+      render();
+    }
+  }
+
+  function onSave() {
+    const v = selectEl.value;
+    if (v === NEW || v === '') {
+      state.mode = 'naming';
+      render();
+      return;
+    }
+    overwrite(v);
+  }
+
+  async function overwrite(pid) {
+    const p = state.profiles.find(x => x.id === pid);
+    if (!p) return;
+    try {
+      await apiJson(`/profiles/${pid}/overwrite`, 'POST');
+      notify('success', `Saved over "${p.name}"`);
+      await refresh();
       render();
     } catch (e) {
       notify('error', 'Save failed: ' + e.message);
     }
   }
 
-  function exportActive() {
-    const id = state.active_id;
-    if (!id) return;
-    window.location.href = `/v1/profiles/${id}/export`;
-    close();
+  function cancelNew() {
+    state.mode = 'idle';
+    render();
   }
 
-  async function deleteActive() {
-    const a = activeProfile();
-    if (!a) return;
-    if (!confirm(`Delete profile "${a.name}"? This cannot be undone.`)) return;
+  async function commitNew(rawName) {
+    const name = (rawName || '').trim();
+    if (!name) {
+      notify('error', 'Name is required');
+      return;
+    }
     try {
-      const r = await fetch(`/v1/profiles/${a.id}`, { method: 'DELETE' });
-      if (!r.ok) throw new Error(await r.text());
-      notify('success', `Deleted "${a.name}"`);
+      const entry = await apiJson('/profiles', 'POST', { name });
+      // Mark the freshly saved snapshot as active so the dropdown reflects it.
+      await apiJson(`/profiles/${entry.id}/activate`, 'POST');
+      notify('success', `Saved profile "${entry.name}"`);
+      state.mode = 'idle';
       await refresh();
-      updateLabel();
-      close();
+      render();
     } catch (e) {
-      notify('error', 'Delete failed: ' + e.message);
+      notify('error', 'Save failed: ' + e.message);
     }
   }
 
-  async function importBundle() {
-    const fileEl = panel.querySelector('#pw-import-file');
-    const file = fileEl && fileEl.files && fileEl.files[0];
-    if (!file) { notify('error', 'Choose a .zip first'); return; }
-    const name = (panel.querySelector('#pw-import-name').value || '').trim();
-    const mode = panel.querySelector('input[name="pw-mode"]:checked').value;
-    if (mode === 'replace') {
-      if (!confirm('Apply this bundle in replace mode? All current live config will be overwritten.')) return;
-    }
+  function onExport() {
+    const v = selectEl.value;
+    if (!v || v === NEW) return;
+    window.location.href = `/v1/profiles/${v}/export`;
+  }
+
+  async function onImportFile() {
+    const file = importFileEl.files && importFileEl.files[0];
+    if (!file) return;
     const fd = new FormData();
     fd.append('file', file);
-    if (name) fd.append('name', name);
-    if (mode === 'replace') fd.append('mode', 'replace');
     try {
       const r = await fetch('/v1/profiles/import', { method: 'POST', body: fd });
       if (!r.ok) throw new Error(await r.text());
       const data = await r.json();
-      notify('success', mode === 'replace' ? 'Bundle applied' : `Imported "${data.name}"`);
+      notify('success', `Imported "${data.name}"`);
       await refresh();
-      updateLabel();
-      close();
+      render();
     } catch (e) {
       notify('error', 'Import failed: ' + e.message);
     }
+    importFileEl.value = '';
   }
 
   if (document.readyState === 'loading') {

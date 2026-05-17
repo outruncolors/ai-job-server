@@ -14,6 +14,7 @@ from .store import (
     import_as_new,
     list_profiles,
     load_profile_master,
+    overwrite_profile,
     save_profile,
     set_active,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "import_as_new",
     "list_profiles",
     "load_profile_master",
+    "overwrite_profile",
     "pack_profile",
     "save_profile",
     "set_active",

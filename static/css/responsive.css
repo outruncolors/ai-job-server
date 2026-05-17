@@ -85,7 +85,8 @@
   cursor: pointer;
   font-size: 1.1rem;
   border-radius: 3px;
-  margin-left: auto;
+  /* No margin-left:auto — the profile widget owns the flex-end push,
+     and the hamburger sits immediately after it. */
   font-family: var(--font-family);
   line-height: 1;
   flex-shrink: 0;
@@ -131,198 +132,60 @@
   color: var(--color-text);
 }
 
-/* ── Profile widget: desktop dropdown + mobile slide-in drawer ──────────── */
+/* ── Profile widget: inline group pinned to the right edge of #topnav ──── */
 
-#nav-profile-btn {
-  margin-left: auto;
+.nav-profile-group {
+  margin-left: auto;          /* pushes the whole group flex-end */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: none;
-  border: 1px solid var(--color-border-mid);
-  color: var(--color-text-sub);
-  padding: 4px 10px;
-  font-family: var(--font-family);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.04em;
-  border-radius: 3px;
-  cursor: pointer;
+  gap: 4px;
   flex-shrink: 0;
-  line-height: 1.5;
+  font-family: var(--font-family);
 }
-#nav-profile-btn:hover {
-  color: var(--color-text);
-  border-color: var(--color-border-hi);
-}
-#nav-profile-btn .profile-icon  { font-size: 0.95rem; }
-#nav-profile-btn .profile-name  { max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#nav-profile-btn .profile-caret { font-size: 0.6rem; color: var(--color-text-muted); }
-
-/* Backdrop only shown on mobile (drawer mode). */
-.profile-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  z-index: var(--z-overlay);
-  display: none;
+.nav-profile-group .profile-save-area {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
-/* Desktop panel = dropdown anchored under the nav */
-.profile-panel {
-  position: fixed;
-  top: 44px; right: 16px;
-  width: 320px; max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 60px);
-  background: var(--color-bg-raised);
-  border: 1px solid var(--color-border-mid);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-  z-index: var(--z-drawer);
-  display: none;
-  flex-direction: column;
-  overflow: hidden;
-}
-.profile-panel.open { display: flex; }
-
-.profile-header {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--color-border-mid);
-  background: var(--color-bg-panel);
-}
-.profile-header-title {
-  flex: 1;
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-sub);
-}
-.profile-close, .profile-back {
-  background: none; border: none;
-  color: var(--color-text-sub);
-  font-size: 1.2rem; line-height: 1;
-  padding: 4px 8px;
-  border-radius: 3px;
-  cursor: pointer;
-}
-.profile-close:hover, .profile-back:hover {
-  background: var(--color-border);
-  color: var(--color-text);
-}
-
-.profile-body {
-  padding: 12px 14px 14px;
-  display: flex; flex-direction: column; gap: 10px;
-  overflow-y: auto;
-}
-.profile-body label {
-  display: block;
-  font-size: var(--font-size-label);
-  color: var(--color-text-muted);
-  margin-bottom: 2px;
-}
-.profile-body input[type=text],
-.profile-body input[type=file],
-.profile-body textarea {
-  width: 100%; box-sizing: border-box;
+#profile-select,
+.nav-profile-group .profile-name-input {
   background: var(--color-bg-input);
   border: 1px solid var(--color-border-mid);
   color: var(--color-text);
-  padding: 6px 8px; border-radius: 3px;
+  padding: 3px 6px;
   font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-}
-.profile-body textarea { resize: vertical; }
-
-.profile-list {
-  list-style: none; padding: 0; margin: 0;
-  display: flex; flex-direction: column; gap: 1px;
-  max-height: 220px; overflow-y: auto;
-  border: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
   border-radius: 3px;
-  background: var(--color-bg-panel);
+  line-height: 1.4;
+  max-width: 14em;
+  box-sizing: border-box;
 }
-.profile-list .profile-pick {
-  width: 100%;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 8px 10px;
-  background: none; border: none;
-  color: var(--color-text-sub);
-  font-family: var(--font-family);
-  font-size: 0.8rem;
-  cursor: pointer; text-align: left;
-}
-.profile-row.active .profile-pick {
-  color: var(--color-text);
-  background: var(--color-border);
-}
-.profile-list .profile-pick:hover {
-  background: var(--color-border-mid);
-  color: var(--color-text);
-}
-.profile-row-tag {
-  font-size: 0.6rem;
-  letter-spacing: 0.08em;
-  color: var(--color-accent);
-  text-transform: uppercase;
-}
-.profile-empty {
-  list-style: none; padding: 14px;
-  color: var(--color-text-muted);
-  font-size: 0.78rem;
-  text-align: center;
+#profile-select { padding-right: 18px; }
+#profile-select:hover,
+.nav-profile-group .profile-name-input:focus {
+  border-color: var(--color-border-hi);
+  outline: none;
 }
 
-.profile-actions {
-  display: flex; flex-direction: column; gap: 2px;
-  border-top: 1px solid var(--color-border);
-  padding-top: 8px;
-}
-.profile-action {
-  background: none; border: 1px solid transparent;
-  color: var(--color-text-sub);
-  padding: 8px 10px;
-  font-family: var(--font-family);
-  font-size: 0.78rem;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 3px;
-}
-.profile-action:hover:not([disabled]) {
-  background: var(--color-border-mid);
-  color: var(--color-text);
-}
-.profile-action[disabled] { opacity: 0.4; cursor: not-allowed; }
-.profile-action.danger { color: var(--color-danger); }
-
-.profile-mode {
+.profile-icon-btn {
+  background: none;
   border: 1px solid var(--color-border-mid);
-  border-radius: 3px;
-  padding: 6px 10px;
-  margin: 0;
-}
-.profile-mode legend {
-  font-size: var(--font-size-label);
-  color: var(--color-text-muted);
-  padding: 0 4px;
-}
-.profile-mode label {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 0.78rem;
   color: var(--color-text-sub);
-  margin: 4px 0;
-}
-
-.profile-primary {
-  background: var(--color-accent);
-  color: #000; border: none;
-  padding: 8px 14px;
+  padding: 2px 8px;
   font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
+  font-size: 0.85rem;
   border-radius: 3px;
-  align-self: flex-start;
+  cursor: pointer;
+  line-height: 1.3;
+  flex-shrink: 0;
 }
-.profile-primary:hover { background: var(--color-accent-hover); }
+.profile-icon-btn:hover:not([disabled]) {
+  color: var(--color-text);
+  border-color: var(--color-border-hi);
+}
+.profile-icon-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+.profile-icon-btn.profile-confirm { color: var(--color-accent); border-color: var(--color-accent); }
 
 /* ── Responsive overrides (@media max-width: 768px) ─────────────────────── */
 @media (max-width: 768px) {
@@ -401,34 +264,11 @@
     max-width: 100vw !important;
   }
 
-  /* ── Profile widget: collapse to icon + open as a slide-in drawer ── */
-  #nav-profile-btn .profile-name,
-  #nav-profile-btn .profile-caret { display: none; }
-  #nav-profile-btn { padding: 6px 10px; }
-
-  .profile-overlay.open { display: block; }
-
-  .profile-panel {
-    top: 0; right: 0; bottom: 0; left: auto;
-    width: 100vw; max-width: 100vw;
-    max-height: 100vh; height: 100vh;
-    border: none; border-radius: 0;
-    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.5);
-    display: flex;
-    transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  .profile-panel.open { transform: translateX(0); }
-
-  .profile-header { padding: 14px 18px; }
-  .profile-header-title { font-size: 0.9rem; }
-  .profile-close, .profile-back { font-size: 1.6rem; padding: 6px 12px; }
-
-  .profile-body { padding: 16px 18px 24px; gap: 14px; }
-  .profile-list { max-height: 40vh; }
-  .profile-list .profile-pick { padding: 14px 12px; font-size: 0.9rem; min-height: var(--touch-min); }
-  .profile-action { padding: 14px 12px; font-size: 0.9rem; min-height: var(--touch-min); }
-  .profile-primary { width: 100%; padding: 14px; align-self: stretch; }
+  /* ── Profile widget: tighten the inline group on mobile ── */
+  /* Stays visible (it's a div, not a > button child of #topnav). Trim
+     widths so the group + hamburger both fit alongside the home link. */
+  .nav-profile-group { gap: 2px; }
+  #profile-select { max-width: 8em; font-size: var(--font-size-micro); }
+  .nav-profile-group .profile-name-input { max-width: 7em; font-size: var(--font-size-micro); }
+  .profile-icon-btn { padding: 2px 6px; font-size: 0.78rem; }
 }
