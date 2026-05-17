@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .bundle import pack_profile, unpack_profile
 from .exporter import build_master_profile, list_required_assets
 from .importer import ImportReport, apply_master_profile
 from .models import (
@@ -26,4 +27,6 @@ __all__ = [
     "apply_master_profile",
     "build_master_profile",
     "list_required_assets",
+    "pack_profile",
+    "unpack_profile",
 ]
