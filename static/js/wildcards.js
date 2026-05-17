@@ -30,6 +30,35 @@ function _wc_resolve(text, map, visiting, depth) {
   });
 }
 
+// Variant that returns both the resolved string and the per-token resolutions
+// in the order they were substituted. Useful for showing the user which
+// wildcards expanded to which values.
+async function resolveWildcardsTracked(text) {
+  if (!text || !text.includes('%%')) return { resolved: text, substitutions: [] };
+  const wildcards = await _wc_fetch();
+  const map = Object.fromEntries(wildcards.map(w => [w.name.toLowerCase(), w]));
+  const subs = [];
+  const resolved = _wc_resolve_tracked(text, map, new Set(), 0, subs);
+  return { resolved, substitutions: subs };
+}
+
+function _wc_resolve_tracked(text, map, visiting, depth, subs) {
+  if (!text || !text.includes('%%')) return text;
+  if (depth >= _WC_MAX_DEPTH) return text;
+  return text.replace(/%%([^%]+)%%/g, (match, name) => {
+    const key = name.toLowerCase();
+    const wc  = map[key];
+    if (!wc || !wc.entries.length) return match;
+    if (visiting.has(key)) return match;
+    const picked = _wc_pickWeighted(wc.entries);
+    const next   = new Set(visiting);
+    next.add(key);
+    const result = _wc_resolve_tracked(picked, map, next, depth + 1, subs);
+    subs.push({ token: match, value: result });
+    return result;
+  });
+}
+
 function _wc_pickWeighted(entries) {
   const total = entries.reduce((s, e) => s + (e.weight || 5), 0);
   let r = Math.random() * total;

@@ -161,12 +161,17 @@ async function submitGenerate() {
   const workflow = sel.value;
   if (!workflow) return;
 
-  const prompt = await resolveWildcards((document.getElementById('gen-prompt').value || '').trim());
+  const rawPrompt = (document.getElementById('gen-prompt').value || '').trim();
+  const { resolved: prompt, substitutions } = await resolveWildcardsTracked(rawPrompt);
   const statusEl = document.getElementById('gen-status');
   const imagesEl = document.getElementById('gen-images');
   imagesEl.innerHTML = '';
   statusEl.style.color = '#888';
   statusEl.textContent = 'Submitting…';
+  renderResolvedPrompt(
+    document.getElementById('gen-resolved-prompt'),
+    [{ resolved: prompt, substitutions }],
+  );
 
   if (_pollHandle) { _pollHandle.stop(); _pollHandle = null; }
 

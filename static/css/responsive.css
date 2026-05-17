@@ -132,6 +132,51 @@
   color: var(--color-text);
 }
 
+/* ── Resolved-prompt block (shown above voice / image output) ──────────── */
+
+.resolved-prompt {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  display: none;
+}
+.resolved-prompt .resolved-block + .resolved-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+.resolved-prompt .resolved-label {
+  font-size: var(--font-size-label);
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.resolved-prompt .resolved-text {
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.resolved-prompt .resolved-subs {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-sub);
+}
+.resolved-prompt .resolved-subs li { padding: 1px 0; }
+.resolved-prompt .resolved-subs code {
+  color: var(--color-warn);
+  background: none;
+  padding: 0;
+}
+.resolved-prompt .resolved-sub-val { color: var(--color-accent); }
+
 /* ── Profile widget: inline group pinned to the right edge of #topnav ──── */
 
 .nav-profile-group {
