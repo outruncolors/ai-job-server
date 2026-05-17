@@ -117,8 +117,7 @@ def test_build_master_profile_populates_every_domain(seeded_config):
 
     assert profile.omnivoice.speed == 1.2
     assert profile.comfyui.default_workflow == "flux-dev.json"
-    assert "flux-dev.json" in profile.comfyui_workflows
-    assert profile.comfyui_workflows["flux-dev.json"]["1"]["class_type"] == "KSampler"
+    assert profile.comfyui_workflows == ["flux-dev.json"]
 
     assert len(profile.voice_presets) == 1
     assert profile.voice_presets[0].name == "Narrator"
@@ -168,7 +167,7 @@ def test_build_with_empty_config_dirs(tmp_path, monkeypatch):
 
     profile = build_master_profile("blank")
     assert profile.llm_config.presets == []
-    assert profile.comfyui_workflows == {}
+    assert profile.comfyui_workflows == []
     assert profile.voice_presets == []
     assert profile.wildcards == []
     assert profile.context_items == []

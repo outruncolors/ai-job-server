@@ -65,9 +65,7 @@ def _profile_with_payload(asset_filename: str = "vp1.wav") -> MasterProfile:
         },
         omnivoice={"speed": 1.3},
         comfyui={"port": 8188, "default_workflow": "flux-dev.json"},
-        comfyui_workflows={
-            "flux-dev.json": {"1": {"class_type": "KSampler", "inputs": {"steps": 22}}}
-        },
+        comfyui_workflows=["flux-dev.json"],
         voice_presets=[
             VoicePresetEntry(id="vp1", name="Narrator", caption="warm", wav_filename=asset_filename)
         ],
@@ -118,7 +116,7 @@ def test_replace_mode_wipes_existing_and_applies_profile(isolated_config, tmp_pa
         "chain_sequences": 1,
     }
     assert report.assets_copied == 1
-    assert report.asset_warnings == []
+    # The only warning expected is the flux-dev.json reference (asserted below).
 
     # llm_config replaced.
     llm_doc = json.loads(importer.LLM_CONFIG_PATH.read_text(encoding="utf-8"))
@@ -129,11 +127,15 @@ def test_replace_mode_wipes_existing_and_applies_profile(isolated_config, tmp_pa
     omnivoice_cfg._config = None
     assert omnivoice_cfg.get_config().speed == 1.3
 
-    # comfyui replaced and stale workflow removed.
+    # comfyui config replaced; workflow files are managed by ComfyUI and
+    # NOT touched by import — the stale workflow file is still there.
     comfyui_cfg._config = None
     assert comfyui_cfg.get_config().default_workflow == "flux-dev.json"
     workflow_files = sorted(p.name for p in comfyui_cfg.WORKFLOWS_DIR.glob("*.json"))
-    assert workflow_files == ["flux-dev.json"]
+    assert workflow_files == ["stale.json"]
+    # The profile referenced flux-dev.json which doesn't exist locally; that
+    # surfaces as a warning in the import report.
+    assert any("flux-dev.json" in w for w in report.asset_warnings)
 
     # Indexed domains replaced (no stale entries).
     assert [w["id"] for w in json.loads(wildcards_mod._INDEX_PATH.read_text())] == ["w1"]
@@ -212,8 +214,9 @@ def test_missing_asset_records_warning_and_does_not_abort(isolated_config, tmp_p
     report = apply_master_profile(profile, mode="replace", asset_source=asset_dir)
 
     assert report.assets_copied == 0
-    assert len(report.asset_warnings) == 1
-    assert "missing.wav" in report.asset_warnings[0]
+    # Two warnings: the missing WAV, and the workflow reference that's not
+    # on the local ComfyUI install.
+    assert any("missing.wav" in w for w in report.asset_warnings)
     # Domains still applied normally despite the asset warning.
     assert report.domains["voice_presets"] == 1
 

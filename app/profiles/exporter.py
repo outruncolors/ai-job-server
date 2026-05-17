@@ -37,17 +37,16 @@ def _load_llm_config() -> LLMConfigDoc:
     )
 
 
-def _load_comfyui_workflows() -> dict[str, dict]:
+def _load_comfyui_workflows() -> list[str]:
+    """Return just the filenames present in the workflows directory.
+
+    Workflow file contents are managed by ComfyUI and not duplicated into the
+    profile — the profile only records which names existed at snapshot time.
+    """
     workflows_dir = comfyui_config.WORKFLOWS_DIR
-    out: dict[str, dict] = {}
     if not workflows_dir.exists():
-        return out
-    for path in sorted(workflows_dir.glob("*.json")):
-        try:
-            out[path.name] = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-    return out
+        return []
+    return sorted(p.name for p in workflows_dir.glob("*.json"))
 
 
 def build_master_profile(name: str, description: str = "") -> MasterProfile:

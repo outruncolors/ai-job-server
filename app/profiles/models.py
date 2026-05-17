@@ -11,7 +11,9 @@ Domains covered (register new domains here when extending the schema):
     llm_config         app/llm_config.py             → LLMConfigDoc
     omnivoice          app/omnivoice/config.py       → OmniVoiceConfig
     comfyui            app/comfyui/config.py         → ComfyUIConfig
-    comfyui_workflows  config/comfyui-workflows/*    → dict[name, workflow JSON]
+    comfyui_workflows  config/comfyui-workflows/*    → list[filename] (names only;
+                                                       file contents are managed
+                                                       externally by ComfyUI)
     voice_presets      app/voice_presets.py          → list[VoicePresetEntry]
     wildcards          app/wildcards.py              → list[WildcardEntry]
     context_items      app/chain/context_library.py  → list[ContextItemEntry]
@@ -102,7 +104,7 @@ class MasterProfile(BaseModel):
     llm_config: LLMConfigDoc = Field(default_factory=LLMConfigDoc)
     omnivoice: OmniVoiceConfig = Field(default_factory=OmniVoiceConfig)
     comfyui: ComfyUIConfig = Field(default_factory=ComfyUIConfig)
-    comfyui_workflows: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    comfyui_workflows: list[str] = Field(default_factory=list)
 
     voice_presets: list[VoicePresetEntry] = Field(default_factory=list)
     wildcards: list[WildcardEntry] = Field(default_factory=list)

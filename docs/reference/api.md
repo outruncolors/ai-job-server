@@ -155,7 +155,7 @@ Serve any file inside the job directory. `path` may include slashes (e.g., `step
 
 ## Profiles
 
-A profile is a snapshot of every declarative-config domain (LLM presets, OmniVoice config, ComfyUI config + workflows, voice presets, wildcards, context items, image prompts, chain sequences) plus the voice-cloning WAVs those presets reference. Stored profiles live under `config/profiles/<id>/{master.json,assets/voice_presets/}`. Activating a profile re-applies its contents to live config in replace mode.
+A profile is a snapshot of every declarative-config domain (LLM presets, OmniVoice config, ComfyUI config, voice presets, wildcards, context items, image prompts, chain sequences) plus the voice-cloning WAVs those presets reference. ComfyUI workflows are tracked by filename only (their JSON contents live in `config/comfyui-workflows/` and are managed by ComfyUI itself, not by the profile system). Stored profiles live under `config/profiles/<id>/{master.json,assets/voice_presets/}`. Activating a profile re-applies its contents to live config in replace mode; workflow files on disk are never touched, but missing references surface as warnings in the import report.
 
 | Method | Path | |
 |--------|------|---|

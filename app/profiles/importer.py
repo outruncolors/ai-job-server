@@ -11,6 +11,10 @@ Mode:
                config, comfyui config) are always overwritten — they have no
                natural id to merge on.
 
+ComfyUI workflows are referenced by filename only — the importer never writes
+to `config/comfyui-workflows/`. If a name listed in `profile.comfyui_workflows`
+is not present on the local ComfyUI install, a warning is recorded.
+
 Robustness: every domain write goes through a tmp file + atomic rename, so a
 mid-import failure leaves earlier domains durably applied and the failing
 domain unchanged. The caller can re-run the import after fixing the cause.
@@ -111,17 +115,19 @@ def _apply_comfyui_config(profile: MasterProfile) -> int:
     return 1
 
 
-def _apply_comfyui_workflows(profile: MasterProfile, mode: Mode) -> int:
+def _check_comfyui_workflow_refs(profile: MasterProfile, report: "ImportReport") -> int:
+    """Record which workflow names the profile references; warn on missing ones.
+
+    Workflow file contents live outside the profile (managed by ComfyUI), so
+    nothing is written here. Returns the number of names referenced.
+    """
     wf_dir = comfyui_cfg.WORKFLOWS_DIR
-    wf_dir.mkdir(parents=True, exist_ok=True)
-    if mode == "replace":
-        for existing in wf_dir.glob("*.json"):
-            existing.unlink()
-    count = 0
-    for filename, body in profile.comfyui_workflows.items():
-        _atomic_write(wf_dir / filename, json.dumps(body, indent=2))
-        count += 1
-    return count
+    for name in profile.comfyui_workflows:
+        if not (wf_dir / name).exists():
+            report.asset_warnings.append(
+                f"workflow referenced but missing from local ComfyUI: {name}"
+            )
+    return len(profile.comfyui_workflows)
 
 
 def _apply_wildcards(profile: MasterProfile, mode: Mode) -> int:
@@ -208,7 +214,7 @@ def apply_master_profile(
     report.domains["llm_config"] = _apply_llm_config(profile, mode)
     report.domains["omnivoice"] = _apply_omnivoice(profile)
     report.domains["comfyui"] = _apply_comfyui_config(profile)
-    report.domains["comfyui_workflows"] = _apply_comfyui_workflows(profile, mode)
+    report.domains["comfyui_workflows"] = _check_comfyui_workflow_refs(profile, report)
     report.domains["voice_presets"] = _apply_voice_presets(profile, mode)
     report.domains["wildcards"] = _apply_wildcards(profile, mode)
     report.domains["context_items"] = _apply_context_items(profile, mode)

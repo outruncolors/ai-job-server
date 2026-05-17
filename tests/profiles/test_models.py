@@ -51,11 +51,7 @@ def _fully_populated() -> MasterProfile:
             "port": 8188,
             "default_workflow": "flux-dev.json",
         },
-        comfyui_workflows={
-            "flux-dev.json": {
-                "1": {"class_type": "KSampler", "inputs": {"steps": 20}},
-            }
-        },
+        comfyui_workflows=["flux-dev.json", "flux-schnell.json"],
         voice_presets=[
             VoicePresetEntry(
                 id="vp1",
@@ -119,7 +115,7 @@ def test_defaults_populate_empty_collections():
     assert p.created_at  # default factory ran
     assert p.llm_config.presets == []
     assert p.llm_config.default_preset_id is None
-    assert p.comfyui_workflows == {}
+    assert p.comfyui_workflows == []
     assert p.voice_presets == []
     assert p.wildcards == []
     assert p.context_items == []
