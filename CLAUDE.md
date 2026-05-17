@@ -38,6 +38,7 @@
 | `app/omnivoice/runner.py` | `OmniVoiceEphemeralRunner` — subprocess-based TTS invocation |
 | `app/voice_presets.py` | Preset CRUD backed by `config/voice_presets/` |
 | `app/profiles/models.py` | `MasterProfile` Pydantic schema bundling every declarative-config domain (llm/omnivoice/comfyui/workflows/voice presets/wildcards/context items/image prompts/chain sequences) + binary asset manifest |
+| `app/profiles/exporter.py` | `build_master_profile(name, description)` snapshots live config; `list_required_assets(profile)` returns binary asset paths (voice WAVs) |
 | `app/server.py` | `get_server_stats()`, `schedule_restart()`, 5s job-count cache (`_get_job_counts()`) |
 | `static/js/nav.js` | Builds top nav from `NAV_ITEMS` array; auto-marks active page by pathname |
 | `static/js/voice-segments.js` | Reusable segment list widget (`vsAddSegment`, `vsCollectSegments`) |
