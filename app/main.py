@@ -48,6 +48,8 @@ from .comfyui.config import get_config as get_comfy_config
 from .comfyui.manager import get_manager as get_comfy_manager
 from .comfyui.router import router as comfyui_router
 from .comfyui.runner import execute_image_job
+from .llamacpp.manager import get_manager as get_llamacpp_manager
+from .llamacpp.router import router as llamacpp_router
 from . import jobs as _jobs_module
 from .jobs import (
     build_jobs_zip,
@@ -147,6 +149,17 @@ async def lifespan(app: FastAPI):
             await get_comfy_manager().start()
         except Exception as exc:
             print(f"ComfyUI autostart skipped: {exc}")
+    if "llm" in get_local_capabilities():
+        mgr = get_llamacpp_manager()
+        try:
+            adopted = await mgr.adopt()
+            if not adopted:
+                # No preset is loaded yet — the manager is instantiated and
+                # ready for ensure-loaded calls; an explicit start with a
+                # preset is required to spawn llama.cpp.
+                pass
+        except Exception as exc:
+            print(f"llama.cpp adoption check skipped: {exc}")
     queue = get_job_queue()
     await queue.start()
     for entry in recover_interrupted_jobs(_jobs_module.JOBS_BASE):
@@ -166,6 +179,7 @@ DOCS_DIR = Path(__file__).parent.parent / "docs"
 
 app.include_router(comfyui_router, dependencies=[Depends(requires_capability("image"))])
 app.include_router(omnivoice_router, dependencies=[Depends(requires_capability("voice"))])
+app.include_router(llamacpp_router, dependencies=[Depends(requires_capability("llm"))])
 app.include_router(presets_router)
 app.include_router(mcp_router)
 
