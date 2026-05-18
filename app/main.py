@@ -87,6 +87,11 @@ from .server import (
     requires_capability,
     schedule_restart,
 )
+from .peer_health import (
+    get_peer_health_snapshot,
+    start_peer_poller,
+    stop_peer_poller,
+)
 from .omnivoice.config import get_config
 from .omnivoice.manager import get_manager
 from .omnivoice.router import router as omnivoice_router
@@ -174,7 +179,9 @@ async def lifespan(app: FastAPI):
         if runner is not None:
             await queue.enqueue(entry["job_id"], runner)
     await start_scheduler()
+    await start_peer_poller()
     yield
+    await stop_peer_poller()
     await stop_scheduler()
     await queue.stop()
 
@@ -842,12 +849,13 @@ def server_capabilities():
 
 @app.get("/v1/server/peers")
 def server_peers():
-    # `health` will be populated by the peer-poller in a later ticket.
+    snap = get_peer_health_snapshot()
     return {
+        "local_git_sha": get_git_sha(),
         "peers": [
-            {**p.model_dump(), "health": None}
+            {**p.model_dump(), "health": snap.get(p.name)}
             for p in get_peers()
-        ]
+        ],
     }
 
 

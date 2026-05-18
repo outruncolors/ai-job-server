@@ -243,6 +243,60 @@
 .profile-icon-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
 .profile-icon-btn.profile-confirm { color: var(--color-accent); border-color: var(--color-accent); }
 
+/* ── Peer status widget: dots pinned to the right edge of #topnav ──────── */
+
+.nav-peer-group {
+  margin-left: auto;          /* claim the flex slack so peer + profile cluster right */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 0;
+  flex-shrink: 0;
+}
+/* When peer group exists it owns margin-left:auto; the profile group then
+   sits immediately after with only its own gap, so the two clusters stay
+   visually adjacent at the right edge. */
+.nav-peer-group + .nav-profile-group { margin-left: 0; }
+
+.peer-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  cursor: help;
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+.peer-dot:hover { transform: scale(1.25); }
+.peer-dot-green { background: var(--color-accent); box-shadow: 0 0 4px rgba(42, 170, 102, 0.6); }
+.peer-dot-amber { background: var(--color-warn);   box-shadow: 0 0 4px rgba(255, 170,   0, 0.6); }
+.peer-dot-red   { background: var(--color-danger); box-shadow: 0 0 4px rgba(228,  68,  68, 0.6); }
+
+/* Version-skew banner under the fixed topnav (44px tall). */
+.peer-skew-banner {
+  position: fixed;
+  top: 44px;
+  left: 0;
+  right: 0;
+  padding: 6px 16px;
+  background: var(--color-danger-bg);
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border-hi);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  z-index: 99;            /* below topnav (z-index: 100) so the bar overlaps cleanly */
+  text-align: center;
+}
+.peer-skew-banner code {
+  color: var(--color-warn);
+  background: none;
+  padding: 0 2px;
+  font-family: var(--font-family);
+}
+
 /* ── Responsive overrides (@media max-width: 768px) ─────────────────────── */
 @media (max-width: 768px) {
 
@@ -327,4 +381,8 @@
   #profile-select { max-width: 8em; font-size: var(--font-size-micro); }
   .nav-profile-group .profile-name-input { max-width: 7em; font-size: var(--font-size-micro); }
   .profile-icon-btn { padding: 2px 6px; font-size: 0.78rem; }
+
+  /* ── Peer status widget: tighten dots so they fit beside profile + hamburger ── */
+  .nav-peer-group { gap: 4px; padding-right: 4px; }
+  .peer-dot { width: 8px; height: 8px; }
 }

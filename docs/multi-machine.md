@@ -56,6 +56,48 @@ Deploys then go: push to `local` on primary → `ssh secondary 'git pull && syst
 
 Migrating the existing standalone Gemma 4 process on the strong PC into the fleet: stop the old process, run `scripts/llamacpp-setup.sh`, drop the GGUF into `/opt/ai-stack/models/`, create a matching `config/llm_presets/<name>.json`, set `default_preset` in `config/llamacpp.json`, then `systemctl --user start ai-job-server`. Full step-by-step lands in ticket 10.
 
+## Peer health and version-skew
+
+Every node runs an in-process poller (`app/peer_health.py`) that hits each peer's `GET /v1/server/health` every 30 seconds with a 5-second timeout. The result feeds `GET /v1/server/peers`:
+
+```json
+{
+  "local_git_sha": "deadbeef…",
+  "peers": [
+    {
+      "name": "gpu",
+      "host": "gpu.local",
+      "port": 8090,
+      "capabilities": ["llm"],
+      "health": {
+        "status": "green",         // green | amber | red
+        "git_sha": "deadbeef…",
+        "last_seen": "2026-05-17T…",
+        "error": null,
+        "host": "gpu.local",
+        "port": 8090
+      }
+    }
+  ]
+}
+```
+
+Status rules:
+
+- **green** — peer reachable and `git_sha` matches local.
+- **amber** — peer reachable but `git_sha` differs (or either side has no SHA known). Functional, but flagged.
+- **red** — peer unreachable or returned 5xx within the 5s timeout. `last_seen` and `git_sha` stay sticky from the prior successful poll so the UI can show the most recent known state.
+
+The topnav widget (`static/js/peer-status-widget.js`) draws one colored dot per peer with a tooltip carrying the full status detail. When any peer is amber it also renders a fixed banner under the topnav:
+
+> Peer `gpu.local` is on commit `abc1234`, this machine is on `def5678` — consider running `scripts/deploy-secondary.sh`.
+
+Both the server-side poll and the client-side fetch are pull-based; nothing pushes status. To eyeball it without a browser:
+
+```bash
+curl -s http://primary.local:8090/v1/server/peers | jq
+```
+
 ## Troubleshooting
 
 <!-- TODO: ticket 10 -->
