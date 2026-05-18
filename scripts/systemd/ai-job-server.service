@@ -1,0 +1,42 @@
+# ai-job-server — systemd **user** unit
+#
+# Install (one-time, on each machine that runs the server):
+#
+#   mkdir -p ~/.config/systemd/user
+#   cp /opt/ai-stack/claude-work/ai-job-server/scripts/systemd/ai-job-server.service \
+#      ~/.config/systemd/user/ai-job-server.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now ai-job-server
+#
+# After install:
+#
+#   systemctl --user status  ai-job-server     # is it running?
+#   systemctl --user restart ai-job-server     # used by scripts/deploy-secondary.sh
+#   journalctl --user -u ai-job-server -f      # tail logs
+#
+# Notes:
+# - This is a **user** unit, not a system unit. It runs as your login user, which
+#   matches the venv ownership and the existing on-disk job/config layout. No root.
+# - To survive logout, enable lingering once per machine:
+#     sudo loginctl enable-linger "$USER"
+# - WorkingDirectory below assumes the canonical primary checkout path. On the
+#   secondary the checkout lives at ~/ai-job-server — edit the two paths below
+#   (WorkingDirectory + ExecStart) when copying the unit there.
+
+[Unit]
+Description=AI Job Server (FastAPI + uvicorn on :8090)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ai-stack/claude-work/ai-job-server
+ExecStart=/opt/ai-stack/claude-work/ai-job-server/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8090
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ai-job-server
+
+[Install]
+WantedBy=default.target

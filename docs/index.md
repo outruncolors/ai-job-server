@@ -10,6 +10,7 @@ Use the tree on the left to navigate. Every page in the site has a matching doc;
 - **[Tools](tools/index.md)** — content building blocks: context items, wildcards, ticks (schedules), MCP tools
 - **[Management](management/index.md)** — server controls, the job list, this docs viewer
 - **[Reference](reference/index.md)** — architecture, REST API, configuration, design notes, UI standards
+- **[Multi-machine](multi-machine.md)** — primary/secondary deployment: bare repo, systemd, capability gating, cutover
 
 ## Quick start
 

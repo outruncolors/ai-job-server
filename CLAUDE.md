@@ -113,3 +113,4 @@ Full developer docs are in `docs/`:
 - `docs/chain-jobs.md` — step type reference, template vars, sequences, MCP tools, voice auto-segmentation
 - `docs/configuration.md` — env vars, `omnivoice.json` fields, external services, dev/prod setup
 - `docs/comfyui-setup.md` — ComfyUI install, optimization flags, workflow authoring, troubleshooting
+- `docs/multi-machine.md` — primary/secondary deployment (bare repo, systemd user unit, capability gating, cutover); design doc at `docs/reference/multi-machine-plan.md`
