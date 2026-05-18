@@ -71,9 +71,14 @@
 .comfy-editor-link { display: inline-block; margin-top: 12px; color: var(--color-accent); font-size: 0.85rem; }
 
 /* ── LLM sub-tab bar (inside the LLM tab) ── */
+/* Sticky below the fixed page tab-bar (88px = topnav 44 + tab-bar 44) so it
+   stays visible while scrolling the sub-pane content. */
 #llm-subtab-bar {
+  position: sticky; top: 88px; z-index: 80;
+  background: var(--color-bg);
   display: flex; align-items: center; gap: 0;
-  padding: 14px 28px 0;           /* below the page tab-bar's 88px panels offset */
+  margin-top: 88px;               /* push past fixed topnav + tab-bar */
+  padding: 14px 28px 0;
   border-bottom: 1px solid #181818;
 }
 .llm-subtab-btn {
@@ -91,8 +96,8 @@
 
 .llm-subtab-pane         { display: none; }
 .llm-subtab-pane.active  { display: block; }
-/* Sub-pane #panels needs to forget the page-level 88px padding (sub-tab bar
-   already provides spacing within the active page tab). */
+/* Inside the sub-tab pane the bar already provides offset from fixed nav,
+   so #panels only needs a small top gap (not the global 88px). */
 .llm-subtab-pane #panels { padding-top: 18px; }
 
 /* ── Model preset list (Models sub-tab) ── */
