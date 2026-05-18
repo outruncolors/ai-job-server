@@ -5,20 +5,20 @@ from typing import Optional
 
 import httpx
 
-from .models import ChainLLMConfig, ChainStep
+from .models import Alternative, ChainLLMConfig, ChainStep
 
 
 class LLMSwapError(RuntimeError):
     """Raised when the per-step ensure-loaded call fails or the preset can't be resolved."""
 
 
-def resolve_preset_name(step: ChainStep) -> Optional[str]:
-    """Return the preset to load for this step, or None if no swap should happen.
+def resolve_preset_name(alt: Alternative) -> Optional[str]:
+    """Return the preset to load for this alternative, or None if no swap should happen.
 
-    Order: explicit step.preset → llamacpp.json default_preset → None (legacy mode).
+    Order: explicit alt.preset → llamacpp.json default_preset → None (legacy mode).
     """
-    if step.preset:
-        return step.preset
+    if alt.preset:
+        return alt.preset
     from ..llamacpp.config import get_config as llamacpp_get_config
     default = llamacpp_get_config().default_preset
     return default or None
@@ -86,10 +86,11 @@ async def resolve_llm_server_url(api_base: str) -> str:
 
 async def ensure_loaded_for_step(
     step: ChainStep,
+    alt: Alternative,
     base_llm: ChainLLMConfig,
     prev_preset: Optional[str],
 ) -> tuple[ChainLLMConfig, Optional[str], Optional[str]]:
-    """Swap llama.cpp to the step's preset, then return overridden llm config + log line.
+    """Swap llama.cpp to the chosen alternative's preset, then return overridden llm config + log line.
 
     Returns:
         (effective_llm_config, current_preset_name, log_line)
@@ -97,7 +98,7 @@ async def ensure_loaded_for_step(
     Raises:
         LLMSwapError on resolution failure, HTTP error, or timeout.
     """
-    preset_name = resolve_preset_name(step)
+    preset_name = resolve_preset_name(alt)
     if preset_name is None:
         # Legacy / single-machine mode: no preset selected and no default configured.
         # Skip ensure-loaded and use the caller's request.llm verbatim.

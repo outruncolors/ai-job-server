@@ -36,12 +36,25 @@
           <div id="seq-edit-msg" class="msg" style="color:#fa0;"></div>
         </div>
 
+        <!-- ── Variables pane ── -->
+        <div id="chain-variables-pane">
+          <div class="vars-header">
+            <span class="section-label">VARIABLES</span>
+            <button class="secondary" onclick="_addVariableRow()"
+                    style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ Variable</button>
+          </div>
+          <div id="chain-variables-list"></div>
+        </div>
+
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:8px;">
           <span class="section-label">STEPS</span>
           <button class="secondary" onclick="addChainStep()"
                   style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ Add Step</button>
         </div>
-        <div id="chain-steps-list"></div>
+        <div id="chain-board">
+          <svg id="goto-arrows" aria-hidden="true"></svg>
+          <div id="chain-steps-list"></div>
+        </div>
 
         <button onclick="submitChain()" style="margin-top:16px;">Run Chain</button>
       </div>
@@ -96,6 +109,18 @@
     </div>
 
   </div>
+
+  <!-- Run-time variables dialog -->
+  <dialog id="run-vars-dialog">
+    <form method="dialog">
+      <h3 style="margin:0 0 12px;font-size:0.9rem;color:#aaa;">Run with variables</h3>
+      <div id="run-vars-fields"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+        <button value="cancel" class="secondary" type="submit">Cancel</button>
+        <button value="run" type="submit">Run</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="/js/nav.js"></script>
   <script src="/js/profiles-widget.js"></script>

@@ -4,7 +4,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 _MAX_TOOL_ITERATIONS = 6
 _GEMMA_TOOL_RE = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
@@ -40,7 +40,7 @@ def _parse_gemma_tool_calls(content: str) -> list[dict]:
 
 async def _execute_llm_with_tools(
     prompt: str,
-    step: Any,
+    alt: Any,
     client: Any,
     llm_config: Any,
 ) -> tuple[str, list[dict]]:
@@ -50,7 +50,7 @@ async def _execute_llm_with_tools(
     from ...mcp.registry import resolve_tools, to_openai_schema
 
     log = logging.getLogger(__name__)
-    tool_defs = resolve_tools(step.tools)
+    tool_defs = resolve_tools(alt.tools)
     openai_tools = [to_openai_schema(td) for td in tool_defs]
 
     messages: list[dict] = [
@@ -69,10 +69,7 @@ async def _execute_llm_with_tools(
         choice = await client.chat(messages, llm_config, tools=openai_tools or None)
         message = choice.get("message", {})
 
-        # Primary: structured tool_calls (well-configured llama.cpp or vLLM)
         raw_tool_calls = message.get("tool_calls") or []
-
-        # Fallback: llama.cpp may emit Gemma 4 native tokens in content instead
         if not raw_tool_calls and message.get("content"):
             raw_tool_calls = _parse_gemma_tool_calls(message["content"])
 
@@ -127,38 +124,47 @@ async def _execute_llm_with_tools(
 async def run_llm_step(
     step_dir: Path,
     step: Any,
+    alt: Any,
     request: Any,
     client: Any,
     text_output: str,
     step_index: int = 0,
-) -> tuple[str, str]:
-    """Execute an LLM step. Returns (new text_output, output filename)."""
+    *,
+    step_inputs: Optional[dict] = None,
+    step_outputs: Optional[dict] = None,
+    variables: Optional[dict] = None,
+) -> tuple[str, str, str]:
+    """Execute an LLM step. Returns (new text_output, output filename, rendered prompt)."""
     from ..context import resolve_context_ids
     from ..template import render_template
 
     (step_dir / "request.json").write_text(
-        json.dumps(step.model_dump(), indent=2), encoding="utf-8"
+        json.dumps({"step": step.model_dump(), "alternative": alt.model_dump()}, indent=2),
+        encoding="utf-8",
     )
-    context = resolve_context_ids(step.context_ids)
+    context = resolve_context_ids(alt.context_ids)
     (step_dir / "context.txt").write_text(context, encoding="utf-8")
 
     rendered = render_template(
-        step.prompt,
+        alt.prompt,
         input=request.input,
         previous=text_output,
         context=context,
         step_index=step_index,
         step_name=step.name,
+        step_inputs=step_inputs,
+        step_outputs=step_outputs,
+        variables=variables,
     )
-    if context and "{{context}}" not in step.prompt:
+    if context and "{{context}}" not in alt.prompt:
         prompt = f"<START CONTEXT>\n{context}\n<END CONTEXT>\n\n{rendered}"
     else:
         prompt = rendered
     (step_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
 
-    if step.tools:
+    if alt.tools:
         output, tool_call_log = await _execute_llm_with_tools(
-            prompt, step, client, request.llm
+            prompt, alt, client, request.llm
         )
         (step_dir / "tool_calls.json").write_text(
             json.dumps(tool_call_log, indent=2), encoding="utf-8"
@@ -166,4 +172,4 @@ async def run_llm_step(
     else:
         output = await client.generate(prompt, request.llm)
     (step_dir / "output.txt").write_text(output, encoding="utf-8")
-    return output, "output.txt"
+    return output, "output.txt", prompt

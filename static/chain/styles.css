@@ -31,19 +31,125 @@
 .artifact-name { flex: 1; color: #777; word-break: break-all; }
 .artifact-size { color: #444; font-size: 0.68rem; white-space: nowrap; }
 
-/* ── Chain step cards ── */
+/* ── Variables pane ── */
+#chain-variables-pane {
+  margin-top: 8px;
+  border: 1px solid #1a1a1a;
+  border-radius: 4px;
+  padding: 10px 12px;
+  background: #0c0c0c;
+}
+.vars-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+}
+.var-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.5fr auto;
+  gap: 6px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+.var-row input { font-size: 0.74rem; padding: 4px 6px; }
+.var-row .var-remove {
+  background: none; border: 1px solid #2a2a2a; color: #666;
+  padding: 2px 8px; font-size: 0.7rem; cursor: pointer; border-radius: 3px;
+}
+.var-row .var-remove:hover { color: #e44; border-color: #5a2a2a; }
+.var-empty { color: #333; font-size: 0.72rem; font-style: italic; padding: 4px 0; }
+
+/* ── Chain board (wrapper for SVG overlay) ── */
+#chain-board {
+  position: relative;
+}
+#goto-arrows {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+  overflow: visible;
+}
+
+/* ── Chain step cards (v2: numbered + alternatives) ── */
 .chain-step-card {
-  border: 1px solid #222; border-radius: 3px; padding: 10px 12px; margin-bottom: 8px; background: #111;
+  position: relative;
+  border: 1px solid #222; border-radius: 4px;
+  padding: 10px 12px 12px 56px;
+  margin-bottom: 10px;
+  background: #111;
+  z-index: 1;
 }
+.chain-step-card.dragging { opacity: 0.4; }
+.chain-step-card.drag-over { outline: 2px dashed var(--color-accent); outline-offset: -1px; }
+.step-num {
+  position: absolute; top: 8px; left: 10px;
+  font: 700 1.55rem/1 monospace;
+  color: var(--color-accent);
+  opacity: 0.55;
+  user-select: none;
+}
+.step-drag-handle {
+  position: absolute; top: 38px; left: 14px;
+  width: 22px; text-align: center;
+  cursor: grab; color: #2c2c2c; user-select: none;
+  font-size: 0.95rem;
+}
+.step-drag-handle:active { cursor: grabbing; }
+
 .chain-step-head {
-  display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
 }
-.chain-step-head span { color: #484848; font-size: 0.72rem; }
-.chain-step-head button { margin-top: 0; padding: 2px 8px; font-size: 0.7rem; }
-.chain-step-kind {
+.chain-step-head .step-name-input {
+  flex: 1;
+  font-size: 0.78rem; padding: 3px 6px;
+  background: var(--color-bg-input);
+  border: 1px solid #1c1c1c; color: #ccc;
+  border-radius: 3px;
+}
+.chain-step-head .chain-step-kind {
   width: auto; padding: 2px 6px; font-size: 0.7rem; background: var(--color-bg-input);
   border: 1px solid var(--color-border-mid); color: #888; border-radius: 3px; cursor: pointer;
 }
+.chain-step-head .visit-cap-input {
+  width: 64px; font-size: 0.7rem; padding: 2px 4px;
+}
+.chain-step-head button {
+  margin-top: 0; padding: 2px 8px; font-size: 0.7rem;
+}
+
+/* ── Alternatives (sub-cards) ── */
+.alternatives-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.alt-card {
+  position: relative;
+  border: 1px solid #1c1c1c;
+  border-left: 3px solid #2a4a2a;
+  background: #0d0d0d;
+  border-radius: 3px;
+  padding: 8px 10px 10px 12px;
+}
+.alt-card .alt-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.alt-card .alt-label { color: #555; font-size: 0.7rem; }
+.alt-card .alt-weight-row {
+  display: flex; align-items: center; gap: 6px;
+}
+.alt-card .alt-weight-row label { color: #444; font-size: 0.68rem; margin: 0; }
+.alt-card .weight-input { width: 56px; font-size: 0.72rem; padding: 2px 5px; }
+.alt-card .alt-remove {
+  background: none; border: 1px solid #2a2a2a; color: #666;
+  padding: 2px 8px; font-size: 0.68rem; cursor: pointer; border-radius: 3px;
+}
+.alt-card .alt-remove:hover { color: #e44; border-color: #5a2a2a; }
+.add-alternative-row { margin-top: 4px; }
+.add-alternative-row button {
+  background: none; border: 1px dashed #2c2c2c; color: #555;
+  padding: 4px 10px; font-size: 0.68rem; cursor: pointer; border-radius: 3px;
+  width: 100%;
+}
+.add-alternative-row button:hover { border-color: var(--color-accent); color: var(--color-accent); }
 
 /* ── Output panel ── */
 .output-pre {
@@ -61,17 +167,12 @@
 .step-collapse > summary::-webkit-details-marker { display: none; }
 .step-collapse > summary::before { content: '▸ '; color: #444; font-size: 0.72rem; }
 .step-collapse[open] > summary::before { content: '▾ '; }
-.step-num { color: #555; font-size: 0.72rem; white-space: nowrap; }
+.step-num-out { color: #555; font-size: 0.72rem; white-space: nowrap; }
 .step-sep { color: #2a2a2a; }
 .step-col-name { color: #666; font-size: 0.72rem; flex: 1; }
 .step-collapse-body { padding: 0 10px 10px; }
 
-/* ── Preset save row ── */
-.preset-save-row { display: flex; gap: 8px; margin-top: 6px; align-items: flex-end; }
-.preset-save-row input { flex: 1; }
-.preset-save-row button { flex: 0 0 auto; margin-top: 0; white-space: nowrap; }
-
-/* ── Context selector widget (chain's inline context picker) ── */
+/* ── Context selector widget ── */
 .ctx-selector { margin-top: 8px; border: 1px solid #1e1e1e; border-radius: 3px; }
 .ctx-selector > summary {
   padding: 5px 8px; cursor: pointer; user-select: none; list-style: none;
@@ -111,3 +212,39 @@
 .ctx-entry.is-checked .ctx-entry-title { color: #4a8; }
 .ctx-entry-desc { color: #484848; font-size: 0.67rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ctx-empty { color: #333; font-size: 0.72rem; padding: 4px 0; }
+
+/* ── Run-time variables dialog ── */
+dialog#run-vars-dialog {
+  border: 1px solid #2a2a2a;
+  background: #0c0c0c;
+  color: #ccc;
+  border-radius: 5px;
+  padding: 18px 20px;
+  min-width: 360px;
+  max-width: 480px;
+}
+dialog#run-vars-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+#run-vars-fields .run-var-row {
+  display: grid;
+  grid-template-columns: 0.7fr 1.3fr;
+  gap: 8px; align-items: center;
+  margin-bottom: 8px;
+}
+#run-vars-fields .run-var-row label {
+  margin: 0; font-size: 0.78rem; color: #888;
+}
+#run-vars-fields .run-var-row input,
+#run-vars-fields .run-var-row select {
+  font-size: 0.8rem; padding: 4px 6px;
+}
+
+/* ── Goto target select ── */
+.goto-target-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap;
+}
+.goto-target-row label { margin: 0; color: #666; font-size: 0.72rem; }
+.goto-target-row select { font-size: 0.74rem; padding: 3px 6px; flex: 1 1 220px; }
+.goto-target-row .goto-fall-through {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 0.72rem; color: #888; cursor: pointer;
+}

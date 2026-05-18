@@ -412,8 +412,9 @@ def test_chain_step_accepts_preset_and_requires():
     from app.chain.models import ChainStep
     s = ChainStep(name="visual", prompt="describe", preset="vision-small",
                   requires=["vision", "text"])
-    assert s.preset == "vision-small"
-    assert s.requires == ["vision", "text"]
+    # v2 hoists v1-style flat fields onto a single alternative.
+    assert s.alternatives[0].preset == "vision-small"
+    assert s.alternatives[0].requires == ["vision", "text"]
 
 
 def test_save_sequence_rejects_when_preset_lacks_capabilities(tmp_path, monkeypatch):

@@ -82,10 +82,93 @@ _format_voice_segments = ToolDefinition(
     ),
 )
 
+_save_image_prompt = ToolDefinition(
+    name="save_image_prompt",
+    description=(
+        "Save a named image prompt to the image-prompts library. The name is "
+        "made unique automatically if it collides with an existing one."
+    ),
+    input_schema=ToolInputSchema(
+        properties={
+            "name": ToolParameter(
+                type="string",
+                description="Human-readable name for the prompt.",
+            ),
+            "prompt": ToolParameter(
+                type="string",
+                description="The image generation prompt body.",
+            ),
+            "workflow": ToolParameter(
+                type="string",
+                description="Optional ComfyUI workflow filename to associate.",
+            ),
+        },
+        required=["name", "prompt"],
+    ),
+)
+
+_save_wildcard = ToolDefinition(
+    name="save_wildcard",
+    description=(
+        "Create a wildcard list or append an entry to an existing one. Wildcards "
+        "can be referenced with %%name%% tokens elsewhere in the system."
+    ),
+    input_schema=ToolInputSchema(
+        properties={
+            "name": ToolParameter(
+                type="string",
+                description="Wildcard name (used in %%name%% references).",
+            ),
+            "value": ToolParameter(
+                type="string",
+                description="Entry text to add.",
+            ),
+            "mode": ToolParameter(
+                type="string",
+                description="'append' to add to an existing list (or create one if missing); 'create' to always make a new wildcard.",
+                enum=["append", "create"],
+                default="append",
+            ),
+        },
+        required=["name", "value"],
+    ),
+)
+
+_create_ticket = ToolDefinition(
+    name="create_ticket",
+    description=(
+        "Create a ticket in the ai-job-server ticket queue. Use this to record "
+        "follow-up work items discovered during a task."
+    ),
+    input_schema=ToolInputSchema(
+        properties={
+            "title": ToolParameter(
+                type="string",
+                description="Short ticket title.",
+            ),
+            "description": ToolParameter(
+                type="string",
+                description="Longer description / body for the ticket.",
+                default="",
+            ),
+            "file_hints": ToolParameter(
+                type="array",
+                description="Optional list of file path hints for the work.",
+                items={"type": "string"},
+                default=[],
+            ),
+        },
+        required=["title"],
+    ),
+)
+
 REGISTRY: dict[str, ToolDefinition] = {
     "random_integer": _random_integer,
     "generate_name": _generate_name,
     "format_voice_segments": _format_voice_segments,
+    "save_image_prompt": _save_image_prompt,
+    "save_wildcard": _save_wildcard,
+    "create_ticket": _create_ticket,
 }
 
 

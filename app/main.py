@@ -373,7 +373,11 @@ def get_chain_sequences():
 @app.post("/v1/chain-sequences", status_code=200)
 async def upsert_chain_sequence(body: dict):
     try:
-        return save_sequence(body["name"], body["steps"])
+        return save_sequence(
+            body["name"],
+            body["steps"],
+            variables=body.get("variables") or [],
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

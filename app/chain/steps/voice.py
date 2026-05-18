@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .llm import _parse_gemma_tool_calls
 
@@ -11,6 +11,7 @@ from .llm import _parse_gemma_tool_calls
 async def run_voice_step(
     step_dir: Path,
     step: Any,
+    alt: Any,
     text: str,
     client: Any = None,
     llm_config: Any = None,
@@ -20,12 +21,12 @@ async def run_voice_step(
     from ...omnivoice.manager import get_manager
     from ...voice_presets import get_preset, resolve_preset_wav
 
-    if not step.voice_preset_id:
+    if not alt.voice_preset_id:
         raise RuntimeError("Voice step requires a voice_preset_id")
 
-    preset = get_preset(step.voice_preset_id)
+    preset = get_preset(alt.voice_preset_id)
     if preset is None:
-        raise RuntimeError(f"Voice preset {step.voice_preset_id!r} not found")
+        raise RuntimeError(f"Voice preset {alt.voice_preset_id!r} not found")
 
     config = get_config()
     manager = get_manager()
@@ -33,15 +34,19 @@ async def run_voice_step(
 
     effective: dict = {
         "model": config.model,
-        "voice_preset_id": step.voice_preset_id,
+        "voice_preset_id": alt.voice_preset_id,
         "voice_preset_name": preset["name"],
         "response_format": config.response_format,
     }
     (step_dir / "request.json").write_text(
-        json.dumps({**step.model_dump(), "effective": effective}, indent=2), encoding="utf-8"
+        json.dumps(
+            {"step": step.model_dump(), "alternative": alt.model_dump(), "effective": effective},
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
-    wav_path = resolve_preset_wav(step.voice_preset_id)
+    wav_path = resolve_preset_wav(alt.voice_preset_id)
     if wav_path is None:
         raise RuntimeError(
             f"Voice preset {preset['name']!r} wav file missing. Re-upload or remove the preset."
@@ -58,9 +63,8 @@ async def run_voice_step(
         guidance_scale=None,
     )
 
-    # Determine segments (auto-segment takes priority over preprocess)
     segments = None
-    if step.voice_auto_segment and client and llm_config:
+    if alt.voice_auto_segment and client and llm_config:
         from ...omnivoice.constants import DEFAULT_VOICE_AUTO_SEGMENT_PROMPT
         from ...mcp.registry import get_tool, to_openai_schema
         from ...models import VoiceSegment
@@ -77,7 +81,6 @@ async def run_voice_step(
         message = choice.get("message", {})
         raw_content = message.get("content") or ""
 
-        # Save raw LLM response for debugging
         (step_dir / "auto_segment_raw.txt").write_text(
             json.dumps(message, indent=2, ensure_ascii=False), encoding="utf-8"
         )
@@ -92,7 +95,6 @@ async def run_voice_step(
             args = json.loads(tc["function"]["arguments"])
             seg_data = args.get("segments", [])
         elif raw_content:
-            # Fallback: model responded with a JSON array instead of calling the tool
             stripped = raw_content.strip()
             fence = re.match(r"^```(?:json)?\s*([\s\S]*?)```\s*$", stripped)
             if fence:
@@ -131,11 +133,11 @@ async def run_voice_step(
                 delay_ms_list.append(seg.delay_ms)
             merge_wav_files(seg_paths, delay_ms_list, output_path)
         else:
-            if step.voice_preprocess and client and llm_config:
+            if alt.voice_preprocess and client and llm_config:
                 from ...omnivoice.constants import DEFAULT_VOICE_PREPROCESS_PROMPT
                 preprocess_prompt = config.voice_preprocess_prompt or DEFAULT_VOICE_PREPROCESS_PROMPT
                 text = await client.generate(f"{preprocess_prompt}\n\n{text}", llm_config)
-            parts = [p for p in [step.voice_pre, text, step.voice_post] if p]
+            parts = [p for p in [alt.voice_pre, text, alt.voice_post] if p]
             tts_text = "\n\n".join(parts) if parts else text
             await runner.run(tts_text, output_path, step_dir, **common_run_kwargs)
     finally:
