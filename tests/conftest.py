@@ -43,6 +43,13 @@ def patch_voice_presets_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def patch_llm_presets_dir(tmp_path, monkeypatch):
+    """Redirect LLM preset storage to a temp directory for each test."""
+    import app.llm_presets as lp
+    monkeypatch.setattr(lp, "PRESETS_DIR", tmp_path / "llm_presets")
+
+
+@pytest.fixture(autouse=True)
 def patch_context_base(tmp_path, monkeypatch):
     """Redirect context file root to a temp directory for each test."""
     import app.chain.context as ctx

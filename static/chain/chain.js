@@ -21,7 +21,7 @@
 
     async function _loadChainPresets() {
       try {
-        const data = await api('/llm-presets');
+        const data = await api('/llm-endpoints');
         _chainPresets    = data.presets || [];
         _defaultPresetId = data.default_preset_id || null;
       } catch (_) {}

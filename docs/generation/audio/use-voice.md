@@ -22,7 +22,7 @@ Use **+ Add segment** to extend, the remove button to shrink. On submit, the pag
 
 Check **Auto-segment with LLM** to reveal:
 
-- **LLM preset** — picked from `/v1/llm-presets`
+- **LLM preset** — picked from `/v1/llm-endpoints`
 - **Transcript** — the full text to synthesize
 
 On submit, the page posts `auto_segment: true`, the transcript as `text`, plus the LLM base URL and model. The server:

@@ -250,15 +250,51 @@ def test_llamacpp_routes_503_when_capability_missing(client, tmp_path, monkeypat
     assert detail["where"] == "gpu.local"
 
 
-def test_llamacpp_ensure_loaded_named_preset_returns_501(client, monkeypatch):
+def test_llamacpp_ensure_loaded_named_preset_404_when_missing(
+    client, tmp_path, monkeypatch
+):
     import app.llamacpp.router as router_mod
+    import app.llm_presets as presets_mod
+
+    monkeypatch.setattr(presets_mod, "PRESETS_DIR", tmp_path / "llm_presets")
     mock_mgr = MagicMock()
     mock_mgr.ensure_loaded = AsyncMock()
     monkeypatch.setattr(router_mod, "get_manager", lambda: mock_mgr)
 
-    r = client.post("/v1/llamacpp/ensure-loaded", json={"preset": "gemma-3"})
-    assert r.status_code == 501
+    r = client.post("/v1/llamacpp/ensure-loaded", json={"preset": "missing-one"})
+    assert r.status_code == 404
     mock_mgr.ensure_loaded.assert_not_called()
+
+
+def test_llamacpp_ensure_loaded_named_preset_resolves(client, tmp_path, monkeypatch):
+    import app.llamacpp.router as router_mod
+    import app.llm_presets as presets_mod
+    from app.llm.models import LLMPreset
+
+    monkeypatch.setattr(presets_mod, "PRESETS_DIR", tmp_path / "llm_presets")
+    presets_mod.save_preset(
+        LLMPreset(
+            name="gemma-3",
+            model_path="/models/gemma.gguf",
+            args={"ctx_size": 4096},
+            capabilities=["text"],
+        )
+    )
+
+    captured: dict = {}
+
+    async def fake_ensure(arg):
+        captured["arg"] = arg
+        return {"loaded": True, "hash": "h", "swapped": True}
+
+    mock_mgr = MagicMock()
+    mock_mgr.ensure_loaded = AsyncMock(side_effect=fake_ensure)
+    monkeypatch.setattr(router_mod, "get_manager", lambda: mock_mgr)
+
+    r = client.post("/v1/llamacpp/ensure-loaded", json={"preset": "gemma-3"})
+    assert r.status_code == 200
+    assert r.json()["swapped"] is True
+    assert captured["arg"] == {"model_path": "/models/gemma.gguf", "args": {"ctx_size": 4096}}
 
 
 def test_llamacpp_ensure_loaded_inline_preset(client, monkeypatch):

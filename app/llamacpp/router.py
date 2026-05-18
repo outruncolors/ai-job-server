@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from .. import llm_presets
 from .config import LlamaCppConfig, get_config, save_config
 from .manager import LlamaCppLoadError, get_manager
 
@@ -14,20 +15,23 @@ router = APIRouter(prefix="/v1/llamacpp", tags=["llamacpp"])
 def _resolve_preset(body: dict) -> dict:
     """Accept either {"preset": <dict>} or {"preset": "<name>"}.
 
-    Named preset lookup arrives with the preset-CRUD ticket; for now a string
-    falls back to a 501 so callers know to pass an inline dict.
+    A name is resolved against `app.llm_presets`; unknown names return 404 so
+    callers see why the swap was rejected instead of silently falling through.
     """
     preset = body.get("preset")
     if isinstance(preset, dict):
         return preset
     if isinstance(preset, str):
-        raise HTTPException(
-            status_code=501,
-            detail=(
-                "Named preset lookup not implemented yet — pass an inline "
-                "preset dict via {\"preset\": {\"model_path\": ..., \"args\": {...}}}"
-            ),
-        )
+        resolved = llm_presets.get_preset(preset)
+        if resolved is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"LLM preset {preset!r} not found",
+            )
+        return {
+            "model_path": resolved["model_path"],
+            "args": dict(resolved.get("args") or {}),
+        }
     raise HTTPException(status_code=422, detail="missing 'preset' field")
 
 

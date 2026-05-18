@@ -374,7 +374,7 @@
 
     async function _loadSegPresets() {
       try {
-        const data = await api('/llm-presets');
+        const data = await api('/llm-endpoints');
         _segAllPresets = data.presets || [];
         const sel = document.getElementById('use-seg-preset-select');
         while (sel.options.length > 1) sel.remove(1);

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>LLM Models · AI Job Server</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <nav id="topnav"></nav>
+
+  <div id="panels">
+
+    <!-- Left: preset list -->
+    <div id="panel-left">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span class="section-label">LLM PRESETS</span>
+        <button class="secondary" onclick="newPreset()"
+                style="margin-top:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
+      </div>
+      <div id="preset-list">
+        <div id="empty-state" class="empty">No presets yet. Click + New to create one.</div>
+      </div>
+      <p class="hint" style="margin-top:14px;font-size:0.7rem;color:#444;">
+        Presets configure which GGUF model and CLI args
+        <code>llama-server</code> spawns with. Loaded on demand by
+        <code>POST&nbsp;/v1/llamacpp/ensure-loaded&nbsp;{"preset":&nbsp;"name"}</code>.
+      </p>
+    </div>
+
+    <!-- Right: form -->
+    <div id="panel-right">
+      <div id="form-title-bar">
+        <h2 id="form-heading">New Preset</h2>
+      </div>
+
+      <label>Name <span class="label-hint">(kebab-case, used as filename)</span></label>
+      <input id="f-name" type="text" placeholder="gemma-3-27b-highctx">
+
+      <label style="margin-top:14px;">Description <span class="label-hint">(optional)</span></label>
+      <input id="f-description" type="text" placeholder="What this preset is for…">
+
+      <label style="margin-top:14px;">Model Path
+        <span class="label-hint">(absolute path on the LLM machine)</span>
+      </label>
+      <input id="f-model-path" type="text" placeholder="/opt/ai-stack/models/gemma-3-27b-q4.gguf">
+
+      <label style="margin-top:14px;">Capabilities</label>
+      <div id="f-capabilities" class="cap-row">
+        <label class="cap-cell">
+          <input type="checkbox" id="cap-text" checked disabled> text
+          <span class="hint">(always on)</span>
+        </label>
+        <label class="cap-cell">
+          <input type="checkbox" id="cap-vision"> vision
+        </label>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px;">
+        <label style="margin:0;">Args
+          <span class="label-hint">(passed as <code>--key value</code>; <code>true</code> = bare flag, <code>null</code>/empty = skip)</span>
+        </label>
+        <button class="secondary" onclick="addArg()"
+                style="margin-top:0;padding:2px 8px;font-size:0.7rem;">+ Add Arg</button>
+      </div>
+      <div id="f-args"></div>
+      <div id="f-args-empty" class="hint" style="padding:6px 0;">
+        No args. Common ones: <code>ctx_size</code>, <code>n_gpu_layers</code>, <code>flash_attn</code>, <code>mmproj</code>.
+      </div>
+
+      <div id="form-actions">
+        <button onclick="savePreset()">Save</button>
+        <button class="secondary" onclick="cancelForm()">Cancel</button>
+        <button class="danger" id="btn-delete" style="display:none;" onclick="deletePreset()">Delete</button>
+        <span id="form-msg" class="msg"></span>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/js/nav.js"></script>
+  <script src="/js/profiles-widget.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="llm-presets.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

@@ -192,14 +192,30 @@ Saved text prompts for image generation. `workflow` is optional — `null` means
 | POST | `/v1/voice-presets/from-job` | `{ job_id, name, caption }` — copy from a voice job's `output.wav` |
 | DELETE | `/v1/voice-presets/{id}` | Remove |
 
-## LLM presets
+## LLM endpoint presets
+
+OpenAI-compatible HTTP endpoint configs used by chain LLM steps and voice auto-segmentation.
 
 | Method | Path | |
 |--------|------|---|
-| GET | `/v1/llm-presets` | List |
-| POST | `/v1/llm-presets` | Upsert |
-| DELETE | `/v1/llm-presets/{id}` | Remove |
-| PUT | `/v1/llm-presets/default` | `{ id }` |
+| GET | `/v1/llm-endpoints` | List → `{ presets: [...], default_preset_id }` |
+| POST | `/v1/llm-endpoints` | Upsert |
+| DELETE | `/v1/llm-endpoints/{id}` | Remove |
+| PUT | `/v1/llm-endpoints/default` | `{ id }` |
+
+## LLM model presets
+
+Named load configs for the local `llama-server` (`model_path` + CLI args + capabilities). Resolved by `/v1/llamacpp/ensure-loaded` when called with `{"preset": "<name>"}`. Stored at `config/llm_presets/<name>.json`.
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/llm-presets` | List → `{ presets: [...] }` |
+| GET | `/v1/llm-presets/{name}` | Fetch one |
+| POST | `/v1/llm-presets` | Create (409 if name taken) |
+| PUT | `/v1/llm-presets/{name}` | Update |
+| DELETE | `/v1/llm-presets/{name}` | Remove |
+
+Body shape: `{ name, model_path, args: {...}, capabilities: ["text"\|"vision"], description? }`. `name` must be kebab-case.
 
 ## MCP tools
 

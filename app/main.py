@@ -13,7 +13,14 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
-from .llm_config import delete_preset, list_presets, save_preset, set_default
+from .llm_config import (
+    delete_preset as delete_llm_endpoint,
+    list_presets as list_llm_endpoints,
+    save_preset as save_llm_endpoint,
+    set_default as set_llm_endpoint_default,
+)
+from .llm.models import LLMPreset
+from . import llm_presets as _llm_presets
 from .job_queue import get_job_queue, recover_interrupted_jobs
 from .ticks.persistence import delete_tick, get_tick, list_ticks, save_tick, update_tick_fields
 from .ticks.scheduler import get_scheduler, start_scheduler, stop_scheduler
@@ -665,31 +672,80 @@ def remove_wildcard(wid: str):
     return {"ok": True}
 
 
-@app.get("/v1/llm-presets")
-def get_llm_presets():
-    return list_presets()
+# LLM endpoint presets — OpenAI-compatible HTTP API configs used by chain jobs.
+# (Renamed from /v1/llm-presets so /v1/llm-presets can address llama.cpp model
+# load presets per the multi-machine plan.)
+@app.get("/v1/llm-endpoints")
+def get_llm_endpoints():
+    return list_llm_endpoints()
 
 
-@app.post("/v1/llm-presets", status_code=200)
-async def upsert_llm_preset(body: dict):
+@app.post("/v1/llm-endpoints", status_code=200)
+async def upsert_llm_endpoint(body: dict):
     try:
-        return save_preset(body).model_dump()
+        return save_llm_endpoint(body).model_dump()
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
-@app.delete("/v1/llm-presets/{preset_id}", status_code=200)
-def remove_llm_preset(preset_id: str):
-    if not delete_preset(preset_id):
-        raise HTTPException(status_code=404, detail="Preset not found")
+@app.delete("/v1/llm-endpoints/{endpoint_id}", status_code=200)
+def remove_llm_endpoint(endpoint_id: str):
+    if not delete_llm_endpoint(endpoint_id):
+        raise HTTPException(status_code=404, detail="Endpoint not found")
     return {"ok": True}
 
 
-@app.put("/v1/llm-presets/default", status_code=200)
-async def set_llm_default(body: dict):
-    preset_id = body.get("id")
-    if not set_default(preset_id):
-        raise HTTPException(status_code=404, detail="Preset not found")
+@app.put("/v1/llm-endpoints/default", status_code=200)
+async def set_llm_endpoint_default_route(body: dict):
+    endpoint_id = body.get("id")
+    if not set_llm_endpoint_default(endpoint_id):
+        raise HTTPException(status_code=404, detail="Endpoint not found")
+    return {"ok": True}
+
+
+# LLM model presets — llama.cpp load configs (model_path + args + capabilities).
+# Resolved by /v1/llamacpp/ensure-loaded when called with {"preset": "name"}.
+@app.get("/v1/llm-presets")
+def get_llm_presets_route():
+    return {"presets": _llm_presets.list_presets()}
+
+
+@app.get("/v1/llm-presets/{name}")
+def get_llm_preset_route(name: str):
+    data = _llm_presets.get_preset(name)
+    if data is None:
+        raise HTTPException(status_code=404, detail="LLM preset not found")
+    return data
+
+
+@app.post("/v1/llm-presets", status_code=201)
+async def create_llm_preset_route(body: dict):
+    try:
+        preset = LLMPreset(**body)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if _llm_presets.get_preset(preset.name) is not None:
+        raise HTTPException(
+            status_code=409, detail=f"LLM preset {preset.name!r} already exists"
+        )
+    return _llm_presets.save_preset(preset)
+
+
+@app.put("/v1/llm-presets/{name}", status_code=200)
+async def update_llm_preset_route(name: str, body: dict):
+    try:
+        path_preset = LLMPreset(**{**body, "name": name})
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if _llm_presets.get_preset(name) is None:
+        raise HTTPException(status_code=404, detail="LLM preset not found")
+    return _llm_presets.save_preset(path_preset)
+
+
+@app.delete("/v1/llm-presets/{name}", status_code=200)
+def delete_llm_preset_route(name: str):
+    if not _llm_presets.delete_preset(name):
+        raise HTTPException(status_code=404, detail="LLM preset not found")
     return {"ok": True}
 
 

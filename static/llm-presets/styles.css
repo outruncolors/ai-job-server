@@ -1,0 +1,51 @@
+#panel-left  { flex: 0 0 var(--panel-w-sm); padding: 20px 22px; }
+#panel-right { padding: 24px 32px; }
+
+/* Preset list */
+.preset-item {
+  border: 1px solid #1e1e1e; border-radius: 3px; padding: 9px 12px; margin-bottom: 6px;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.preset-item:hover    { border-color: #333; background: var(--color-bg-panel); }
+.preset-item.selected { border-color: var(--color-accent); background: #101810; }
+.preset-item-name { color: #bbb; font-size: 0.82rem; }
+.preset-item-sub  {
+  color: #555; font-size: 0.7rem; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.preset-item-caps {
+  color: var(--color-accent); font-size: 0.65rem; margin-top: 3px; letter-spacing: 0.04em;
+}
+
+/* Capability checkboxes */
+.cap-row    { display: flex; gap: 18px; flex-wrap: wrap; padding: 6px 0; }
+.cap-cell   { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #bbb; cursor: pointer; }
+.cap-cell input[type="checkbox"] { margin: 0; cursor: pointer; }
+.cap-cell .hint { color: #444; font-size: 0.65rem; }
+
+/* Arg rows */
+.arg-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; background: #0f0f0f; border: 1px solid #1e1e1e;
+  border-radius: 3px; margin-bottom: 5px;
+}
+.arg-row input[type="text"] { min-width: 0; }
+.arg-row .arg-key   { flex: 0 0 160px; }
+.arg-row .arg-value { flex: 1; }
+.arg-remove {
+  background: none; border: none; color: #444; cursor: pointer;
+  font-size: 1rem; padding: 0 2px; margin: 0; flex-shrink: 0; line-height: 1;
+}
+.arg-remove:hover { color: var(--color-danger); background: none; }
+
+/* Form header */
+#form-title-bar {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+}
+#form-title-bar h2 { color: #555; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
+#form-actions { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
+#form-actions button { margin-top: 0; }
+
+.label-hint { color: #333; font-size: 0.7rem; }
+
+code { font-family: inherit; color: #888; }

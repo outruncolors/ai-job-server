@@ -14,7 +14,7 @@ async function onLlmTabActive() {
 
 async function _loadPresets() {
   try {
-    const data = await api('/llm-presets');
+    const data = await api('/llm-endpoints');
     _llmPresets    = data.presets || [];
     _llmDefaultId  = data.default_preset_id || null;
     _renderPresetList();
@@ -89,7 +89,7 @@ async function saveLlmPreset() {
   if (_llmEditingId) body.id = _llmEditingId;
   _setLlmMsg('Saving…', '#777');
   try {
-    const saved = await api('/llm-presets', 'POST', body);
+    const saved = await api('/llm-endpoints', 'POST', body);
     _llmEditingId = saved.id;
     await _loadPresets();
     _setLlmMsg('Saved.', '#2a6');
@@ -148,7 +148,7 @@ async function _migrateLocalStorage() {
   let migrated = 0;
   for (const p of legacy) {
     try {
-      await api('/llm-presets', 'POST', {
+      await api('/llm-endpoints', 'POST', {
         name:            p.name || 'Migrated',
         api_base:        p.api_base || '',
         model:           p.model || '',
