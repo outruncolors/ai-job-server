@@ -17,7 +17,7 @@ set -euo pipefail
 # Bump this manually when upgrading. Different builds have subtly different
 # CLI args — preset files may need updates. See docs/llamacpp-upgrade.md.
 # ─────────────────────────────────────────────────────────────────────────────
-LLAMA_CPP_TAG="b6000"
+LLAMA_CPP_TAG="b9204"
 
 LLAMA_DIR="/opt/ai-stack/llama.cpp"
 MODELS_DIR="/opt/ai-stack/models"
