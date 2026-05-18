@@ -9,8 +9,11 @@ The MCP page hosts a tiny registry of structured tools that LLM chain steps can 
 | `random_integer` | Returns an integer in `[min, max]`. |
 | `generate_name` | Generates a random US name. Params: `gender` (`male`/`female`), `include_middle_name`, `include_last_name`. |
 | `format_voice_segments` | Returns an array of `{text, delay_ms}` segments. Used by voice auto-segmentation; safe to expose to other steps if you want similar structure. |
+| `save_image_prompt` | Saves a named entry to the image-prompts library. Params: `name`, `prompt`, `workflow?`. Mirrors the `image_prompt` chain step. |
+| `save_wildcard` | Creates or appends to a [wildcard](wildcards.md) list. Params: `name`, `value`, `mode` (`"append"` (default) / `"create"`). Mirrors the `save_wildcard` chain step. |
+| `create_ticket` | Files a ticket on the [tick queue](ticks.md). Params: `title`, `description?`, `file_hints?`. Mirrors the `create_ticket` chain step. |
 
-There is no runtime registration mechanism — adding a tool means editing the registry and executor.
+There is no runtime registration mechanism — adding a tool means editing the registry and executor. Each of the three "save" tools above has a one-to-one chain step type with the same payload, so you can choose whether the work happens inside an LLM tool loop (mid-prompt) or as a direct chain step (no LLM in the loop).
 
 ## What's on the page
 

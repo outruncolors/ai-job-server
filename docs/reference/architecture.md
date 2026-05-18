@@ -14,17 +14,27 @@ app/
   voice_presets_router.py  GET/POST/DELETE /v1/voice-presets, /from-job
   audio_utils.py         WAV concatenation with silence padding
   chain/
-    executor.py          execute_chain_job(), _expand_steps(), step loop, status writes
-    models.py            ChainStep, ChainJobRequest, ChainLLMConfig
-    sequences.py         Sequence CRUD, DFS cycle detection
-    template.py          render_template() — {{input}} {{previous}} {{context}} …
+    executor.py          execute_chain_job() — number-keyed graph walker, weighted
+                         alternative picker, goto + visit_cap + 2000-run total budget,
+                         per-invocation step dirs, _expand_steps() for sequence refs
+    models.py            ChainStep, Alternative, SequenceVariable, ChainJobRequest,
+                         ChainLLMConfig. ChainStep has a model_validator that hoists
+                         v1-shorthand keys onto a single alternative.
+    sequences.py         Sequence CRUD (schema_version 2), DFS cycle detection,
+                         step-number / goto-target / weight validation
+    template.py          render_template() — {{input}} {{previous}} {{context}}
+                         {{step_index}} {{step_name}} {{N_input}} {{N_output}} {{var.NAME}}
     context.py           resolve_context_ids()
     context_library.py   Context item CRUD
     llm_client.py        OpenAICompatibleLLMClient (httpx)
+    llm_swap.py          ensure_loaded_for_step(step, alt, …) — per-alt preset routing
     steps/
       llm.py             run_llm_step() — tool loop, Gemma fallback parser
       voice.py           run_voice_step() — synthesis, auto-segmentation
       write_context.py   run_write_context_step()
+      image_prompt.py    run_image_prompt_step() — saves to /v1/image-prompts
+      save_wildcard.py   run_save_wildcard_step() — append or create wildcard list
+      create_ticket.py   run_create_ticket_step() — file ticket on the queue
   mcp/
     registry.py          Hardcoded tool definitions
     executor.py          execute() — schema-validated tool invocation
@@ -106,8 +116,10 @@ JOBS_BASE/YYYY-MM-DD/<job_id>/
       output.wav              # voice
       auto_segment_prompt.txt # voice w/ auto-segment
       auto_segment_raw.txt    # voice w/ auto-segment
-      output.json             # write_context
+      output.json             # write_context | image_prompt | save_wildcard | create_ticket
 ```
+
+Step directories are named `NNN_id` on first visit and `NNN_id_xII` on re-runs (only possible when a `goto` points back at the step). `II` is a zero-padded invocation index starting at `01`.
 
 ## Chain execution flow
 
@@ -118,12 +130,20 @@ POST /v1/jobs/chain
   → enqueue on JobQueue (single worker, sequential)
   → eventually: execute_chain_job()
       → list_sequences()          seq_map for expansion
+      → _renumber_top_level()     fill in missing step numbers
       → _expand_steps()           flatten sequence refs (depth ≤ 20)
-      → for each flat step:
-          _write_chain_status()   progress update
-          run_llm_step | run_voice_step | run_write_context_step
-          _write_step_status()    done | error
-          _append_log()
+      → walk by number until ptr is None or a budget trips:
+          visit_cap (per-step, default 100) and 2000-run total budget
+          _pick_alternative()     random.choices on alt weights
+          if goto: jump to alt.target_step (or fall_through → next number)
+          else:
+            _write_chain_status() progress update
+            run_<type>_step(step_dir, step, alt, …)
+            step_inputs[ptr].append(rendered_prompt)
+            step_outputs[ptr].append(result)        # empty for non-llm types
+            text_output = result                    # llm only
+            _write_step_status()  done | error
+            _append_log()
       → write final_output.txt
       → write artifacts.json
       → _write_chain_status(done)

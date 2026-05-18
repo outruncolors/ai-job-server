@@ -14,20 +14,23 @@
 | `app/main.py` | All FastAPI routes |
 | `app/jobs.py` | Job lifecycle: `create_job()`, artifact tracking, file serving |
 | `app/job_queue.py` | `JobQueue` — single-worker async queue all create-job endpoints flow through; `recover_interrupted_jobs()` for startup recovery |
-| `app/chain/models.py` | Pydantic schemas: `ChainStep`, `ChainJobRequest`, `ChainLLMConfig` |
-| `app/chain/executor.py` | `execute_chain_job()`, `_expand_steps()`, step loop; shared helpers (`_write_chain_status`, `_append_log`) |
-| `app/chain/steps/llm.py` | `run_llm_step()` — LLM tool loop, Gemma fallback parser |
-| `app/chain/llm_swap.py` | `ensure_loaded_for_step()` — resolves step preset (`step.preset` → `llamacpp.default_preset` → skip), POSTs to peer's `/v1/llamacpp/ensure-loaded` (control plane, FastAPI port), then GETs `/v1/llamacpp/config` to discover the llama-server port (data plane) and returns overridden `ChainLLMConfig` + swap log line. **Two ports**: `config/server.json` peers carry the FastAPI port (~8090); the llama-server port (~8080) is fetched from the peer's llamacpp config because it's not in the peer manifest. |
-| `app/chain/steps/voice.py` | `run_voice_step()` — TTS synthesis, auto-segmentation |
-| `app/chain/steps/write_context.py` | `run_write_context_step()` — saves text output to context library |
-| `app/chain/sequences.py` | Sequence CRUD + `check_for_cycles()` |
+| `app/chain/models.py` | Pydantic schemas: `ChainStep`, `Alternative`, `SequenceVariable`, `ChainJobRequest`, `ChainLLMConfig`. `ChainStep` has `number`, `visit_cap`, `alternatives: list[Alternative]`. A `model_validator(mode='before')` hoists v1-shorthand flat keys (`prompt`, `tools`, `preset`, `ctx_*`, `voice_*`, `sequence_id`, `target_step`, `fall_through`, …) into a single alternative so simple callers and existing tests keep parsing. |
+| `app/chain/executor.py` | `execute_chain_job()` — number-keyed graph walker. Picks one alternative per visit with `random.choices` over relative weights; handles `goto` (jump to `target_step` or `fall_through` to next number); enforces per-step `visit_cap` (default 100) and a 2000-run total budget. Step dirs are `NNN_id` on first visit, `NNN_id_xII` on re-runs. Per-invocation `step_inputs[N]` / `step_outputs[N]` feed `{{N_input}}` / `{{N_output}}`. Only `llm` steps mutate `text_output`. |
+| `app/chain/steps/llm.py` | `run_llm_step(step_dir, step, alt, request, client, text_output, step_index, …)` — LLM tool loop, Gemma fallback parser. Reads `alt.prompt` / `alt.tools` / `alt.context_ids` / `alt.preset`. |
+| `app/chain/llm_swap.py` | `ensure_loaded_for_step(step, alt, base_llm, prev_preset)` — resolves the chosen alternative's preset (`alt.preset` → `llamacpp.default_preset` → skip), POSTs to peer's `/v1/llamacpp/ensure-loaded` (control plane, FastAPI port), then GETs `/v1/llamacpp/config` to discover the llama-server port (data plane) and returns overridden `ChainLLMConfig` + swap log line. **Two ports**: `config/server.json` peers carry the FastAPI port (~8090); the llama-server port (~8080) is fetched from the peer's llamacpp config because it's not in the peer manifest. |
+| `app/chain/steps/voice.py` | `run_voice_step(step_dir, step, alt, text, …)` — TTS synthesis, auto-segmentation. Reads voice fields from `alt`. |
+| `app/chain/steps/write_context.py` | `run_write_context_step(step_dir, step, alt, text_output)` — saves to context library. |
+| `app/chain/steps/image_prompt.py` | `run_image_prompt_step()` — calls `app.image_prompts.create_prompt(rendered_name, body, workflow)`. Does not mutate `text_output`. |
+| `app/chain/steps/save_wildcard.py` | `run_save_wildcard_step()` — `mode=append` looks up existing wildcard by name and appends; `mode=create` always creates. Does not mutate `text_output`. |
+| `app/chain/steps/create_ticket.py` | `run_create_ticket_step()` — calls `app.tickets.store.create_ticket(rendered_title, rendered_description, file_hints)`. Does not mutate `text_output`. |
+| `app/chain/sequences.py` | Sequence CRUD (`schema_version: 2`), `check_for_cycles()` (DFS over `type=sequence` refs), `_validate_steps()` (unique numbers, weight >=1, goto target exists, exactly one of `target_step` / `fall_through`), `validate_llm_step_capabilities()` (per-alternative). Sequences persist a `variables` array of `{name, default, choices?}`. |
 | `app/chain/context.py` | `resolve_context_ids()` |
 | `app/chain/context_library.py` | Context item CRUD (JSON index) |
 | `app/tickets/store.py` | Ticket queue CRUD + reorder + `next_ticket()` (JSON index) |
 | `app/image_prompts.py` | Saved image prompt CRUD (JSON index) — name/prompt/workflow |
-| `app/chain/template.py` | `render_template()` — vars: `{{input}}` `{{previous}}` `{{context}}` `{{step_index}}` `{{step_name}}` |
+| `app/chain/template.py` | `render_template()` — single regex pass; tokens: `{{input}}` `{{previous}}` `{{context}}` `{{step_index}}` `{{step_name}}` `{{N_input}}` `{{N_output}}` `{{var.NAME}}`. Unknown tokens render as `""` (forward refs to not-yet-run steps are legal because of gotos). |
 | `app/chain/llm_client.py` | `OpenAICompatibleLLMClient` — uses `httpx`, not `requests` |
-| `app/mcp/registry.py` | Hardcoded tool definitions (`random_integer`, `generate_name`, `format_voice_segments`) |
+| `app/mcp/registry.py` | Hardcoded tool definitions: `random_integer`, `generate_name`, `format_voice_segments`, plus `save_image_prompt`, `save_wildcard`, `create_ticket` (each mirroring a same-named chain step type so the work can happen either inside an LLM tool loop or as a direct chain step). |
 | `app/mcp/executor.py` | `execute()` — runs a named tool with validated arguments |
 | `app/comfyui/config.py` | `ComfyUIConfig` model, get/save from `config/comfyui.json` |
 | `app/comfyui/manager.py` | `ComfyUIManager` — long-lived process: start/stop/restart, readiness probe, GPU status |
@@ -69,11 +72,14 @@ Pages can split into multiple JS modules. Script load order: `nav.js` → (page 
 ## Architecture
 
 - **Jobs** stored at `JOBS_BASE/YYYY-MM-DD/<uuid>/` with `request.json`, `status.json`, `logs.txt`, `artifacts.json`
-- **Chain jobs** add `steps/NNN_<step_id>/` subdirs; `_expand_steps()` flattens sequence references before execution
+- **Chain jobs** add `steps/NNN_<step_id>/` subdirs (and `NNN_<step_id>_xII/` for re-runs when a `goto` loops back); `_expand_steps()` flattens `type=sequence` references before execution
 - **Config** (sequences, context items, voice presets, omnivoice settings, comfyui settings + workflows) lives in `config/` — **gitignored**, never commit
-- **Step types**: `llm`, `voice`, `write_context`, `sequence` (sequence expands inline; only llm updates `text_output`)
-- **Step runner isolation**: step runners in `app/chain/steps/` raise exceptions on failure; `executor.py` owns all status writes and log appends — steps never import from `executor.py`
-- **Cycle detection**: DFS in `sequences.py`; enforced at save time (422) and run time (depth guard at 20)
+- **Step types**: `llm`, `voice`, `write_context`, `sequence`, `image_prompt`, `save_wildcard`, `create_ticket`, `goto`. Only `llm` updates `text_output`. `goto` doesn't run a step body; it picks an alternative whose `target_step` is the next step number (or whose `fall_through=true` lets execution continue normally).
+- **Alternatives**: every step carries `alternatives: list[Alternative]` (min 1). The executor `random.choices` one per visit using relative weights. All alternatives in a step share the parent's type. v1-style flat step dicts are accepted as shorthand and hoisted into a single alternative by a Pydantic `model_validator(mode='before')` on `ChainStep`.
+- **Variables**: `ChainJobRequest` carries `sequence_variables: list[SequenceVariable]` (declarations: name + default + optional choices) and `variables: dict[str,str]` (caller overrides). Resolved values are exposed as `{{var.NAME}}` to every template.
+- **Loop safety**: each step has a `visit_cap` (default 100); the chain also bails after a 2000-run total budget. Either limit short-circuits the job to `status=error` with a clear reason.
+- **Step runner isolation**: step runners in `app/chain/steps/` raise exceptions on failure; `executor.py` owns all status writes and log appends — steps never import from `executor.py`. Each runner now takes both `step` and the chosen `alt` (`Alternative`).
+- **Cycle detection**: DFS in `sequences.py` for `type=sequence` references; enforced at save time (422) and run time (depth guard at 20). Goto target validity is enforced at save time too (`target_step` must reference an existing step `number`).
 - **Job status on disk**: `"queued"`, `"running"`, `"done"`, `"error"` — note `"error"` maps to `"failed"` in server stats API (see `_STATUS_MAP` in `app/server.py`)
 - UI is dark-theme monospace; two-panel layout (controls left, output right); tab switching via `switchTab()`
 - **Toast system**: `Map`-based, id-deduplicated; defined in `static/server/server.js` and `static/mcp/mcp.js`; requires `<div id="toast-stack"></div>` in HTML
