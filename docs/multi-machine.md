@@ -307,8 +307,9 @@ The script:
 2. Runs `git push local master` to publish to the bare repo at `/srv/git/ai-job-server.git`.
 3. SSHes to the peer and runs `cd ~/ai-job-server && git pull && systemctl --user restart ai-job-server`, streaming output back.
 4. Waits 5s and probes `http://<peer>:8090/v1/server/health`, retrying for up to ~15s. Fails loudly if the peer doesn't come back, doesn't return a `git_sha`, or returns a `git_sha` that doesn't match the local HEAD.
+5. Restarts the **local** `ai-job-server.service` so its self-reported `git_sha` refreshes — `get_git_sha()` is computed once at startup, so without this step a commit made on the primary would leave the peer poller showing amber (peer on the new SHA, primary stuck on the old one) until someone restarted manually. Soft-fails with a warning if the unit isn't installed locally (e.g., running the script from a machine that isn't the primary).
 
-It's idempotent: running it twice in a row with no new commits is harmless — `git push` has nothing to send, the restart still succeeds, and the health probe still confirms the SHA match.
+It's idempotent: running it twice in a row with no new commits is harmless — `git push` has nothing to send, the restarts still succeed, and the health probes still confirm SHA parity.
 
 Common failure modes the script will surface:
 

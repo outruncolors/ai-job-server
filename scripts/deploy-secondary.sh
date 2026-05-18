@@ -8,6 +8,10 @@
 #   2. git push local master  (the bare-repo remote set up in docs/multi-machine.md).
 #   3. ssh <peer> 'cd ~/ai-job-server && git pull && systemctl --user restart ai-job-server'.
 #   4. Wait ~5s, GET http://<peer>:8090/v1/server/health, compare git_sha.
+#   5. Restart the local ai-job-server.service so its self-reported git_sha
+#      refreshes (otherwise the peer poller sees the new HEAD on the peer but
+#      stale HEAD locally and flags amber). Soft-fails if the unit isn't
+#      installed locally.
 #
 # Idempotent: a second invocation with no new commits is a harmless no-op
 # (git push has nothing new, restart succeeds, health probe still matches).
@@ -157,6 +161,43 @@ if [ "$PEER_SHA" != "$LOCAL_SHA" ]; then
     echo "       local=$LOCAL_SHA  peer=$PEER_SHA" >&2
     echo "       Did the remote 'git pull' diverge or fail silently?" >&2
     exit 1
+fi
+
+# ── 5. Restart local service so its self-reported git_sha refreshes ──────────
+# get_git_sha() is computed at startup. Without this, commits made on the
+# primary leave the peer poller showing amber (peer on new SHA, local stuck on
+# old SHA) until someone manually restarts.
+echo ""
+echo "--- Restarting local ai-job-server (so local git_sha refreshes) ---"
+if systemctl --user cat ai-job-server.service &>/dev/null; then
+    if systemctl --user restart ai-job-server; then
+        LOCAL_HEALTH_URL="http://localhost:8090/v1/server/health"
+        LOCAL_BODY=""
+        for attempt in 1 2 3 4 5; do
+            if LOCAL_BODY="$(curl -sf --max-time 5 "$LOCAL_HEALTH_URL" 2>/dev/null)"; then
+                break
+            fi
+            sleep 2
+            LOCAL_BODY=""
+        done
+        if [ -z "$LOCAL_BODY" ]; then
+            echo "WARN: local service did not respond to $LOCAL_HEALTH_URL within ~15s." >&2
+            echo "      Check 'journalctl --user -u ai-job-server'." >&2
+        else
+            LOCAL_RESTARTED_SHA="$("$PY" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("git_sha") or "")' <<<"$LOCAL_BODY")"
+            echo "--- Local self-reported SHA: ${LOCAL_RESTARTED_SHA:-<none>}"
+            if [ -n "$LOCAL_RESTARTED_SHA" ] && [ "$LOCAL_RESTARTED_SHA" != "$LOCAL_SHA" ]; then
+                echo "WARN: local self-reported SHA ($LOCAL_RESTARTED_SHA) does not match HEAD ($LOCAL_SHA)." >&2
+                echo "      The unit may be running from a different checkout than this script." >&2
+            fi
+        fi
+    else
+        echo "WARN: 'systemctl --user restart ai-job-server' failed; local git_sha may stay stale." >&2
+        echo "      Restart manually once the underlying issue is fixed." >&2
+    fi
+else
+    echo "--- ai-job-server.service not installed as a user unit on this host; skipping local restart."
+    echo "    If the local node also runs ai-job-server, install the systemd unit (see docs/multi-machine.md)."
 fi
 
 echo ""
