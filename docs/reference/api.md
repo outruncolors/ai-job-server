@@ -237,7 +237,24 @@ Validation error: `{ "error": "...", "validation_status": "invalid_arguments" }`
 | Method | Path | |
 |--------|------|---|
 | GET | `/v1/server/stats` | CPU / memory / disk / jobs / `queue_depth` / hostname / python |
+| GET | `/v1/server/health` | `status`, `timestamp`, `git_sha`, local `capabilities`, `uptime_seconds`; polled by peers |
+| GET | `/v1/server/capabilities` | `{ "local": [...], "peers": [...] }` — UI uses this on load to gate controls |
+| GET | `/v1/server/peers` | Configured peers with cached `health` (null until poller lands) |
 | POST | `/v1/server/restart` | `os.execv` hot restart |
+
+### Capability gating
+
+Each node declares its capabilities in `config/server.json` (see `config/server.json.example`).
+Routes that need a capability the local node lacks return **HTTP 503** with body:
+
+```json
+{ "detail": { "error": "capability_unavailable", "needed": "image", "where": "render.local" } }
+```
+
+`where` is the host of the first configured peer that owns the missing capability, or `"unknown"`.
+Gated routes include `POST /v1/jobs/image` (needs `image`), `POST /v1/jobs/voice` (needs `voice`),
+the entire `/v1/comfyui/*` router (needs `image`), and the entire `/v1/omnivoice/*` router (needs `voice`).
+Chain jobs are not gated at the route level — they orchestrate locally and call out to peers per step.
 
 ## Docs
 

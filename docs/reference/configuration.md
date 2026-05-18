@@ -6,6 +6,7 @@
 |----------|---------|-------------|
 | `JOBS_BASE` | `/srv/ai-jobs` | Root for all job storage. Created on first use. |
 | `OMNIVOICE_CONFIG_PATH` | `<repo>/config/omnivoice.json` | Override the OmniVoice config path. |
+| `AI_JOB_SERVER_CONFIG_PATH` | `<repo>/config/server.json` | Override the multi-machine server config path. |
 
 ```bash
 JOBS_BASE=/data/ai-jobs .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8090
@@ -17,6 +18,7 @@ Lives at the repo root, gitignored, created automatically.
 
 ```
 config/
+  server.json
   omnivoice.json
   comfyui.json
   llm_config.json
@@ -34,6 +36,31 @@ config/
 ```
 
 Never commit `config/`. It holds user data — voice samples, prompt text, LLM endpoints — that belongs on the machine running the server.
+
+## `config/server.json`
+
+Declares this node's role in a multi-machine fleet. If absent, the server defaults to **all capabilities enabled** (single-machine mode — backwards compatible). Ship a `config/server.json.example` alongside the real file in the repo.
+
+```json
+{
+  "role": "primary",
+  "capabilities": ["web", "voice", "image"],
+  "peers": [
+    { "name": "gpu", "host": "gpu.local", "port": 8090, "capabilities": ["llm"] }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `role` | string | Informational tag (`"primary"` or `"secondary"` by convention) — does **not** drive behavior |
+| `capabilities` | string[] | Subsystems this node serves: any of `"web"`, `"voice"`, `"image"`, `"llm"` |
+| `peers[].name` | string | Stable identifier for the peer |
+| `peers[].host` | string | Hostname (mDNS `.local`) or IP |
+| `peers[].port` | int | HTTP port (default `8090`) |
+| `peers[].capabilities` | string[] | Subsystems hosted on that peer |
+
+The `capabilities` array is the contract: routes that need a missing capability return HTTP 503 with `{ "error": "capability_unavailable", "needed": "<cap>", "where": "<peer-host>" }`. See [API → Server → Capability gating](api.md#capability-gating) and the [multi-machine plan](multi-machine-plan.md) for the full design.
 
 ## `config/omnivoice.json`
 

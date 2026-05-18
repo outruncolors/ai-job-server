@@ -42,7 +42,7 @@
 | `app/profiles/importer.py` | `apply_master_profile(profile, mode='replace'\|'merge', asset_source)` writes every domain back to its on-disk store (atomic per-domain), copies referenced WAVs, returns an `ImportReport` |
 | `app/profiles/bundle.py` | `pack_profile(profile, out_path)` and `unpack_profile(zip_path)` — `.zip` bundle with `master.json` + `assets/voice_presets/<wav>`; unpack validates `schema_version`, zip-slip-safe, returns flat asset dir for importer |
 | `app/profiles/store.py` | Named-profile store: `save_profile`, `list_profiles`, `get_profile`, `delete_profile`, `set_active`, `get_active`, plus `export_to_zip`/`import_as_new`/`apply_from_zip` for bundle I/O; profiles live under `config/profiles/<id>/{master.json,assets/}` with `index.json` + `active.json` markers |
-| `app/server.py` | `get_server_stats()`, `schedule_restart()`, 5s job-count cache (`_get_job_counts()`) |
+| `app/server.py` | `get_server_stats()`, `schedule_restart()`, 5s job-count cache (`_get_job_counts()`); multi-machine config (`ServerConfig`, `Peer`, `get_local_capabilities()`, `get_peers()`, `find_peer_for_capability()`, `get_git_sha()`) and the `requires_capability(cap)` FastAPI dependency that 503s out-of-capability routes |
 | `static/js/nav.js` | Builds top nav from `NAV_ITEMS` array; auto-marks active page by pathname |
 | `static/js/voice-segments.js` | Reusable segment list widget (`vsAddSegment`, `vsCollectSegments`) |
 | `static/js/resolved-prompt.js` | `renderResolvedPrompt(container, items)` — shows the resolved prompt + per-token wildcard substitutions above voice/image output panels; pairs with `resolveWildcardsTracked()` in `wildcards.js` |
@@ -71,6 +71,7 @@ Pages can split into multiple JS modules. Script load order: `nav.js` → (page 
 - **Toast system**: `Map`-based, id-deduplicated; defined in `static/server/server.js` and `static/mcp/mcp.js`; requires `<div id="toast-stack"></div>` in HTML
 - **psutil**: `psutil.cpu_percent()` must be called once at import (no interval) to prime the sampler before using `interval=None` calls
 - **ComfyUI**: unlike OmniVoice (ephemeral subprocesses), ComfyUI is a long-lived HTTP server at `127.0.0.1:8188`. `ComfyUIManager` starts it at FastAPI boot (`lifespan` in `main.py`), adopts it if already running, and manages the process group with `os.killpg`. Workflows are API-format JSON in `config/comfyui-workflows/`; params are auto-detected by node class. Install: `bash scripts/comfyui-setup.sh`
+- **Multi-machine capabilities**: `config/server.json` declares this node's `capabilities` (`web`/`voice`/`image`/`llm`) and known `peers`. Absent file → all-capabilities (single-machine). Routes that need a missing capability return `503 {"error":"capability_unavailable","needed":<cap>,"where":<peer-host>}` via `Depends(requires_capability(cap))` (see `app/main.py` — `POST /v1/jobs/image`, `POST /v1/jobs/voice`, the comfyui and omnivoice routers). Chain jobs are **not** route-gated; per-step gating is deferred. Endpoints: `GET /v1/server/capabilities`, `GET /v1/server/peers`, `GET /v1/server/health` (incl. `git_sha`). Full design: `docs/reference/multi-machine-plan.md`.
 
 ## Common patterns
 

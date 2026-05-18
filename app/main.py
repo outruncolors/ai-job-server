@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
@@ -70,7 +70,14 @@ from .models import (
     ServerStatsResponse,
     VoiceJobRequest,
 )
-from .server import get_server_stats, schedule_restart
+from .server import (
+    get_git_sha,
+    get_local_capabilities,
+    get_peers,
+    get_server_stats,
+    requires_capability,
+    schedule_restart,
+)
 from .omnivoice.config import get_config
 from .omnivoice.manager import get_manager
 from .omnivoice.router import router as omnivoice_router
@@ -157,8 +164,8 @@ app = FastAPI(title="ai-job-server", version="0.1.0", lifespan=lifespan)
 STATIC_DIR = Path(__file__).parent.parent / "static"
 DOCS_DIR = Path(__file__).parent.parent / "docs"
 
-app.include_router(comfyui_router)
-app.include_router(omnivoice_router)
+app.include_router(comfyui_router, dependencies=[Depends(requires_capability("image"))])
+app.include_router(omnivoice_router, dependencies=[Depends(requires_capability("voice"))])
 app.include_router(presets_router)
 app.include_router(mcp_router)
 
@@ -168,7 +175,12 @@ def health():
     return HealthResponse(status="ok", timestamp=datetime.now(timezone.utc))
 
 
-@app.post("/v1/jobs/image", response_model=JobCreatedResponse, status_code=202)
+@app.post(
+    "/v1/jobs/image",
+    response_model=JobCreatedResponse,
+    status_code=202,
+    dependencies=[Depends(requires_capability("image"))],
+)
 async def create_image_job(req: ImageJobRequest):
     input_text = req.prompt
     data = create_job("image", req.model_dump(), input_text)
@@ -184,7 +196,12 @@ async def create_image_job(req: ImageJobRequest):
     return JobCreatedResponse(**data)
 
 
-@app.post("/v1/jobs/voice", response_model=JobCreatedResponse, status_code=202)
+@app.post(
+    "/v1/jobs/voice",
+    response_model=JobCreatedResponse,
+    status_code=202,
+    dependencies=[Depends(requires_capability("voice"))],
+)
 async def create_voice_job(req: VoiceJobRequest):
     input_text = req.text or (req.segments[0].text if req.segments else "")
     data = create_job("voice", req.model_dump(), input_text)
@@ -742,6 +759,37 @@ async def preview_cron(body: dict):
 @app.get("/v1/server/stats", response_model=ServerStatsResponse)
 def server_stats():
     return get_server_stats()
+
+
+@app.get("/v1/server/capabilities")
+def server_capabilities():
+    peers = get_peers()
+    return {
+        "local": sorted(get_local_capabilities()),
+        "peers": [p.model_dump() for p in peers],
+    }
+
+
+@app.get("/v1/server/peers")
+def server_peers():
+    # `health` will be populated by the peer-poller in a later ticket.
+    return {
+        "peers": [
+            {**p.model_dump(), "health": None}
+            for p in get_peers()
+        ]
+    }
+
+
+@app.get("/v1/server/health")
+def server_health():
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "git_sha": get_git_sha(),
+        "capabilities": sorted(get_local_capabilities()),
+        "uptime_seconds": get_server_stats()["uptime_seconds"],
+    }
 
 
 @app.post("/v1/server/restart", response_model=ServerRestartResponse)

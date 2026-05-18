@@ -53,6 +53,18 @@ def patch_context_base(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def patch_server_config(tmp_path, monkeypatch):
+    """Redirect server config to tmp dir and reset cache.
+
+    Tests get the default ServerConfig (all capabilities enabled) unless they
+    write their own config/server.json into tmp_path and call reset_server_config().
+    """
+    import app.server as s
+    monkeypatch.setattr(s, "SERVER_CONFIG_PATH", tmp_path / "config" / "server.json")
+    monkeypatch.setattr(s, "_server_config", None)
+
+
+@pytest.fixture(autouse=True)
 def patch_comfyui_config(tmp_path, monkeypatch):
     """Redirect ComfyUI config to tmp dir and reset singleton."""
     import app.comfyui.config as cfg

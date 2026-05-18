@@ -1,0 +1,7 @@
+{
+  "role": "primary",
+  "capabilities": ["web", "voice", "image"],
+  "peers": [
+    { "name": "gpu", "host": "gpu.local", "port": 8090, "capabilities": ["llm"] }
+  ]
+}
