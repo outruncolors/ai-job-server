@@ -123,11 +123,30 @@ monkeypatch.setattr(m, "schedule_restart", lambda: ...)
 
 ## Documentation
 
-Full developer docs are in `docs/`:
-- `docs/architecture.md` — module map, job lifecycle, chain execution flow
-- `docs/api.md` — complete REST API reference with curl examples
-- `docs/chain-jobs.md` — step type reference, template vars, sequences, MCP tools, voice auto-segmentation
-- `docs/configuration.md` — env vars, `omnivoice.json` fields, external services, dev/prod setup
-- `docs/comfyui-setup.md` — ComfyUI install, optimization flags, workflow authoring, troubleshooting
-- `docs/multi-machine.md` — primary/secondary deployment (bare repo, systemd user unit, capability gating, cutover); design doc at `docs/reference/multi-machine-plan.md`
+Full developer docs live under `docs/` and are organized by section. Start at `docs/index.md` for the table of contents.
+
+**Reference (the most useful pages when navigating the codebase):**
+- `docs/reference/architecture.md` — module map, job lifecycle, chain execution flow
+- `docs/reference/api.md` — REST API reference with curl examples
+- `docs/reference/configuration.md` — env vars, `omnivoice.json` fields, external services, dev/prod setup
+- `docs/reference/design.md` — design notes / non-obvious decisions
+- `docs/reference/ui-standards.md`, `docs/reference/ui-cheatsheet.md` — frontend conventions
+- `docs/reference/multi-machine-plan.md` — multi-machine design doc
+
+**Generation (per-domain user guides):**
+- `docs/generation/text/chain.md` — step types (v2), alternatives, gotos, template vars, variables
+- `docs/generation/text/sequences.md` — sequence storage, validation, expansion
+- `docs/generation/audio/{clone-voice,design-voice,use-voice,utility-prompts}.md` — OmniVoice flows
+- `docs/generation/visual/{generate,prompts,comfyui-setup}.md` — ComfyUI image generation + install
+
+**Tools (shared subsystems):**
+- `docs/tools/mcp.md` — MCP tool registry and the same-named chain step types
+- `docs/tools/context.md`, `docs/tools/wildcards.md`, `docs/tools/llm-presets.md`, `docs/tools/ticks.md`
+
+**Management (operator pages, not feature pages):**
+- `docs/management/jobs.md`, `docs/management/tickets.md`, `docs/management/docs.md`
+- `docs/management/server/{web,llm,comfyui}.md` — Server tab sub-pages
+
+**Top-level deployment docs:**
+- `docs/multi-machine.md` — primary/secondary deployment (bare repo, systemd user unit, capability gating, cutover)
 - `docs/llamacpp-upgrade.md` — procedure for bumping `LLAMA_CPP_TAG` in `scripts/llamacpp-setup.sh`
