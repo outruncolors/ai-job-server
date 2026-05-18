@@ -73,7 +73,46 @@ def check_for_cycles(entries: list[dict], root_id: str) -> None:
         dfs(root_id, [])
 
 
+def validate_llm_step_capabilities(steps: list[dict]) -> None:
+    """For each LLM step that declares `requires`, ensure the chosen (or default)
+    preset advertises every required capability. Raises ValueError on mismatch.
+    """
+    from .. import llm_presets
+    from ..llamacpp.config import get_config as llamacpp_get_config
+
+    default_name: Optional[str] = None
+    for idx, step in enumerate(steps, start=1):
+        if step.get("type") != "llm":
+            continue
+        requires = list(step.get("requires") or [])
+        if not requires:
+            continue
+        preset_name = step.get("preset") or default_name
+        if not preset_name:
+            # Lazily read the default only when needed.
+            default_name = default_name or llamacpp_get_config().default_preset
+            preset_name = step.get("preset") or default_name
+        if not preset_name:
+            raise ValueError(
+                f"Step {idx} ({step.get('name') or '?'}): requires={requires} but no preset is selected "
+                f"and no default_preset is configured in llamacpp.json"
+            )
+        preset = llm_presets.get_preset(preset_name)
+        if preset is None:
+            raise ValueError(
+                f"Step {idx} ({step.get('name') or '?'}): references unknown LLM preset {preset_name!r}"
+            )
+        caps = set(preset.get("capabilities") or [])
+        missing = [c for c in requires if c not in caps]
+        if missing:
+            raise ValueError(
+                f"Step {idx} ({step.get('name') or '?'}): preset {preset_name!r} is missing required "
+                f"capabilities {missing} (preset has {sorted(caps)})"
+            )
+
+
 def save_sequence(name: str, steps: list[dict]) -> dict:
+    validate_llm_step_capabilities(steps)
     entries = _read_index()
     existing = next((e for e in entries if e["name"] == name), None)
     now = _now_iso()

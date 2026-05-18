@@ -392,3 +392,220 @@ def test_get_job_file_status_still_works(client):
     job_id = r.json()["job_id"]
     r2 = client.get(f"/v1/jobs/{job_id}/files/status.json")
     assert r2.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Per-step LLM preset selector + ensure-loaded wiring
+# ---------------------------------------------------------------------------
+
+
+def _save_llm_model_preset(name, capabilities=("text",), model_path="/tmp/fake.gguf"):
+    """Helper: write a minimal LLMPreset JSON into the test preset dir."""
+    from app import llm_presets
+    from app.llm.models import LLMPreset
+    preset = LLMPreset(name=name, model_path=model_path,
+                       args={"ctx_size": 4096}, capabilities=list(capabilities))
+    llm_presets.save_preset(preset)
+
+
+def test_chain_step_accepts_preset_and_requires():
+    from app.chain.models import ChainStep
+    s = ChainStep(name="visual", prompt="describe", preset="vision-small",
+                  requires=["vision", "text"])
+    assert s.preset == "vision-small"
+    assert s.requires == ["vision", "text"]
+
+
+def test_save_sequence_rejects_when_preset_lacks_capabilities(tmp_path, monkeypatch):
+    from app.chain import sequences
+    seqdir = tmp_path / "seq"
+    monkeypatch.setattr(sequences, "SEQUENCES_DIR", seqdir)
+    monkeypatch.setattr(sequences, "INDEX_PATH", seqdir / "index.json")
+    _save_llm_model_preset("text-only", capabilities=["text"])
+    with pytest.raises(ValueError, match="missing required capabilities"):
+        sequences.save_sequence("bad-seq", [
+            {"name": "needs vision", "type": "llm",
+             "preset": "text-only", "requires": ["vision"]},
+        ])
+
+
+def test_save_sequence_accepts_when_preset_has_all_capabilities(tmp_path, monkeypatch):
+    from app.chain import sequences
+    seqdir = tmp_path / "seq"
+    monkeypatch.setattr(sequences, "SEQUENCES_DIR", seqdir)
+    monkeypatch.setattr(sequences, "INDEX_PATH", seqdir / "index.json")
+    _save_llm_model_preset("multimodal", capabilities=["text", "vision"])
+    result = sequences.save_sequence("ok-seq", [
+        {"name": "describe image", "type": "llm",
+         "preset": "multimodal", "requires": ["vision"]},
+    ])
+    assert result["name"] == "ok-seq"
+
+
+def test_save_sequence_rejects_unknown_preset(tmp_path, monkeypatch):
+    from app.chain import sequences
+    seqdir = tmp_path / "seq"
+    monkeypatch.setattr(sequences, "SEQUENCES_DIR", seqdir)
+    monkeypatch.setattr(sequences, "INDEX_PATH", seqdir / "index.json")
+    with pytest.raises(ValueError, match="unknown LLM preset"):
+        sequences.save_sequence("ghost-seq", [
+            {"name": "ghost", "type": "llm",
+             "preset": "does-not-exist", "requires": ["text"]},
+        ])
+
+
+def test_save_sequence_rejects_requires_without_any_preset(tmp_path, monkeypatch):
+    from app.chain import sequences
+    from app.llamacpp import config as llcfg
+    seqdir = tmp_path / "seq"
+    monkeypatch.setattr(sequences, "SEQUENCES_DIR", seqdir)
+    monkeypatch.setattr(sequences, "INDEX_PATH", seqdir / "index.json")
+    # Force a clean llamacpp config with no default_preset.
+    monkeypatch.setattr(llcfg, "CONFIG_PATH", tmp_path / "llamacpp.json")
+    monkeypatch.setattr(llcfg, "_config", None)
+    with pytest.raises(ValueError, match="no preset is selected"):
+        sequences.save_sequence("orphan-seq", [
+            {"name": "needs text", "type": "llm", "requires": ["text"]},
+        ])
+
+
+async def test_executor_calls_ensure_loaded_with_step_preset(tmp_path, monkeypatch):
+    """A step with `preset` set must POST that name to /v1/llamacpp/ensure-loaded
+    before the chat-completion call, and override the api_base + model used."""
+    from app.chain.executor import execute_chain_job
+    from app.chain.models import ChainJobRequest, ChainLLMConfig, ChainStep
+    from app.jobs import create_job, find_job_dir
+    from app.llamacpp import config as llcfg
+    monkeypatch.setattr(llcfg, "CONFIG_PATH", tmp_path / "llamacpp.json")
+    monkeypatch.setattr(llcfg, "_config", None)
+    # config defaults to port 8080; local has 'llm' capability via patch_server_config
+
+    _save_llm_model_preset("alpha", capabilities=["text"])
+
+    req = ChainJobRequest(
+        input="hi",
+        llm=ChainLLMConfig(api_base="http://will-be-overridden", model="placeholder"),
+        steps=[ChainStep(name="one", prompt="{{input}}", preset="alpha")],
+    )
+    data = create_job("chain", req.model_dump(), req.input)
+    job_id = data["job_id"]
+    job_dir = find_job_dir(job_id)
+
+    posted: dict = {}
+
+    class _Resp:
+        status_code = 200
+        text = ""
+        def json(self):
+            return {"loaded": True, "hash": "abc", "swapped": True}
+
+    async def _fake_post(self, url, json=None, **kw):
+        posted["url"] = url
+        posted["json"] = json
+        return _Resp()
+
+    monkeypatch.setattr("httpx.AsyncClient.post", _fake_post)
+
+    with patch("app.chain.executor.OpenAICompatibleLLMClient") as MockClient:
+        instance = MockClient.return_value
+        instance.generate = AsyncMock(return_value="model-said-hi")
+        await execute_chain_job(job_id, job_dir, req)
+
+    assert posted["url"] == "http://127.0.0.1:8080/v1/llamacpp/ensure-loaded"
+    assert posted["json"] == {"preset": "alpha"}
+
+    # generate was called with the overridden llm config (api_base + model)
+    call_args = instance.generate.await_args
+    used_llm = call_args.args[1]
+    assert used_llm.api_base == "http://127.0.0.1:8080/v1"
+    assert used_llm.model == "alpha"
+
+    logs = (job_dir / "logs.txt").read_text(encoding="utf-8")
+    assert "LLM swap" in logs and "alpha" in logs
+
+
+async def test_executor_falls_back_to_default_preset(tmp_path, monkeypatch):
+    from app.chain.executor import execute_chain_job
+    from app.chain.models import ChainJobRequest, ChainLLMConfig, ChainStep
+    from app.jobs import create_job, find_job_dir
+    from app.llamacpp import config as llcfg
+    cfg_path = tmp_path / "llamacpp.json"
+    cfg_path.write_text(
+        '{"binary_path":"/x","port":8080,"default_preset":"beta","models_dir":"/m"}'
+    )
+    monkeypatch.setattr(llcfg, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(llcfg, "_config", None)
+
+    _save_llm_model_preset("beta", capabilities=["text"])
+
+    req = ChainJobRequest(
+        input="hi",
+        llm=ChainLLMConfig(api_base="http://orig", model="orig"),
+        steps=[ChainStep(name="one", prompt="{{input}}")],  # no preset
+    )
+    data = create_job("chain", req.model_dump(), req.input)
+    job_id = data["job_id"]
+    job_dir = find_job_dir(job_id)
+
+    posted: dict = {}
+
+    class _Resp:
+        status_code = 200
+        text = ""
+        def json(self):
+            return {"loaded": True, "hash": "h", "swapped": False}
+
+    async def _fake_post(self, url, json=None, **kw):
+        posted["json"] = json
+        return _Resp()
+
+    monkeypatch.setattr("httpx.AsyncClient.post", _fake_post)
+
+    with patch("app.chain.executor.OpenAICompatibleLLMClient") as MockClient:
+        instance = MockClient.return_value
+        instance.generate = AsyncMock(return_value="ok")
+        await execute_chain_job(job_id, job_dir, req)
+
+    assert posted["json"] == {"preset": "beta"}
+
+
+async def test_executor_step_errors_on_ensure_loaded_failure(tmp_path, monkeypatch):
+    from app.chain.executor import execute_chain_job
+    from app.chain.models import ChainJobRequest, ChainLLMConfig, ChainStep
+    from app.jobs import create_job, find_job_dir
+    from app.llamacpp import config as llcfg
+    monkeypatch.setattr(llcfg, "CONFIG_PATH", tmp_path / "llamacpp.json")
+    monkeypatch.setattr(llcfg, "_config", None)
+
+    _save_llm_model_preset("gamma", capabilities=["text"])
+
+    req = ChainJobRequest(
+        input="hi",
+        llm=ChainLLMConfig(api_base="http://orig", model="orig"),
+        steps=[ChainStep(name="one", prompt="{{input}}", preset="gamma")],
+    )
+    data = create_job("chain", req.model_dump(), req.input)
+    job_id = data["job_id"]
+    job_dir = find_job_dir(job_id)
+
+    class _Resp:
+        status_code = 503
+        text = "model fail"
+        def json(self):  # not used on error path
+            return {}
+
+    async def _fake_post(self, url, json=None, **kw):
+        return _Resp()
+
+    monkeypatch.setattr("httpx.AsyncClient.post", _fake_post)
+
+    with patch("app.chain.executor.OpenAICompatibleLLMClient") as MockClient:
+        instance = MockClient.return_value
+        instance.generate = AsyncMock(return_value="should-not-run")
+        await execute_chain_job(job_id, job_dir, req)
+
+    parent_status = json.loads((job_dir / "status.json").read_text())
+    assert parent_status["status"] == "error"
+    assert "ensure-loaded" in parent_status["error"]
+    # generate must not have been called once ensure-loaded failed
+    instance.generate.assert_not_awaited()

@@ -14,6 +14,10 @@ Renders a prompt template, calls the configured LLM, and stores the response as 
 | `prompt` | string | `""` | Prompt template; see [template variables](#template-variables) |
 | `context_ids` | string[] | `[]` | [Context items](../../tools/context.md) to inject as `{{context}}` |
 | `tools` | string[] | `[]` | [MCP tools](../../tools/mcp.md) to make available |
+| `preset` | string\|null | null | Name of an [LLM preset](../../tools/llm-presets.md) to load on llama.cpp before the call. Falls back to `default_preset` from `config/llamacpp.json`. |
+| `requires` | string[] | `[]` | Capabilities (`text`, `vision`) the chosen preset must advertise; validated at sequence-save time (422 on mismatch) |
+
+Before each `llm` step the executor POSTs `{"preset": "<name>"}` to `/v1/llamacpp/ensure-loaded` on whichever node holds the `llm` capability (local if available, otherwise the peer from `config/server.json`). If the preset is already loaded the call is a near-instant no-op (`LLM already loaded: <name>` in `logs.txt`); otherwise the manager swaps `llama-server` and logs `LLM swap: <prev> → <name> (loaded in 23.4s)`. With no preset selected and no `default_preset` configured the swap is skipped entirely and the request's `llm` config is used as-is (single-machine / legacy mode).
 
 The step writes `prompt.txt`, `output.txt`, optionally `context.txt`, and `tool_calls.json` when tools are used.
 

@@ -17,6 +17,7 @@
 | `app/chain/models.py` | Pydantic schemas: `ChainStep`, `ChainJobRequest`, `ChainLLMConfig` |
 | `app/chain/executor.py` | `execute_chain_job()`, `_expand_steps()`, step loop; shared helpers (`_write_chain_status`, `_append_log`) |
 | `app/chain/steps/llm.py` | `run_llm_step()` — LLM tool loop, Gemma fallback parser |
+| `app/chain/llm_swap.py` | `ensure_loaded_for_step()` — resolves step preset (`step.preset` → `llamacpp.default_preset` → skip), POSTs to peer's `/v1/llamacpp/ensure-loaded`, returns overridden `ChainLLMConfig` + swap log line |
 | `app/chain/steps/voice.py` | `run_voice_step()` — TTS synthesis, auto-segmentation |
 | `app/chain/steps/write_context.py` | `run_write_context_step()` — saves text output to context library |
 | `app/chain/sequences.py` | Sequence CRUD + `check_for_cycles()` |

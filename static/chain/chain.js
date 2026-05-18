@@ -27,6 +27,34 @@
       } catch (_) {}
     }
 
+    // ── LLM model presets (per-step preset selector) ─────────────────
+    let _llmModelPresets = [];
+
+    async function _loadLlmModelPresets() {
+      try {
+        const data = await api('/llm-presets');
+        _llmModelPresets = data.presets || [];
+      } catch (_) { _llmModelPresets = []; }
+    }
+
+    function _llmModelPresetOptions(selectedName, requires) {
+      const reqSet = new Set(requires || []);
+      const compatible = _llmModelPresets.filter(p => {
+        if (reqSet.size === 0) return true;
+        const caps = new Set(p.capabilities || []);
+        for (const r of reqSet) if (!caps.has(r)) return false;
+        return true;
+      });
+      let opts = '<option value="">— default —</option>';
+      for (const p of compatible) {
+        const caps = (p.capabilities || []).join(',');
+        const label = caps ? p.name + ' [' + caps + ']' : p.name;
+        opts += '<option value="' + _escHtml(p.name) + '"' +
+          (p.name === selectedName ? ' selected' : '') + '>' + _escHtml(label) + '</option>';
+      }
+      return opts;
+    }
+
     // ── Sequences ─────────────────────────────────────────────────────
     let _allSeqs = [];
 
@@ -162,6 +190,8 @@
           ctx_tags: s.ctx_tags || [], ctx_pre: s.ctx_pre || '', ctx_post: s.ctx_post || '',
           ctx_overwrite: !!s.ctx_overwrite,
           sequence_id: s.sequence_id || '',
+          preset: s.preset || '',
+          requires: s.requires || [],
         });
       }
     }
@@ -376,6 +406,8 @@
       const ctxPost        = opts.ctx_post || '';
       const ctxOverwrite   = !!opts.ctx_overwrite;
       const seqId          = opts.sequence_id || '';
+      const presetName     = opts.preset || '';
+      const requiresList   = Array.isArray(opts.requires) ? opts.requires : [];
 
       const isFirst = document.querySelectorAll('#chain-steps-list > .chain-step-card').length === 0;
       const idx    = _chainStepCounter++;
@@ -392,6 +424,9 @@
           '<option value="sequence"' + (type === 'sequence' ? ' selected' : '') + '>sequence</option>' +
         '</select>';
 
+      const requiresText  = requiresList.includes('text');
+      const requiresVision = requiresList.includes('vision');
+
       el.innerHTML =
         '<div class="chain-step-head">' +
           '<span>Step</span>' +
@@ -402,6 +437,22 @@
           '</div>' +
         '</div>' +
         '<div class="chain-step-text-fields"' + (type !== 'llm' ? ' style="display:none;"' : '') + '>' +
+          '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">' +
+            '<label style="margin:0;flex:0 0 auto;">Preset</label>' +
+            '<select class="chain-step-llm-preset" style="flex:1 1 220px;min-width:160px;" ' +
+              'onchange="_onLlmPresetChange(this)">' +
+              _llmModelPresetOptions(presetName, requiresList) +
+            '</select>' +
+            '<label style="margin:0;flex:0 0 auto;color:#383838;font-size:0.7rem;">requires:</label>' +
+            '<label style="margin:0;display:flex;align-items:center;gap:3px;font-size:0.72rem;cursor:pointer;">' +
+              '<input type="checkbox" class="chain-step-llm-req-text"' + (requiresText ? ' checked' : '') +
+                ' onchange="_onLlmRequiresChange(this)"> text' +
+            '</label>' +
+            '<label style="margin:0;display:flex;align-items:center;gap:3px;font-size:0.72rem;cursor:pointer;">' +
+              '<input type="checkbox" class="chain-step-llm-req-vision"' + (requiresVision ? ' checked' : '') +
+                ' onchange="_onLlmRequiresChange(this)"> vision' +
+            '</label>' +
+          '</div>' +
           '<label>Prompt</label>' +
           '<textarea class="chain-step-prompt" style="min-height:72px;">' + _escHtml(prompt) + '</textarea>' +
           '<datalist id="' + listId + '"></datalist>' +
@@ -481,6 +532,24 @@
       _refreshFirstStepVoiceDisable();
     }
 
+    function _collectLlmRequires(card) {
+      const out = [];
+      if (card.querySelector('.chain-step-llm-req-text')?.checked) out.push('text');
+      if (card.querySelector('.chain-step-llm-req-vision')?.checked) out.push('vision');
+      return out;
+    }
+
+    function _onLlmRequiresChange(input) {
+      const card = input.closest('.chain-step-card');
+      if (!card) return;
+      const sel = card.querySelector('.chain-step-llm-preset');
+      if (!sel) return;
+      const current = sel.value;
+      sel.innerHTML = _llmModelPresetOptions(current, _collectLlmRequires(card));
+    }
+
+    function _onLlmPresetChange(_sel) { /* placeholder for future hooks */ }
+
     function _refreshFirstStepVoiceDisable() {
       const cards = document.querySelectorAll('#chain-steps-list > .chain-step-card');
       cards.forEach((card, i) => {
@@ -552,7 +621,9 @@
           const prompt = el.querySelector('.chain-step-prompt').value;
           const context_ids = _collectStepContextIds(el);
           const tools = [...el.querySelectorAll('.tool-chk:checked')].map(c => c.getAttribute('data-name'));
-          steps.push({ name: 'Step ' + (++i), type: 'llm', prompt, context_ids, tools });
+          const preset = el.querySelector('.chain-step-llm-preset')?.value || null;
+          const requires = _collectLlmRequires(el);
+          steps.push({ name: 'Step ' + (++i), type: 'llm', prompt, context_ids, tools, preset, requires });
         }
       }
       return steps;
@@ -959,7 +1030,7 @@
     }
 
     // ── Init ─────────────────────────────────────────────────────────
-    Promise.all([_loadChainPresets(), loadContextItems(), loadVoicePresets(), loadSeqs(), loadMcpTools()]).then(() => {
+    Promise.all([_loadChainPresets(), _loadLlmModelPresets(), loadContextItems(), loadVoicePresets(), loadSeqs(), loadMcpTools()]).then(() => {
       if (_recreateId) {
         _hydrateFromRecreate(_recreateId);
         switchTab('chain');

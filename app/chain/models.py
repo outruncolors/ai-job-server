@@ -32,6 +32,8 @@ class ChainStep(BaseModel):
     ctx_post: Optional[str] = None
     ctx_tags: list[str] = []
     ctx_overwrite: bool = False
+    preset: Optional[str] = None
+    requires: list[str] = []
 
 
 class ChainJobRequest(BaseModel):

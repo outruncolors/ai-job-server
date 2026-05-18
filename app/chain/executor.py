@@ -152,6 +152,7 @@ async def execute_chain_job(
     client = OpenAICompatibleLLMClient()
     text_output = request.input
     executed_step_dirs: list[tuple[str, str]] = []  # (dir_name, step_type)
+    current_preset_name: Optional[str] = None
 
     for i, step in enumerate(flat_steps):
         step_index = i + 1
@@ -180,8 +181,15 @@ async def execute_chain_job(
 
         if step.type == "llm":
             try:
+                from .llm_swap import ensure_loaded_for_step
+                effective_llm, current_preset_name, swap_log = await ensure_loaded_for_step(
+                    step, request.llm, current_preset_name
+                )
+                if swap_log is not None:
+                    _append_log(job_dir, f"[step {step_index}/{step_count}] {swap_log}\n")
+                request_for_step = request.model_copy(update={"llm": effective_llm})
                 text_output, output_file = await run_llm_step(
-                    step_dir, step, request, client, text_output, step_index
+                    step_dir, step, request_for_step, client, text_output, step_index
                 )
                 _write_step_status(
                     step_dir,
