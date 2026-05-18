@@ -3,6 +3,8 @@ from __future__ import annotations
 import shutil
 import tempfile
 import zipfile
+
+import httpx
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -80,6 +82,7 @@ from .models import (
     VoiceJobRequest,
 )
 from .server import (
+    find_peer_for_capability,
     get_git_sha,
     get_local_capabilities,
     get_peers,
@@ -712,48 +715,101 @@ async def set_llm_endpoint_default_route(body: dict):
 
 # LLM model presets — llama.cpp load configs (model_path + args + capabilities).
 # Resolved by /v1/llamacpp/ensure-loaded when called with {"preset": "name"}.
+#
+# Presets physically live on the node that runs llama-server (the "llm"-capable
+# peer). Nodes without "llm" capability proxy these routes to that peer so the
+# chain UI's preset dropdown + the Server > LLM > Models sub-tab work from any
+# machine — otherwise the primary's UI would show an empty list because there
+# is no llm-server on it to load anything.
+
+async def _proxy_llm_presets(
+    method: str,
+    sub_path: str = "",
+    *,
+    json_body: Optional[dict] = None,
+    success_status: int = 200,
+):
+    """Forward an /v1/llm-presets... request to the LLM-capable peer.
+
+    Returns the peer's JSON body. Raises HTTPException for unreachable peer
+    (503) or non-2xx peer responses (passes through status + body).
+    """
+    peer = find_peer_for_capability("llm")
+    if peer is None:
+        raise HTTPException(
+            status_code=503,
+            detail="No node with 'llm' capability available (neither local nor any configured peer)",
+        )
+    url = f"http://{peer.host}:{peer.port}/v1/llm-presets{sub_path}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.request(method, url, json=json_body)
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"LLM peer at {peer.host}:{peer.port} unreachable: {exc}",
+        ) from exc
+    if r.status_code >= 400:
+        try:
+            detail = r.json().get("detail", r.text)
+        except ValueError:
+            detail = r.text
+        raise HTTPException(status_code=r.status_code, detail=detail)
+    return r.json()
+
+
 @app.get("/v1/llm-presets")
-def get_llm_presets_route():
-    return {"presets": _llm_presets.list_presets()}
+async def get_llm_presets_route():
+    if "llm" in get_local_capabilities():
+        return {"presets": _llm_presets.list_presets()}
+    return await _proxy_llm_presets("GET")
 
 
 @app.get("/v1/llm-presets/{name}")
-def get_llm_preset_route(name: str):
-    data = _llm_presets.get_preset(name)
-    if data is None:
-        raise HTTPException(status_code=404, detail="LLM preset not found")
-    return data
+async def get_llm_preset_route(name: str):
+    if "llm" in get_local_capabilities():
+        data = _llm_presets.get_preset(name)
+        if data is None:
+            raise HTTPException(status_code=404, detail="LLM preset not found")
+        return data
+    return await _proxy_llm_presets("GET", f"/{name}")
 
 
 @app.post("/v1/llm-presets", status_code=201)
 async def create_llm_preset_route(body: dict):
-    try:
-        preset = LLMPreset(**body)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    if _llm_presets.get_preset(preset.name) is not None:
-        raise HTTPException(
-            status_code=409, detail=f"LLM preset {preset.name!r} already exists"
-        )
-    return _llm_presets.save_preset(preset)
+    if "llm" in get_local_capabilities():
+        try:
+            preset = LLMPreset(**body)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        if _llm_presets.get_preset(preset.name) is not None:
+            raise HTTPException(
+                status_code=409, detail=f"LLM preset {preset.name!r} already exists"
+            )
+        return _llm_presets.save_preset(preset)
+    return await _proxy_llm_presets("POST", json_body=body)
 
 
 @app.put("/v1/llm-presets/{name}", status_code=200)
 async def update_llm_preset_route(name: str, body: dict):
-    try:
-        path_preset = LLMPreset(**{**body, "name": name})
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    if _llm_presets.get_preset(name) is None:
-        raise HTTPException(status_code=404, detail="LLM preset not found")
-    return _llm_presets.save_preset(path_preset)
+    if "llm" in get_local_capabilities():
+        try:
+            path_preset = LLMPreset(**{**body, "name": name})
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        if _llm_presets.get_preset(name) is None:
+            raise HTTPException(status_code=404, detail="LLM preset not found")
+        return _llm_presets.save_preset(path_preset)
+    return await _proxy_llm_presets("PUT", f"/{name}", json_body=body)
 
 
 @app.delete("/v1/llm-presets/{name}", status_code=200)
-def delete_llm_preset_route(name: str):
-    if not _llm_presets.delete_preset(name):
-        raise HTTPException(status_code=404, detail="LLM preset not found")
-    return {"ok": True}
+async def delete_llm_preset_route(name: str):
+    if "llm" in get_local_capabilities():
+        if not _llm_presets.delete_preset(name):
+            raise HTTPException(status_code=404, detail="LLM preset not found")
+        return {"ok": True}
+    return await _proxy_llm_presets("DELETE", f"/{name}")
 
 
 @app.get("/v1/ticks")
