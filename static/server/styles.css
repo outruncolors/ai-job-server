@@ -69,3 +69,68 @@
 
 /* ── ComfyUI editor link ── */
 .comfy-editor-link { display: inline-block; margin-top: 12px; color: var(--color-accent); font-size: 0.85rem; }
+
+/* ── LLM sub-tab bar (inside the LLM tab) ── */
+#llm-subtab-bar {
+  display: flex; align-items: center; gap: 0;
+  padding: 14px 28px 0;           /* below the page tab-bar's 88px panels offset */
+  border-bottom: 1px solid #181818;
+}
+.llm-subtab-btn {
+  background: none; border: none; color: #555;
+  font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 8px 16px; margin: 0; cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.llm-subtab-btn:hover   { color: #aaa; }
+.llm-subtab-btn.active  { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+.llm-subtab-hint {
+  margin-left: auto; color: #333; font-size: 0.7rem; padding-bottom: 8px;
+}
+
+.llm-subtab-pane         { display: none; }
+.llm-subtab-pane.active  { display: block; }
+/* Sub-pane #panels needs to forget the page-level 88px padding (sub-tab bar
+   already provides spacing within the active page tab). */
+.llm-subtab-pane #panels { padding-top: 18px; }
+
+/* ── Model preset list (Models sub-tab) ── */
+.preset-item {
+  border: 1px solid #1e1e1e; border-radius: 3px; padding: 9px 12px; margin-bottom: 6px;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.preset-item:hover    { border-color: #333; background: var(--color-bg-panel); }
+.preset-item.selected { border-color: var(--color-accent); background: #101810; }
+.preset-item-name { color: #bbb; font-size: 0.82rem; }
+.preset-item-sub  {
+  color: #555; font-size: 0.7rem; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.preset-item-caps {
+  color: var(--color-accent); font-size: 0.65rem; margin-top: 3px; letter-spacing: 0.04em;
+}
+
+/* Capability checkboxes (Models sub-tab) */
+.cap-row    { display: flex; gap: 18px; flex-wrap: wrap; padding: 6px 0; }
+.cap-cell   { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #bbb; cursor: pointer; }
+.cap-cell input[type="checkbox"] { margin: 0; cursor: pointer; }
+.cap-cell .hint { color: #444; font-size: 0.65rem; }
+
+/* Arg rows (Models sub-tab) */
+.arg-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; background: #0f0f0f; border: 1px solid #1e1e1e;
+  border-radius: 3px; margin-bottom: 5px;
+}
+.arg-row input[type="text"] { min-width: 0; }
+.arg-row .arg-key   { flex: 0 0 160px; }
+.arg-row .arg-value { flex: 1; }
+.arg-remove {
+  background: none; border: none; color: #444; cursor: pointer;
+  font-size: 1rem; padding: 0 2px; margin: 0; flex-shrink: 0; line-height: 1;
+}
+.arg-remove:hover { color: var(--color-danger); background: none; }
+
+.label-hint { color: #333; font-size: 0.7rem; }
+.label-hint code, .hint code, p code { font-family: inherit; color: #888; }

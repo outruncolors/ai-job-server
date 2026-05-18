@@ -1,15 +1,31 @@
-// LLM Presets tab — CRUD for server-side LLM presets + default selection.
+// LLM Endpoints sub-tab — CRUD for OpenAI-compatible HTTP destinations
+// (/v1/llm-endpoints). The Models sub-tab is in llm-models-tab.js.
 // Auto-migrates legacy localStorage presets from the old chain page.
 
 let _llmPresets = [];
 let _llmDefaultId = null;
 let _llmEditingId = null;
+let _activeLlmSubtab = 'models';   // default sub-tab on LLM tab open
 
 function initLlmTab() {}
 
 async function onLlmTabActive() {
-  await _loadPresets();
+  // Load both sub-panes' data (cheap; both are small JSON lists).
+  await Promise.all([
+    _loadPresets(),
+    onLlmModelsActive(),
+  ]);
   _migrateLocalStorage();
+}
+
+function switchLlmSubtab(name) {
+  _activeLlmSubtab = name;
+  document.querySelectorAll('.llm-subtab-pane').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.llm-subtab-btn').forEach(el => el.classList.remove('active'));
+  const pane = document.getElementById('subtab-' + name);
+  const btn  = document.querySelector('.llm-subtab-btn[data-subtab="' + name + '"]');
+  if (pane) pane.classList.add('active');
+  if (btn)  btn.classList.add('active');
 }
 
 async function _loadPresets() {
@@ -107,7 +123,7 @@ async function deleteLlmPreset() {
   const p = _llmPresets.find(x => x.id === _llmEditingId);
   if (!p || !confirm('Delete preset "' + p.name + '"?')) return;
   try {
-    await api('/llm-presets/' + _llmEditingId, 'DELETE');
+    await api('/llm-endpoints/' + _llmEditingId, 'DELETE');
     _llmEditingId = null;
     await _loadPresets();
     newLlmPreset();
@@ -120,7 +136,7 @@ async function toggleLlmDefault() {
   if (!_llmEditingId) return;
   const newDefault = _llmEditingId === _llmDefaultId ? null : _llmEditingId;
   try {
-    await api('/llm-presets/default', 'PUT', { id: newDefault });
+    await api('/llm-endpoints/default', 'PUT', { id: newDefault });
     _llmDefaultId = newDefault;
     await _loadPresets();
     document.getElementById('llm-default-btn').textContent =

@@ -1,12 +1,14 @@
-# LLM Models (LLM Presets)
+# LLM Models
 
 LLM model presets are named load configurations for the local llama.cpp server (`llama-server`). Each preset bundles the GGUF model path, CLI args (context size, GPU layer count, flash attention, multimodal projector, etc.), and capability tags. The llama.cpp manager swaps between them on demand.
 
-(Different from **LLM endpoint presets** on the [Server / LLM](../management/server/llm.md) tab. Endpoint presets describe *where to send HTTP requests*; model presets describe *which model llama.cpp loads locally*.)
+**UI location:** [Server → LLM → Models](../management/server/llm.md) sub-tab. (Previously a standalone `/llm-presets/` page — folded into the Server page so models and endpoints sit side-by-side.)
+
+**Companion concept:** [LLM endpoints](../management/server/llm.md) — the other sub-tab — describe *where chain LLM steps send HTTP requests*. Models describe *what llama.cpp loads*. When a chain step has a preset selected, the endpoint values are overridden at runtime to point at the LLM-capable peer.
 
 ## What's on the page
 
-- **Left** — list of presets, each showing name, description (or model path) and capability tags
+- **Left** — list of models, each showing name, description (or model path) and capability tags
 - **Right** — editor:
   - **Name** — kebab-case, used as the filename (`config/llm_presets/<name>.json`)
   - **Description** — optional

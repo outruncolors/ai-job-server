@@ -86,49 +86,133 @@
 
 <!-- ── LLM tab ────────────────────────────────────────────────────── -->
 <div id="tab-llm" class="tab-pane" role="tabpanel">
-  <div id="panels">
-    <div id="panel-left" style="min-width:260px;max-width:320px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <p class="section-label" style="margin:0;">LLM Presets</p>
-        <button class="secondary" onclick="newLlmPreset()" style="margin:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
-      </div>
-      <div id="llm-preset-list"></div>
-    </div>
-    <div id="panel-right">
-      <p class="section-label" id="llm-form-heading" style="margin-bottom:14px;">New Preset</p>
 
-      <label>Name</label>
-      <input id="llm-name" type="text" placeholder="e.g. Local Gemma">
+  <!-- Sub-tab bar -->
+  <div id="llm-subtab-bar">
+    <button class="llm-subtab-btn active" data-subtab="models"    onclick="switchLlmSubtab('models')">Models</button>
+    <button class="llm-subtab-btn"        data-subtab="endpoints" onclick="switchLlmSubtab('endpoints')">Endpoints</button>
+    <span class="llm-subtab-hint">
+      Models = what to load on the LLM-capable peer · Endpoints = where chain LLM requests POST
+    </span>
+  </div>
 
-      <label>API Base URL</label>
-      <input id="llm-api-base" type="text" placeholder="http://debian1.local:11434/v1">
-
-      <label>Model</label>
-      <input id="llm-model" type="text" placeholder="gemma4">
-
-      <div class="row" style="display:flex;gap:10px;margin-top:4px;">
-        <div style="flex:1;">
-          <label>Temperature (0–2)</label>
-          <input id="llm-temp" type="number" step="0.1" min="0" max="2" value="0.7">
+  <!-- ── Sub-tab: Models (llama.cpp presets, served by /v1/llm-presets) ── -->
+  <div id="subtab-models" class="llm-subtab-pane active">
+    <div id="panels">
+      <div id="panel-left">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <p class="section-label" style="margin:0;">Models</p>
+          <button class="secondary" onclick="newModelPreset()" style="margin:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
         </div>
-        <div style="flex:1;">
-          <label>Max Tokens</label>
-          <input id="llm-max-tokens" type="number" min="1" value="2048">
+        <div id="model-list">
+          <div class="empty" style="color:#444;font-size:0.75rem;padding:10px 0;">Loading…</div>
         </div>
-        <div style="flex:1;">
-          <label>Timeout (s)</label>
-          <input id="llm-timeout" type="number" min="1" value="120">
-        </div>
+        <p class="hint" style="margin-top:14px;font-size:0.7rem;color:#444;">
+          Each preset is a GGUF path + CLI args for <code>llama-server</code>.
+          Loaded on demand via <code>POST&nbsp;/v1/llamacpp/ensure-loaded&nbsp;{"preset":&nbsp;"name"}</code>
+          against the peer with the <code>llm</code> capability.
+        </p>
       </div>
+      <div id="panel-right">
+        <p class="section-label" id="model-form-heading" style="margin-bottom:14px;">New Model</p>
 
-      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-        <button onclick="saveLlmPreset()">Save</button>
-        <button id="llm-default-btn" class="secondary" onclick="toggleLlmDefault()" style="display:none;">Set as Default</button>
-        <button id="llm-delete-btn"  class="danger"    onclick="deleteLlmPreset()"  style="display:none;">Delete</button>
+        <label>Name <span class="label-hint">(kebab-case, used as filename)</span></label>
+        <input id="f-model-name" type="text" placeholder="gemma-3-27b-highctx">
+
+        <label style="margin-top:14px;">Description <span class="label-hint">(optional)</span></label>
+        <input id="f-model-description" type="text" placeholder="What this preset is for…">
+
+        <label style="margin-top:14px;">Model Path
+          <span class="label-hint">(absolute path on the LLM machine)</span>
+        </label>
+        <input id="f-model-path" type="text" placeholder="/opt/ai-stack/models/gemma-3-27b-q4.gguf">
+
+        <label style="margin-top:14px;">Capabilities</label>
+        <div class="cap-row">
+          <label class="cap-cell">
+            <input type="checkbox" id="model-cap-text" checked disabled> text
+            <span class="hint">(always on)</span>
+          </label>
+          <label class="cap-cell">
+            <input type="checkbox" id="model-cap-vision"> vision
+          </label>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px;">
+          <label style="margin:0;">Args
+            <span class="label-hint">(passed as <code>--key value</code>; <code>true</code> = bare flag, <code>null</code>/empty = skip)</span>
+          </label>
+          <button class="secondary" onclick="addModelArg()"
+                  style="margin-top:0;padding:2px 8px;font-size:0.7rem;">+ Add Arg</button>
+        </div>
+        <div id="model-args"></div>
+        <div id="model-args-empty" class="hint" style="padding:6px 0;">
+          No args. Common ones: <code>ctx_size</code>, <code>n_gpu_layers</code>, <code>flash_attn</code>, <code>mmproj</code>.
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center;">
+          <button onclick="saveModelPreset()">Save</button>
+          <button class="secondary" onclick="cancelModelForm()">Cancel</button>
+          <button class="danger" id="model-btn-delete" style="display:none;" onclick="deleteModelPreset()">Delete</button>
+          <span id="model-form-msg" class="msg"></span>
+        </div>
       </div>
-      <div id="llm-msg" class="msg"></div>
     </div>
   </div>
+
+  <!-- ── Sub-tab: Endpoints (HTTP destinations, served by /v1/llm-endpoints) ── -->
+  <div id="subtab-endpoints" class="llm-subtab-pane">
+    <div id="panels">
+      <div id="panel-left" style="min-width:260px;max-width:320px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <p class="section-label" style="margin:0;">Endpoints</p>
+          <button class="secondary" onclick="newLlmPreset()" style="margin:0;padding:3px 10px;font-size:0.7rem;">+ New</button>
+        </div>
+        <div id="llm-preset-list"></div>
+        <p class="hint" style="margin-top:14px;font-size:0.7rem;color:#444;">
+          When a chain LLM step has a preset (or <code>default_preset</code> is set in
+          the peer's <code>config/llamacpp.json</code>), the api_base + model fields here
+          are <em>overridden at runtime</em> to point at the LLM-capable peer. Endpoints
+          are still used for voice auto-segmentation and legacy chains without a preset.
+        </p>
+      </div>
+      <div id="panel-right">
+        <p class="section-label" id="llm-form-heading" style="margin-bottom:14px;">New Endpoint</p>
+
+        <label>Name</label>
+        <input id="llm-name" type="text" placeholder="e.g. Local Gemma">
+
+        <label>API Base URL</label>
+        <input id="llm-api-base" type="text" placeholder="http://gpu.local:8080/v1">
+
+        <label>Model</label>
+        <input id="llm-model" type="text" placeholder="gemma-4">
+
+        <div class="row" style="display:flex;gap:10px;margin-top:4px;">
+          <div style="flex:1;">
+            <label>Temperature (0–2)</label>
+            <input id="llm-temp" type="number" step="0.1" min="0" max="2" value="0.7">
+          </div>
+          <div style="flex:1;">
+            <label>Max Tokens</label>
+            <input id="llm-max-tokens" type="number" min="1" value="2048">
+          </div>
+          <div style="flex:1;">
+            <label>Timeout (s)</label>
+            <input id="llm-timeout" type="number" min="1" value="120">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <button onclick="saveLlmPreset()">Save</button>
+          <button id="llm-default-btn" class="secondary" onclick="toggleLlmDefault()" style="display:none;">Set as Default</button>
+          <button id="llm-delete-btn"  class="danger"    onclick="deleteLlmPreset()"  style="display:none;">Delete</button>
+        </div>
+        <div id="llm-msg" class="msg"></div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ── ComfyUI tab ────────────────────────────────────────────────── -->
@@ -257,6 +341,7 @@
 <script src="/js/toast.js"></script>
 <script src="comfyui-tab.js"></script>
 <script src="llm-tab.js"></script>
+<script src="llm-models-tab.js"></script>
 <script src="server.js"></script>
 <script src="/js/nav-mobile.js"></script>
 </body>

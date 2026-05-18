@@ -8,7 +8,6 @@
     { href: '/wildcards/', label: 'Wildcards', page: 'wildcards' },
     { href: '/ticks',    label: 'Ticks',    page: 'ticks'   },
     { href: '/mcp',      label: 'MCP',      page: 'mcp',    groupEnd: true },
-    { href: '/llm-presets/', label: 'LLM Models', page: 'llm-presets' },
     { href: '/tickets/', label: 'Tickets',  page: 'tickets' },
     { href: '/server',   label: 'Server',   page: 'server'  },
     { href: '/jobs',     label: 'Jobs',     page: 'jobs'    },

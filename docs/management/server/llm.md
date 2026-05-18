@@ -1,15 +1,22 @@
 # Server / LLM
 
-Manages **LLM endpoint presets** — saved OpenAI-compatible HTTP endpoints. Chain LLM steps and voice auto-segmentation use these as their default backend.
+Two sub-tabs sitting under one page:
 
-(Not to be confused with **LLM model presets** at `/llm-presets/`, which configure which GGUF and CLI args `llama-server` spawns with. See the [LLM Models page](../../tools/llm-presets.md) — endpoint presets and model presets live at different layers.)
+- **Models** — llama.cpp load presets (what GGUF + CLI args to load on the LLM-capable peer). Reads/writes `/v1/llm-presets`. Full schema reference in [LLM Models](../../tools/llm-presets.md).
+- **Endpoints** — OpenAI-compatible HTTP destinations (where to POST chat completions). Reads/writes `/v1/llm-endpoints`.
 
-## What's on the page
+Both surfaces lived as separate pages before multi-machine; the consolidation makes the relationship between them visible. When a chain LLM step has a preset selected (or `default_preset` is set in the peer's `config/llamacpp.json`), the **endpoint's api_base + model fields are overridden at runtime** to point at the LLM-capable peer — so for a typical multi-machine setup the endpoint values are placeholders. Endpoints still matter for voice auto-segmentation and legacy chains without a preset.
 
-- **Left** — list of presets with a "+ New" button. The default preset is marked with a badge.
+## Models sub-tab
+
+See [LLM Models](../../tools/llm-presets.md) — same UI, same data, same endpoints, now mounted as a sub-tab.
+
+## Endpoints sub-tab
+
+- **Left** — list of endpoints with a "+ New" button. The default endpoint is marked with a badge.
 - **Right** — edit form with:
   - **Name**
-  - **API base URL** (e.g. `http://debian1.local:11434/v1`)
+  - **API base URL** (e.g. `http://gpu.local:8080/v1`)
   - **Model**
   - **Temperature** (0–2)
   - **Max tokens**
