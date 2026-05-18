@@ -19,6 +19,8 @@
       <div id="jobs-toolbar">
         <span class="toolbar-label">All Jobs</span>
         <button class="secondary" onclick="loadJobs()">Refresh</button>
+        <button id="download-selected-btn" class="secondary" disabled onclick="downloadSelectedJobs()">Download</button>
+        <button id="download-all-btn" class="secondary" disabled onclick="downloadAllJobs()">Download All</button>
         <button id="clear-selected-btn" class="danger" disabled onclick="clearSelectedJobs()">Clear</button>
         <button id="clear-all-btn" class="danger" disabled onclick="clearAllJobs()">Clear All</button>
       </div>

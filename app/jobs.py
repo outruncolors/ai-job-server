@@ -137,6 +137,47 @@ def get_job_file(job_id: str, filename: str) -> Optional[Path]:
     return target
 
 
+def build_jobs_zip(job_ids: list[str], out_path: Path) -> int:
+    """Zip every job's declared artifacts into out_path.
+
+    Multi-job zips namespace entries under "<job_id>/" so files from different
+    jobs can't collide. Returns the number of jobs that contributed at least
+    one file.
+    """
+    import zipfile
+    nest = len(job_ids) > 1
+    count = 0
+    with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for job_id in job_ids:
+            job_dir = find_job_dir(job_id)
+            if job_dir is None:
+                continue
+            artifacts_file = job_dir / "artifacts.json"
+            if not artifacts_file.exists():
+                continue
+            try:
+                artifacts = json.loads(artifacts_file.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+            added = False
+            job_root = job_dir.resolve()
+            for a in artifacts:
+                fname = a.get("filename")
+                if not fname:
+                    continue
+                src = (job_dir / fname).resolve()
+                if not str(src).startswith(str(job_root)):
+                    continue
+                if not src.exists() or src.is_dir():
+                    continue
+                arcname = f"{job_id}/{fname}" if nest else fname
+                zf.write(src, arcname)
+                added = True
+            if added:
+                count += 1
+    return count
+
+
 # ---------------------------------------------------------------------------
 # Private helpers for execute_voice_job
 # ---------------------------------------------------------------------------

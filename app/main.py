@@ -48,6 +48,7 @@ from .comfyui.manager import get_manager as get_comfy_manager
 from .comfyui.router import router as comfyui_router
 from .comfyui.runner import execute_image_job
 from .jobs import (
+    build_jobs_zip,
     clear_all_jobs,
     clear_pending_jobs,
     create_job,
@@ -177,6 +178,39 @@ def clear_queue():
 def clear_all():
     removed = clear_all_jobs()
     return {"removed": removed}
+
+
+def _zip_response(job_ids: list[str], filename: str) -> FileResponse:
+    tmp = tempfile.NamedTemporaryFile(prefix="jobs-", suffix=".zip", delete=False)
+    tmp.close()
+    out_path = Path(tmp.name)
+    count = build_jobs_zip(job_ids, out_path)
+    if count == 0:
+        out_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=404, detail="No artifacts to download")
+    return FileResponse(
+        out_path,
+        filename=filename,
+        media_type="application/zip",
+        background=BackgroundTask(lambda: out_path.unlink(missing_ok=True)),
+    )
+
+
+@app.post("/v1/jobs/download")
+def download_selected_jobs(body: dict):
+    ids = body.get("job_ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="job_ids must be a non-empty list")
+    fname = f"job-{ids[0][:8]}.zip" if len(ids) == 1 else f"jobs-{len(ids)}.zip"
+    return _zip_response(ids, fname)
+
+
+@app.get("/v1/jobs/download-all")
+def download_all_jobs_zip():
+    ids = [j["job_id"] for j in list_jobs()]
+    if not ids:
+        raise HTTPException(status_code=404, detail="No jobs")
+    return _zip_response(ids, f"all-jobs-{len(ids)}.zip")
 
 
 @app.get("/v1/jobs/{job_id}", response_model=JobStatus)

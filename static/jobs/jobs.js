@@ -76,8 +76,10 @@
     }
 
     function _updateClearBtns() {
-      document.getElementById('clear-selected-btn').disabled = _selectedJobs.size === 0;
-      document.getElementById('clear-all-btn').disabled      = _allJobs.length === 0;
+      document.getElementById('clear-selected-btn').disabled    = _selectedJobs.size === 0;
+      document.getElementById('clear-all-btn').disabled         = _allJobs.length === 0;
+      document.getElementById('download-selected-btn').disabled = _selectedJobs.size === 0;
+      document.getElementById('download-all-btn').disabled      = _allJobs.length === 0;
     }
 
     function _jobsGo(delta) {
@@ -128,6 +130,52 @@
         await loadJobs();
       } catch(e) {
         alert('Error: ' + e.message);
+      }
+    }
+
+    // ── Download (zip artifacts) ─────────────────────────────────────
+    async function downloadSelectedJobs() {
+      const ids = [..._selectedJobs];
+      if (ids.length === 0) return;
+      await _downloadZip('/v1/jobs/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_ids: ids }),
+      });
+    }
+
+    async function downloadAllJobs() {
+      if (_allJobs.length === 0) return;
+      await _downloadZip('/v1/jobs/download-all', { method: 'GET' });
+    }
+
+    async function _downloadZip(url, opts) {
+      const btns = ['download-selected-btn', 'download-all-btn']
+        .map(id => document.getElementById(id));
+      btns.forEach(b => { if (b) b.disabled = true; });
+      try {
+        const r = await fetch(url, opts);
+        if (!r.ok) {
+          let msg = r.statusText;
+          try { msg = (await r.json()).detail || msg; } catch(_) {}
+          throw new Error(msg);
+        }
+        const blob = await r.blob();
+        const cd = r.headers.get('content-disposition') || '';
+        const m = cd.match(/filename="?([^";]+)"?/);
+        const filename = m ? m[1] : 'jobs.zip';
+        const objUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+      } catch(e) {
+        alert('Download failed: ' + e.message);
+      } finally {
+        _updateClearBtns();
       }
     }
 
