@@ -37,6 +37,8 @@ def _get_job_counts() -> dict:
 
 
 def get_server_stats() -> dict:
+    from .job_queue import get_job_queue
+
     cpu = psutil.cpu_percent(interval=None)
     mem = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
@@ -46,6 +48,7 @@ def get_server_stats() -> dict:
         "disk": {"used": disk.used, "total": disk.total, "percent": disk.percent},
         "uptime_seconds": time.monotonic() - _PROCESS_START,
         "jobs": _get_job_counts(),
+        "queue_depth": get_job_queue().depth(),
         "hostname": platform.node(),
         "python_version": sys.version.split()[0],
     }

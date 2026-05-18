@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
 from .llm_config import delete_preset, list_presets, save_preset, set_default
+from .job_queue import get_job_queue, recover_interrupted_jobs
 from .ticks.persistence import delete_tick, get_tick, list_ticks, save_tick, update_tick_fields
 from .ticks.scheduler import get_scheduler, start_scheduler, stop_scheduler
 from .chain.context_library import (
@@ -47,6 +48,7 @@ from .comfyui.config import get_config as get_comfy_config
 from .comfyui.manager import get_manager as get_comfy_manager
 from .comfyui.router import router as comfyui_router
 from .comfyui.runner import execute_image_job
+from . import jobs as _jobs_module
 from .jobs import (
     build_jobs_zip,
     clear_all_jobs,
@@ -89,6 +91,47 @@ from .profiles import (
 )
 
 
+def _build_recovery_runner(entry: dict):
+    """Construct a zero-arg coroutine factory for a recovered queued job."""
+    job_type = entry["job_type"]
+    job_id = entry["job_id"]
+    job_dir = entry["job_dir"]
+    requested = (entry["request"] or {}).get("requested") or {}
+    if job_type == "image":
+        try:
+            req = ImageJobRequest(**requested)
+        except Exception:
+            return None
+
+        async def runner():
+            await execute_image_job(
+                job_id, job_dir, req, get_comfy_config(), get_comfy_manager()
+            )
+
+        return runner
+    if job_type == "voice":
+        try:
+            req = VoiceJobRequest(**requested)
+        except Exception:
+            return None
+
+        async def runner():
+            await execute_voice_job(job_id, job_dir, req, get_config(), get_manager())
+
+        return runner
+    if job_type == "chain":
+        try:
+            req = ChainJobRequest(**requested)
+        except Exception:
+            return None
+
+        async def runner():
+            await execute_chain_job(job_id, job_dir, req)
+
+        return runner
+    return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = get_comfy_config()
@@ -97,9 +140,16 @@ async def lifespan(app: FastAPI):
             await get_comfy_manager().start()
         except Exception as exc:
             print(f"ComfyUI autostart skipped: {exc}")
+    queue = get_job_queue()
+    await queue.start()
+    for entry in recover_interrupted_jobs(_jobs_module.JOBS_BASE):
+        runner = _build_recovery_runner(entry)
+        if runner is not None:
+            await queue.enqueue(entry["job_id"], runner)
     await start_scheduler()
     yield
     await stop_scheduler()
+    await queue.stop()
 
 
 app = FastAPI(title="ai-job-server", version="0.1.0", lifespan=lifespan)
@@ -119,46 +169,46 @@ def health():
 
 
 @app.post("/v1/jobs/image", response_model=JobCreatedResponse, status_code=202)
-def create_image_job(req: ImageJobRequest, background_tasks: BackgroundTasks):
+async def create_image_job(req: ImageJobRequest):
     input_text = req.prompt
     data = create_job("image", req.model_dump(), input_text)
     job_id = data["job_id"]
     job_dir = find_job_dir(job_id)
-    background_tasks.add_task(
-        execute_image_job,
-        job_id,
-        job_dir,
-        req,
-        get_comfy_config(),
-        get_comfy_manager(),
-    )
+
+    async def runner():
+        await execute_image_job(
+            job_id, job_dir, req, get_comfy_config(), get_comfy_manager()
+        )
+
+    await get_job_queue().enqueue(job_id, runner)
     return JobCreatedResponse(**data)
 
 
 @app.post("/v1/jobs/voice", response_model=JobCreatedResponse, status_code=202)
-def create_voice_job(req: VoiceJobRequest, background_tasks: BackgroundTasks):
+async def create_voice_job(req: VoiceJobRequest):
     input_text = req.text or (req.segments[0].text if req.segments else "")
     data = create_job("voice", req.model_dump(), input_text)
     job_id = data["job_id"]
     job_dir = find_job_dir(job_id)
-    background_tasks.add_task(
-        execute_voice_job,
-        job_id,
-        job_dir,
-        req,
-        get_config(),
-        get_manager(),
-    )
+
+    async def runner():
+        await execute_voice_job(job_id, job_dir, req, get_config(), get_manager())
+
+    await get_job_queue().enqueue(job_id, runner)
     return JobCreatedResponse(**data)
 
 
 @app.post("/v1/jobs/chain", response_model=JobCreatedResponse, status_code=202)
-async def create_chain_job(req: ChainJobRequest, background_tasks: BackgroundTasks):
+async def create_chain_job(req: ChainJobRequest):
     data = create_job("chain", req.model_dump(), req.input)
     job_id = data["job_id"]
     job_dir = find_job_dir(job_id)
     patch_initial_chain_status(job_dir, len(req.steps))
-    background_tasks.add_task(execute_chain_job, job_id, job_dir, req)
+
+    async def runner():
+        await execute_chain_job(job_id, job_dir, req)
+
+    await get_job_queue().enqueue(job_id, runner)
     return JobCreatedResponse(**data)
 
 
@@ -223,9 +273,30 @@ def get_job_detail(job_id: str):
 
 @app.delete("/v1/jobs/{job_id}", status_code=200)
 def delete_job(job_id: str):
+    import json as _json
+
     job_dir = find_job_dir(job_id)
     if job_dir is None:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    status_file = job_dir / "status.json"
+    current_status: Optional[str] = None
+    if status_file.exists():
+        try:
+            current_status = _json.loads(
+                status_file.read_text(encoding="utf-8")
+            ).get("status")
+        except (OSError, _json.JSONDecodeError):
+            current_status = None
+
+    if current_status == "queued":
+        get_job_queue().cancel_queued(job_id)
+        data = _json.loads(status_file.read_text(encoding="utf-8"))
+        data["status"] = "cancelled"
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        status_file.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+        return {"cancelled": job_id}
+
     shutil.rmtree(job_dir)
     return {"deleted": job_id}
 

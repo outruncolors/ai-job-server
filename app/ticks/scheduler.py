@@ -152,7 +152,13 @@ class TickScheduler:
         job_id  = data["job_id"]
         job_dir = find_job_dir(job_id)
         patch_initial_chain_status(job_dir, len(req.steps))
-        asyncio.create_task(execute_chain_job(job_id, job_dir, req), name=f"tick-job-{job_id[:8]}")
+
+        from ..job_queue import get_job_queue
+
+        async def _runner():
+            await execute_chain_job(job_id, job_dir, req)
+
+        await get_job_queue().enqueue(job_id, _runner)
 
         now     = _now()
         nxt     = _next_fire(cron_expr, after=now) if cron_expr else None

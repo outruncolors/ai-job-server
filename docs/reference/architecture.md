@@ -65,14 +65,24 @@ config/                  Runtime data (gitignored)
 
 ## Job lifecycle
 
-Statuses in `status.json`: `queued` → `running` → `done` | `error`.
+Statuses in `status.json`: `queued` → `running` → `done` | `error` | `cancelled`.
 
-- **queued** — job dir created, request/status written, no work started
-- **running** — background task active; chain jobs update `step_count`, `progress`, `current_step_index`, `current_step_name`
+- **queued** — job dir created, request/status written, sitting in the global queue waiting for the worker
+- **running** — queue worker is executing the job; chain jobs update `step_count`, `progress`, `current_step_index`, `current_step_name`
 - **done** — all work complete; `artifacts.json` written; chain jobs also write `final_output.txt` and an `outputs` field on `status.json`
-- **error** — failure; `error` set on `status.json` (and on the failing step's `status.json` for chains)
+- **error** — failure; `error` set on `status.json` (and on the failing step's `status.json` for chains). Jobs left in `running` across a server restart are rewritten to `error` with reason `"interrupted by server restart"` (the queue worker cannot safely resume mid-step).
+- **cancelled** — `DELETE /v1/jobs/{id}` was called while the job was still `queued`; the job dir is preserved on disk for audit, the queue worker skips it when it pops it
 
-`_STATUS_MAP` in `app/server.py` translates the on-disk `error` to `failed` for the stats API.
+`_STATUS_MAP` in `app/server.py` translates the on-disk `error` to `failed` for the stats API. Cancelled jobs are not counted in the stats buckets.
+
+## Global job queue
+
+All three create-job endpoints (`/v1/jobs/image`, `/v1/jobs/voice`, `/v1/jobs/chain`) and tick-fired chain jobs flow through a single `JobQueue` in `app/job_queue.py` rather than FastAPI `BackgroundTasks`. The queue has one worker coroutine that pulls runners off `asyncio.Queue` and awaits them one at a time — so back-to-back POSTs serialize.
+
+- Worker lifecycle: started in `app/main.py` lifespan; stopped in shutdown. Lazy-started on first `enqueue` if lifespan didn't run (e.g. some test paths).
+- On startup, `recover_interrupted_jobs(JOBS_BASE)` scans the job tree: any `running` job is rewritten to `error`; any `queued` job is re-enqueued in `created_at` order.
+- `JobQueue.cancel_queued(job_id)` drops a queued job from in-memory pending tracking. The caller is responsible for writing the new on-disk status; the worker re-reads `status.json` when it pops an item and skips anything not still `queued`.
+- `queue_depth` is exposed in `/v1/server/stats`.
 
 ### Job directory layout
 
@@ -105,7 +115,8 @@ JOBS_BASE/YYYY-MM-DD/<job_id>/
 POST /v1/jobs/chain
   → create_job()                  request.json + status.json (queued)
   → patch_initial_chain_status()  add step_count, progress, …
-  → background: execute_chain_job()
+  → enqueue on JobQueue (single worker, sequential)
+  → eventually: execute_chain_job()
       → list_sequences()          seq_map for expansion
       → _expand_steps()           flatten sequence refs (depth ≤ 20)
       → for each flat step:

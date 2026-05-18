@@ -13,6 +13,7 @@
 |------|---------|
 | `app/main.py` | All FastAPI routes |
 | `app/jobs.py` | Job lifecycle: `create_job()`, artifact tracking, file serving |
+| `app/job_queue.py` | `JobQueue` — single-worker async queue all create-job endpoints flow through; `recover_interrupted_jobs()` for startup recovery |
 | `app/chain/models.py` | Pydantic schemas: `ChainStep`, `ChainJobRequest`, `ChainLLMConfig` |
 | `app/chain/executor.py` | `execute_chain_job()`, `_expand_steps()`, step loop; shared helpers (`_write_chain_status`, `_append_log`) |
 | `app/chain/steps/llm.py` | `run_llm_step()` — LLM tool loop, Gemma fallback parser |

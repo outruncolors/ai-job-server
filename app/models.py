@@ -95,6 +95,7 @@ class ServerStatsResponse(BaseModel):
     disk: ResourceStats
     uptime_seconds: float
     jobs: JobCounts
+    queue_depth: int = 0
     hostname: str
     python_version: str
 

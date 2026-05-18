@@ -15,6 +15,17 @@ def patch_jobs_base(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def reset_job_queue_singleton():
+    """Drop the JobQueue singleton between tests so each test's event loop
+    gets a fresh asyncio.Queue. Without this, the cached queue would be bound
+    to the previous test's (now closed) event loop."""
+    import app.job_queue as jq
+    jq.reset_job_queue()
+    yield
+    jq.reset_job_queue()
+
+
+@pytest.fixture(autouse=True)
 def patch_omnivoice_config(tmp_path, monkeypatch):
     """Redirect OmniVoice config to tmp dir so tests don't write to the real config dir."""
     import app.omnivoice.config as cfg

@@ -99,10 +99,11 @@ Full status. 404 if missing.
 
 ### `DELETE /v1/jobs/{id}` / `DELETE /v1/jobs` / `DELETE /v1/jobs/all`
 
-| Path | Removes |
-|------|---------|
-| `DELETE /v1/jobs/{id}` | One job and its files |
-| `DELETE /v1/jobs` | Queued + running jobs |
+| Path | Behaviour |
+|------|-----------|
+| `DELETE /v1/jobs/{id}` (status=`queued`) | Pops the job off the queue and marks its on-disk status `cancelled`. Returns `{"cancelled": id}`. The job dir is preserved. |
+| `DELETE /v1/jobs/{id}` (other statuses) | Removes the job directory. Returns `{"deleted": id}`. Cancel-while-running is out of scope. |
+| `DELETE /v1/jobs` | Removes queued + running jobs from disk |
 | `DELETE /v1/jobs/all` | Everything |
 
 ### `GET /v1/jobs/{id}/steps`
@@ -235,7 +236,7 @@ Validation error: `{ "error": "...", "validation_status": "invalid_arguments" }`
 
 | Method | Path | |
 |--------|------|---|
-| GET | `/v1/server/stats` | CPU / memory / disk / jobs / hostname / python |
+| GET | `/v1/server/stats` | CPU / memory / disk / jobs / `queue_depth` / hostname / python |
 | POST | `/v1/server/restart` | `os.execv` hot restart |
 
 ## Docs
