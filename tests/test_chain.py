@@ -512,10 +512,12 @@ async def test_executor_calls_ensure_loaded_with_step_preset(tmp_path, monkeypat
         instance.generate = AsyncMock(return_value="model-said-hi")
         await execute_chain_job(job_id, job_dir, req)
 
-    assert posted["url"] == "http://127.0.0.1:8080/v1/llamacpp/ensure-loaded"
+    # ensure-loaded hits the FastAPI control plane (typically :8090 locally).
+    assert posted["url"] == "http://127.0.0.1:8090/v1/llamacpp/ensure-loaded"
     assert posted["json"] == {"preset": "alpha"}
 
-    # generate was called with the overridden llm config (api_base + model)
+    # generate was called with the overridden llm config (api_base + model).
+    # The chat-completion api_base points at the llama-server data plane (:8080).
     call_args = instance.generate.await_args
     used_llm = call_args.args[1]
     assert used_llm.api_base == "http://127.0.0.1:8080/v1"

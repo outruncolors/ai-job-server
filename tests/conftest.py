@@ -81,6 +81,20 @@ def patch_comfyui_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def patch_llamacpp_config(tmp_path, monkeypatch):
+    """Redirect llamacpp config to tmp dir and reset singleton.
+
+    Without this, chain tests that exercise the executor would pick up the
+    host's `default_preset` from config/llamacpp.json and route through
+    ensure_loaded_for_step → real HTTP. Defaulting to an empty tmp config
+    means `default_preset` is None and the swap is skipped automatically.
+    """
+    import app.llamacpp.config as cfg
+    monkeypatch.setattr(cfg, "CONFIG_PATH", tmp_path / "config" / "llamacpp.json")
+    monkeypatch.setattr(cfg, "_config", None)
+
+
+@pytest.fixture(autouse=True)
 def patch_execute_image_job(monkeypatch):
     """Stub out image job execution so tests don't try to reach ComfyUI."""
     import app.main as m

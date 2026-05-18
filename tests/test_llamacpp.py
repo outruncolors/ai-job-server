@@ -62,7 +62,7 @@ def test_args_from_preset_translates_keys(tmp_path, monkeypatch):
     argv = mgr._args_from_preset(preset)
     assert argv[0].endswith("llama-server")
     assert "--model" in argv and "/models/g.gguf" in argv
-    assert "--host" in argv and "127.0.0.1" in argv
+    assert "--host" in argv and "0.0.0.0" in argv
     assert "--port" in argv and "8080" in argv
     assert "--ctx-size" in argv and "32768" in argv
     assert "--n-gpu-layers" in argv and "99" in argv
