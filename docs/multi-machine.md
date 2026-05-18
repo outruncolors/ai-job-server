@@ -36,7 +36,7 @@ After this the primary can `git push local master` to publish; the secondary clo
 git clone ssh://$USER@primary.local/srv/git/ai-job-server.git ~/ai-job-server
 ```
 
-Deploys then go: push to `local` on primary → `ssh secondary 'git pull && systemctl --user restart ai-job-server'`. That sequence is automated by `scripts/deploy-secondary.sh` (see the Secondary cutover section below).
+Deploys then go: push to `local` on primary → `ssh secondary 'git pull && systemctl --user restart ai-job-server'`. That sequence is automated by `scripts/deploy-secondary.sh` (see the Deploying changes section below).
 
 ## Avahi setup
 
@@ -55,6 +55,34 @@ Deploys then go: push to `local` on primary → `ssh secondary 'git pull && syst
 <!-- TODO: ticket 10 -->
 
 Migrating the existing standalone Gemma 4 process on the strong PC into the fleet: stop the old process, run `scripts/llamacpp-setup.sh` (clones + builds llama.cpp at the pinned tag, installs the systemd user unit, creates `/opt/ai-stack/models/`), drop the GGUF into `/opt/ai-stack/models/`, create a matching `config/llm_presets/<name>.json`, set `default_preset` in `config/llamacpp.json`, then `systemctl --user enable --now ai-job-server`. Full step-by-step lands in ticket 10. See [Upgrading llama.cpp](llamacpp-upgrade.md) for the tag-bump procedure once the secondary is running.
+
+## Deploying changes
+
+Once the bare repo and the secondary checkout are wired up, deploys are a one-command operation from the primary:
+
+```bash
+bash scripts/deploy-secondary.sh                # auto-picks the first peer with "llm" capability
+bash scripts/deploy-secondary.sh gpu.local      # or name the peer explicitly
+bash scripts/deploy-secondary.sh --force        # deploy even with a dirty working tree
+```
+
+The script:
+
+1. Refuses to run if the working tree is dirty (override with `--force`).
+2. Runs `git push local master` to publish to the bare repo at `/srv/git/ai-job-server.git`.
+3. SSHes to the peer and runs `cd ~/ai-job-server && git pull && systemctl --user restart ai-job-server`, streaming output back.
+4. Waits 5s and probes `http://<peer>:8090/v1/server/health`, retrying for up to ~15s. Fails loudly if the peer doesn't come back, doesn't return a `git_sha`, or returns a `git_sha` that doesn't match the local HEAD.
+
+It's idempotent: running it twice in a row with no new commits is harmless — `git push` has nothing to send, the restart still succeeds, and the health probe still confirms the SHA match.
+
+Common failure modes the script will surface:
+
+- **SSH not set up** — `ssh -o BatchMode=yes` refuses to prompt for a password, so missing keys fail fast instead of hanging.
+- **Peer unreachable** — `ConnectTimeout=10` on SSH and 5-second curl timeouts on the health probe bound the wait.
+- **Service didn't come back** — five 2-second-spaced retries on `/v1/server/health`, then exit non-zero with a pointer to `journalctl --user -u ai-job-server`.
+- **SHA mismatch after deploy** — a successful push + pull + restart that lands on a different commit than local (e.g., the bare repo and peer diverged) exits non-zero rather than declaring success.
+
+After a green run the amber version-skew banner (see the next section) should clear within 30 seconds, once the in-process peer poller re-fetches `/v1/server/health` on each node.
 
 ## Peer health and version-skew
 
