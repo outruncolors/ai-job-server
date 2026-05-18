@@ -54,7 +54,7 @@ Deploys then go: push to `local` on primary → `ssh secondary 'git pull && syst
 
 <!-- TODO: ticket 10 -->
 
-Migrating the existing standalone Gemma 4 process on the strong PC into the fleet: stop the old process, run `scripts/llamacpp-setup.sh`, drop the GGUF into `/opt/ai-stack/models/`, create a matching `config/llm_presets/<name>.json`, set `default_preset` in `config/llamacpp.json`, then `systemctl --user start ai-job-server`. Full step-by-step lands in ticket 10.
+Migrating the existing standalone Gemma 4 process on the strong PC into the fleet: stop the old process, run `scripts/llamacpp-setup.sh` (clones + builds llama.cpp at the pinned tag, installs the systemd user unit, creates `/opt/ai-stack/models/`), drop the GGUF into `/opt/ai-stack/models/`, create a matching `config/llm_presets/<name>.json`, set `default_preset` in `config/llamacpp.json`, then `systemctl --user enable --now ai-job-server`. Full step-by-step lands in ticket 10. See [Upgrading llama.cpp](llamacpp-upgrade.md) for the tag-bump procedure once the secondary is running.
 
 ## Peer health and version-skew
 
