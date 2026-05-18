@@ -21,6 +21,7 @@ _config: Optional["LlamaCppConfig"] = None
 
 class LlamaCppConfig(BaseModel):
     binary_path: str = "/opt/ai-stack/llama.cpp/build/bin/llama-server"
+    host: str = "0.0.0.0"
     port: int = 8080
     default_preset: Optional[str] = None
     models_dir: str = "/opt/ai-stack/models"

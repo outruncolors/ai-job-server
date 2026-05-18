@@ -77,7 +77,7 @@ class LlamaCppManager:
         model_path = preset.get("model_path") or preset.get("model")
         if model_path:
             argv += ["--model", str(model_path)]
-        argv += ["--host", "127.0.0.1", "--port", str(cfg.port)]
+        argv += ["--host", cfg.host, "--port", str(cfg.port)]
         args = preset.get("args") or {}
         for k, v in args.items():
             flag = "--" + str(k).replace("_", "-")
