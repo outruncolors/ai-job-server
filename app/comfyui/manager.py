@@ -41,10 +41,14 @@ class ComfyUIManager:
             "--preview-method", cfg.preview_method,
             "--output-directory", cfg.output_dir,
             "--input-directory", cfg.input_dir,
-            f"--{cfg.vram_mode}",
             "--reserve-vram", str(cfg.reserve_vram_gb),
             "--cuda-malloc",
         ]
+        # Recent ComfyUI dropped `--normalvram`; "normal" is the default and
+        # passing the flag now exits with an error. Only emit a flag for the
+        # non-default modes.
+        if cfg.vram_mode and cfg.vram_mode != "normalvram":
+            argv.append(f"--{cfg.vram_mode}")
         if cfg.extra_model_paths_yaml and Path(cfg.extra_model_paths_yaml).exists():
             argv += ["--extra-model-paths-config", cfg.extra_model_paths_yaml]
         if cfg.use_sage_attention:
