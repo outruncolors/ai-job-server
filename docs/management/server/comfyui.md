@@ -14,6 +14,15 @@ Lifecycle controls and configuration for the ComfyUI subprocess. See [ComfyUI Se
 - Link to the ComfyUI editor at `http://hostname:8188`
 - Scrolling action log of the last 20 operations
 
+**Download model panel** — server-side fetch into `models_root`. Useful when you're SSH'd into the host and don't want clicking "Download" in your browser to land the file on your laptop instead of the GPU box.
+
+- **URL** — direct download link. HuggingFace `/resolve/main/...` paths work directly
+- **Authorization** (optional) — for gated downloads (HF tokens, etc.). A bare token is auto-wrapped as `Bearer <token>`; an explicit scheme (`Bearer …`, `Basic …`, `Token …`) is passed through verbatim. The value is held in memory for the download only — never persisted and never echoed back through `GET /v1/comfyui/downloads`
+- **Path** — relative to `models_root`, e.g. `checkpoints/foo.safetensors`. A `models/` prefix is shown next to the field; the server strips it defensively if you paste it in
+- **Overwrite** — opt-in checkbox; without it, an existing destination returns 409
+- Active and recent downloads show a progress bar (when `Content-Length` is sent), bytes done / total, and a Cancel button while running. The list survives a page reload — `GET /v1/comfyui/downloads` is fetched on tab activation
+- Downloads stream to `<dest>.partial` and are atomically renamed on success; cancels and errors remove the partial
+
 **Config panel** — every field in `config/comfyui.json`:
 
 - Paths: `comfyui_root`, `venv_python`, `models_root`, `output_dir`, `input_dir`, `extra_model_paths_yaml`
@@ -36,6 +45,10 @@ Lifecycle controls and configuration for the ComfyUI subprocess. See [ComfyUI Se
 | GET / PUT | `/v1/comfyui/config` | Read / write `comfyui.json` |
 | GET | `/v1/comfyui/workflows` | List + validate workflow JSON files |
 | GET | `/v1/comfyui/system_stats` | Passthrough of ComfyUI's stats endpoint |
+| POST | `/v1/comfyui/downloads` | Start a server-side model download (`{url, path, overwrite}`) |
+| GET | `/v1/comfyui/downloads` | List active + recent downloads |
+| GET | `/v1/comfyui/downloads/{id}` | Single download state |
+| POST | `/v1/comfyui/downloads/{id}/cancel` | Cancel a running download |
 
 ## Adopt-don't-fight
 

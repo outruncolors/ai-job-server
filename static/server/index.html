@@ -249,6 +249,35 @@
         Open ComfyUI Editor ↗
       </a>
 
+      <p class="section-label" style="margin-top:24px;">DOWNLOAD MODEL</p>
+      <div class="hint" style="margin-bottom:8px;">
+        Downloads onto this host (the machine running ComfyUI), not your browser.
+      </div>
+      <label>URL</label>
+      <input id="dl-url" type="text" placeholder="https://huggingface.co/…/file.safetensors">
+
+      <label>Authorization <span class="label-hint">(optional — for gated downloads)</span></label>
+      <input id="dl-auth" type="text" autocomplete="off" placeholder="hf_xxx  (bare token is wrapped as Bearer)">
+
+      <label>Path</label>
+      <div class="dl-path-row" style="display:flex;align-items:center;gap:0;">
+        <span style="color:#666;font-size:0.82rem;padding:6px 4px 6px 0;">models/</span>
+        <input id="dl-path" type="text" style="flex:1;" placeholder="checkpoints/foo.safetensors">
+      </div>
+      <div class="hint" style="margin-top:4px;">Relative to <code>models_root</code>; subdirs are created on demand.</div>
+
+      <label class="check-label" style="margin-top:8px;">
+        <input id="dl-overwrite" type="checkbox">
+        Overwrite if the destination already exists
+      </label>
+
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center;">
+        <button id="dl-btn" onclick="comfyDownloadStart()">Download</button>
+        <span id="dl-msg" class="msg"></span>
+      </div>
+
+      <div id="dl-list" style="margin-top:12px;"></div>
+
       <p class="section-label" style="margin-top:24px;">ACTION LOG</p>
       <div id="comfy-action-log" class="action-log" style="max-height:200px;overflow-y:auto;">
         <div style="color:#2a2a2a;" class="log-entry">No actions yet.</div>

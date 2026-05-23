@@ -10,6 +10,9 @@ function initComfyTab() {
 function onComfyTabActive() {
   loadComfyStatus();
   if (!_loadedComfyCfg) loadComfyConfig();
+  _refreshComfyDownloads().then(items => {
+    if (items.some(i => i.status === 'running')) _pollComfyDownloads();
+  });
 }
 
 function _updateComfyEditorLinks() {
@@ -233,6 +236,138 @@ function _collectComfyCfgForm() {
     extra_model_paths_yaml: get('cfg-extra_model_paths_yaml'),
     default_workflow: get('cfg-default_workflow') || null,
   };
+}
+
+// ── Model downloader ─────────────────────────────────────────────────────────
+
+let _comfyDownloadPolling = false;
+
+function _fmtDlBytes(b) {
+  if (b == null) return '—';
+  if (b >= 1e9) return (b / 1e9).toFixed(2) + ' GB';
+  if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB';
+  if (b >= 1e3) return (b / 1e3).toFixed(0) + ' KB';
+  return b + ' B';
+}
+
+function _renderComfyDownloads(items) {
+  const list = document.getElementById('dl-list');
+  if (!list) return;
+  if (!items || !items.length) {
+    list.innerHTML = '';
+    return;
+  }
+  const rows = items.slice(0, 8).map(it => {
+    const total = it.bytes_total;
+    const done  = it.bytes_done || 0;
+    const pct   = (total && total > 0) ? Math.min(100, Math.round(done / total * 100)) : null;
+    const barCls = it.status === 'error' ? 'danger'
+                 : it.status === 'done'  ? ''
+                 : (pct != null && pct >= 90) ? 'warn' : '';
+    const widthPct = it.status === 'done' ? 100 : (pct != null ? pct : 8);
+    const statusLabel = it.status === 'running'
+      ? (pct != null ? pct + '%' : 'downloading…')
+      : it.status;
+    const sizeLine = (total != null)
+      ? _fmtDlBytes(done) + ' / ' + _fmtDlBytes(total)
+      : _fmtDlBytes(done);
+    const errLine = it.error
+      ? '<div style="color:#c44;font-size:0.72rem;margin-top:2px;">' + _escHtml(it.error) + '</div>'
+      : '';
+    const cancelBtn = it.status === 'running'
+      ? '<button class="secondary" style="padding:2px 8px;font-size:0.7rem;" onclick="comfyDownloadCancel(\'' + it.id + '\')">Cancel</button>'
+      : '';
+    return (
+      '<div class="dl-row" style="margin-bottom:10px;padding:8px;border:1px solid #222;border-radius:4px;background:#141414;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+          '<div style="font-family:monospace;font-size:0.78rem;color:#bbb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+            'models/' + _escHtml(it.path) +
+          '</div>' +
+          '<div style="font-size:0.72rem;color:#888;flex-shrink:0;">' + _escHtml(statusLabel) + '</div>' +
+        '</div>' +
+        '<div class="vram-bar-wrap" style="margin-top:6px;"><div class="vram-bar ' + barCls + '" style="width:' + widthPct + '%"></div></div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">' +
+          '<div style="font-size:0.72rem;color:#666;">' + sizeLine + '</div>' +
+          cancelBtn +
+        '</div>' +
+        errLine +
+      '</div>'
+    );
+  });
+  list.innerHTML = rows.join('');
+}
+
+async function _refreshComfyDownloads() {
+  try {
+    const res = await api('/comfyui/downloads');
+    _renderComfyDownloads(res.items || []);
+    return res.items || [];
+  } catch (_) {
+    return [];
+  }
+}
+
+async function _pollComfyDownloads() {
+  if (_comfyDownloadPolling) return;
+  _comfyDownloadPolling = true;
+  try {
+    while (true) {
+      const items = await _refreshComfyDownloads();
+      if (!items.some(i => i.status === 'running')) break;
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  } finally {
+    _comfyDownloadPolling = false;
+  }
+}
+
+async function comfyDownloadStart() {
+  const urlEl  = document.getElementById('dl-url');
+  const pathEl = document.getElementById('dl-path');
+  const authEl = document.getElementById('dl-auth');
+  const ovEl   = document.getElementById('dl-overwrite');
+  const msg    = document.getElementById('dl-msg');
+  const btn    = document.getElementById('dl-btn');
+  const url    = (urlEl?.value || '').trim();
+  const path   = (pathEl?.value || '').trim();
+  const authorization = (authEl?.value || '').trim() || null;
+  const overwrite = !!ovEl?.checked;
+  msg.textContent = '';
+  if (!url)  { msg.style.color = '#c44'; msg.textContent = 'URL required';  return; }
+  if (!path) { msg.style.color = '#c44'; msg.textContent = 'Path required'; return; }
+
+  btn.disabled = true;
+  msg.style.color = '#888'; msg.textContent = 'Starting…';
+  try {
+    const body = { url, path, overwrite };
+    if (authorization) body.authorization = authorization;
+    const res = await api('/comfyui/downloads', 'POST', body);
+    msg.style.color = '#2a6'; msg.textContent = 'Started (' + res.id + ').';
+    _logComfyAction('Download started: models/' + res.path, 'log-ok');
+    toast('success', 'Download started');
+    if (urlEl)  urlEl.value = '';
+    if (pathEl) pathEl.value = '';
+    if (authEl) authEl.value = '';
+    if (ovEl)   ovEl.checked = false;
+    _pollComfyDownloads();
+  } catch (e) {
+    msg.style.color = '#c44'; msg.textContent = 'Failed: ' + e.message;
+    _logComfyAction('Download failed: ' + e.message, 'log-err');
+    toast('error', 'Download failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function comfyDownloadCancel(id) {
+  try {
+    await api('/comfyui/downloads/' + encodeURIComponent(id) + '/cancel', 'POST');
+    _logComfyAction('Download cancelled: ' + id);
+    toast('info', 'Download cancelled');
+    _refreshComfyDownloads();
+  } catch (e) {
+    toast('error', 'Cancel failed: ' + e.message);
+  }
 }
 
 async function saveComfyConfig() {
