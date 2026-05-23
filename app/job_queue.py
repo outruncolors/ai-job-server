@@ -3,14 +3,22 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
+
+from .chain.events import EventBus
 
 log = logging.getLogger(__name__)
 
 Runner = Callable[[], Awaitable[Any]]
 _SENTINEL: tuple = (None, None)
+
+# How long a closed EventBus is kept around for late SSE subscribers to replay.
+EVENT_BUS_RETENTION_SECONDS = int(os.environ.get("CHAIN_EVENT_RETENTION_SECONDS", "300"))
+_SWEEP_INTERVAL_SECONDS = 30
 
 
 class JobQueue:
@@ -32,12 +40,17 @@ class JobQueue:
         self._worker_task: Optional[asyncio.Task] = None
         self._stop_event = asyncio.Event()
         self._current_job_id: Optional[str] = None
+        self._buses: dict[str, EventBus] = {}
+        self._bus_expiry: dict[str, float] = {}
+        self._sweep_task: Optional[asyncio.Task] = None
 
     async def start(self) -> None:
         if self._worker_task is not None and not self._worker_task.done():
             return
         self._stop_event.clear()
         self._worker_task = asyncio.create_task(self._run(), name="job-queue-worker")
+        if self._sweep_task is None or self._sweep_task.done():
+            self._sweep_task = asyncio.create_task(self._sweep(), name="job-queue-bus-sweep")
         log.info("Job queue worker started")
 
     async def stop(self) -> None:
@@ -55,6 +68,18 @@ class JobQueue:
         except Exception:  # noqa: BLE001
             log.exception("Job queue worker exited with error")
         self._worker_task = None
+        if self._sweep_task is not None:
+            self._sweep_task.cancel()
+            try:
+                await self._sweep_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+            self._sweep_task = None
+        # Close any remaining buses so subscribers wake up.
+        for bus in self._buses.values():
+            bus.close()
+        self._buses.clear()
+        self._bus_expiry.clear()
         log.info("Job queue worker stopped")
 
     async def enqueue(self, job_id: str, runner: Runner) -> None:
@@ -93,6 +118,44 @@ class JobQueue:
     @property
     def current_job_id(self) -> Optional[str]:
         return self._current_job_id
+
+    def create_bus(self, job_id: str) -> EventBus:
+        """Create and register an EventBus for ``job_id``.
+
+        If a bus already exists for this job_id (e.g. recovery re-enqueue), it
+        is closed first and replaced. The caller is expected to call
+        :meth:`close_bus` once the job finishes so the sweep can retain it for
+        replay until the retention window expires.
+        """
+        old = self._buses.get(job_id)
+        if old is not None:
+            old.close()
+        bus = EventBus(job_id)
+        self._buses[job_id] = bus
+        self._bus_expiry.pop(job_id, None)
+        return bus
+
+    def get_bus(self, job_id: str) -> Optional[EventBus]:
+        return self._buses.get(job_id)
+
+    def close_bus(self, job_id: str) -> None:
+        bus = self._buses.get(job_id)
+        if bus is None:
+            return
+        bus.close()
+        self._bus_expiry[job_id] = time.monotonic() + EVENT_BUS_RETENTION_SECONDS
+
+    async def _sweep(self) -> None:
+        try:
+            while not self._stop_event.is_set():
+                await asyncio.sleep(_SWEEP_INTERVAL_SECONDS)
+                now = time.monotonic()
+                expired = [jid for jid, exp in self._bus_expiry.items() if exp <= now]
+                for jid in expired:
+                    self._buses.pop(jid, None)
+                    self._bus_expiry.pop(jid, None)
+        except asyncio.CancelledError:
+            return
 
     async def _run(self) -> None:
         from .jobs import find_job_dir

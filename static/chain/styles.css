@@ -248,3 +248,77 @@ dialog#run-vars-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
   display: flex; align-items: center; gap: 5px;
   font-size: 0.72rem; color: #888; cursor: pointer;
 }
+
+/* ── Timeline ── */
+#chain-timeline-wrap {
+  max-height: calc(100vh - 240px);
+  min-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #1a1a1a;
+  border-radius: 4px;
+  padding: 8px;
+  background: #0a0a0a;
+}
+#chain-timeline { display: flex; flex-direction: column; gap: 8px; }
+.tl-node {
+  background: #0e0e0e;
+  border: 1px solid #1e1e1e;
+  border-radius: 5px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  color: #ddd;
+}
+.tl-node-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  color: #888;
+  margin-bottom: 4px;
+}
+.tl-node-head .tl-step { color: #6ad; font-weight: 600; }
+.tl-node-head .tl-type { color: #aa6; }
+.tl-node-head .tl-label { color: #aaa; }
+.tl-node-head .tl-status {
+  margin-left: auto;
+  font-size: 0.65rem;
+  color: #888;
+}
+.tl-node-head .tl-status[data-kind="done"] { color: #5b6; }
+.tl-node-head .tl-status[data-kind="error"] { color: #e44; }
+.tl-node-head .tl-status[data-kind="streaming"] { color: #fa0; }
+.tl-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 4px 0 0;
+  font-size: 0.74rem;
+  color: #ccc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.tl-pre-mono { font-size: 0.7rem; color: #999; }
+.tl-streaming::after {
+  content: '▌';
+  color: #fa0;
+  animation: tlblink 1s steps(2) infinite;
+}
+@keyframes tlblink { 50% { opacity: 0.3; } }
+.tl-node-input { border-left: 2px solid #356; }
+.tl-node-llm-output { border-left: 2px solid #553; }
+.tl-node-artifact { border-left: 2px solid #535; }
+.tl-node-summary { border-left: 2px solid #455; }
+.tl-node-goto { border-left: 2px solid #533; font-size: 0.72rem; }
+.tl-node-error,
+.tl-node.tl-node-error { border-left: 2px solid #e44 !important; }
+.tl-node-done { border-left: 2px solid #5b6; }
+.tl-node-job-start, .tl-node-job-done { text-align: center; background: #131313; }
+.tl-node-job-done.tl-node-error { background: #1a0e0e; }
+.tl-error-text { color: #e88; }
+.tl-context { margin: 4px 0; }
+.tl-context summary, .tl-detail summary {
+  cursor: pointer; color: #888; font-size: 0.7rem;
+}
+.tl-context[open] summary, .tl-detail[open] summary { color: #aaa; }
+.tl-audio { width: 100%; margin-top: 4px; }
+.tl-image { max-width: 100%; border-radius: 3px; margin-top: 4px; display: block; }
+.tl-file-link { color: #6ad; text-decoration: none; font-size: 0.74rem; }
+.tl-file-link:hover { text-decoration: underline; }

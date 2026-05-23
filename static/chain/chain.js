@@ -28,7 +28,6 @@
     let _mcpTools        = [];
     let _variables       = [];           // [{name, default, choices: [...]}]
     let _chainStepCounter  = 0;
-    let _chainJobPollTimer = null;
     const _STEP_TYPES = ['llm','voice','write_context','sequence','image_prompt','save_wildcard','create_ticket','goto'];
 
     function _uid() { return Math.random().toString(36).slice(2, 10); }
@@ -873,19 +872,82 @@
     }
     window.addEventListener('resize', () => requestAnimationFrame(redrawGotoArrows));
 
-    // ── Sequence-form prompt for variables, then submit ─────────────
-    async function submitChain() {
-      const msg           = document.getElementById('chain-msg');
-      const stepStatusDiv = document.getElementById('chain-step-status');
-      const outputDiv     = document.getElementById('chain-output');
-      const hint          = document.getElementById('chain-right-hint');
-      msg.textContent = ''; stepStatusDiv.innerHTML = ''; outputDiv.style.display = 'none';
-      document.getElementById('chain-final-context').style.display = 'none';
-      document.getElementById('chain-final-input').style.display = 'none';
-      document.getElementById('chain-final-tool-calls').style.display = 'none';
-      document.getElementById('chain-final-audio').style.display = 'none';
+    // Holds the active EventSource + timeline so submit/recreate flows can reset cleanly.
+    let _activeSource = null;
+    let _activeTimeline = null;
+
+    function _resetOutputPane() {
+      const msg = document.getElementById('chain-msg');
+      const hint = document.getElementById('chain-right-hint');
+      msg.textContent = '';
+      hint.style.display = 'none';
       document.getElementById('chain-artifacts').style.display = 'none';
       document.getElementById('chain-artifacts-list').innerHTML = '';
+      const finalCollapse = document.getElementById('chain-final-output-collapse');
+      if (finalCollapse) finalCollapse.style.display = 'none';
+      const pre = document.getElementById('chain-output-pre');
+      if (pre) pre.textContent = '';
+      if (_activeSource) { try { _activeSource.close(); } catch (_) {} _activeSource = null; }
+      if (!_activeTimeline) {
+        _activeTimeline = createTimeline(document.getElementById('chain-timeline'));
+      }
+      _activeTimeline.reset();
+    }
+
+    function _attachEventSourceFor(jobId) {
+      const es = new EventSource('/v1/jobs/' + jobId + '/stream');
+      _activeSource = es;
+      _activeTimeline.attach(es);
+      // The timeline closes the source on job_done. We additionally listen
+      // for job_done at this level to update the small status message + load
+      // artifacts + raw final-output collapse.
+      es.addEventListener('job_done', async (e) => {
+        let p = {};
+        try { p = JSON.parse(e.data); } catch (_) {}
+        const msg = document.getElementById('chain-msg');
+        if (p.status === 'done') {
+          msg.style.color = '#2a6'; msg.textContent = 'Done.';
+        } else {
+          msg.style.color = '#e44';
+          msg.textContent = 'Error: ' + (p.error || 'unknown');
+        }
+        if (Array.isArray(p.artifacts) && p.artifacts.length) {
+          await _renderArtifacts(jobId, p.artifacts);
+        }
+        if (typeof p.final_output === 'string') {
+          const pre = document.getElementById('chain-output-pre');
+          const wrap = document.getElementById('chain-final-output-collapse');
+          if (pre) pre.textContent = p.final_output;
+          if (wrap) wrap.style.display = 'block';
+        } else {
+          // Fall back to fetching the file for historical jobs whose
+          // job_done payload didn't include final_output.
+          try {
+            const or = await fetch('/v1/jobs/' + jobId + '/files/final_output.txt');
+            if (or.ok) {
+              const pre = document.getElementById('chain-output-pre');
+              const wrap = document.getElementById('chain-final-output-collapse');
+              if (pre) pre.textContent = await or.text();
+              if (wrap) wrap.style.display = 'block';
+            }
+          } catch (_) {}
+          try {
+            const ar = await fetch('/v1/jobs/' + jobId + '/files/artifacts.json');
+            if (ar.ok) await _renderArtifacts(jobId, await ar.json());
+          } catch (_) {}
+        }
+      });
+      es.addEventListener('error', () => {
+        // EventSource auto-reconnects; nothing to do unless we want to
+        // surface the disconnection — leave silent for now.
+      });
+      return es;
+    }
+
+    // ── Sequence-form prompt for variables, then submit ─────────────
+    async function submitChain() {
+      const msg = document.getElementById('chain-msg');
+      _resetOutputPane();
 
       _collectVariablesFromDom();
       const steps = _collectSteps();
@@ -934,12 +996,10 @@
       };
 
       try {
-        hint.style.display = 'none';
         const job = await api('/jobs/chain', 'POST', body);
         msg.style.color = '#fa0';
         msg.textContent = 'Job ' + job.job_id.slice(0, 8) + '… running';
-        if (_chainJobPollTimer) clearInterval(_chainJobPollTimer);
-        _chainJobPollTimer = setInterval(() => _pollChainJob(job.job_id), 3000);
+        _attachEventSourceFor(job.job_id);
       } catch (e) {
         msg.style.color = '#e44'; msg.textContent = 'Error: ' + e.message;
       }
@@ -1004,100 +1064,6 @@
     }
     function _onLlmPresetChange(_sel) { /* future hook */ }
 
-    // ── Output panel (mostly unchanged from v1) ──────────────────────
-    function _stepCollapseHtml(step, stepIndex, files) {
-      const cls = step.status === 'error' ? 'status-failed' : statusClass(step.status);
-      const typeTag = ['voice','write_context','image_prompt','save_wildcard','create_ticket','goto']
-        .includes(step.type) ? ' <span style="color:#555;font-size:0.66rem;">' + step.type + '</span>' : '';
-      let bodyHtml = '';
-      if (step.type === 'voice') {
-        if (files && files.audioUrl) {
-          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">AUDIO</p>' +
-            '<audio controls style="width:100%;margin-top:4px;" src="' + files.audioUrl + '"></audio>';
-        } else if (step.error) {
-          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
-            '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
-        }
-      } else if (['write_context','image_prompt','save_wildcard','create_ticket'].includes(step.type)) {
-        if (files && files.outputJson) {
-          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">RESULT</p>' +
-            '<pre class="output-pre">' + _escHtml(JSON.stringify(files.outputJson, null, 2)) + '</pre>';
-        } else if (step.error) {
-          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
-            '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
-        }
-      } else {
-        const { contextText, promptText, outputText } = files || {};
-        if (contextText) {
-          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">CONTEXT</p>' +
-            '<pre class="output-pre">' + _escHtml(contextText) + '</pre>';
-        }
-        if (promptText != null) {
-          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">PROMPT</p>' +
-            '<pre class="output-pre">' + _escHtml(promptText) + '</pre>';
-        }
-        if (outputText != null) {
-          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">OUTPUT</p>' +
-            '<pre class="output-pre">' + _escHtml(outputText) + '</pre>';
-        }
-        if (files && files.toolCallsData && files.toolCallsData.length > 0) {
-          bodyHtml += '<details style="margin-top:10px;border:1px solid #1e1e1e;border-radius:3px;padding:6px 8px;background:#0a0a0a;">' +
-            '<summary style="font-size:0.72rem;color:#555;cursor:pointer;list-style:none;">' +
-              '<span style="color:#444;">▸ </span>TOOL CALLS · ' + files.toolCallsData.length + '</summary>' +
-            '<pre class="output-pre" style="margin-top:6px;font-size:0.68rem;">' + _escHtml(JSON.stringify(files.toolCallsData, null, 2)) + '</pre>' +
-            '</details>';
-        }
-        if (outputText == null && step.error) {
-          bodyHtml += '<p class="section-label" style="margin:10px 0 4px;">ERROR</p>' +
-            '<pre class="output-pre status-failed">' + _escHtml(step.error) + '</pre>';
-        }
-      }
-      return '<details class="step-collapse">' +
-        '<summary>' +
-          '<span class="step-num-out">Step ' + stepIndex + '</span>' +
-          '<span class="step-sep">·</span>' +
-          '<span class="step-col-name">' + _escHtml(step.name) + typeTag + '</span>' +
-          '<span class="' + cls + '">' + step.status + '</span>' +
-        '</summary>' +
-        '<div class="step-collapse-body">' + bodyHtml + '</div>' +
-        '</details>';
-    }
-
-    async function _fetchStepFiles(jobId, step, arrayIndex) {
-      const num = step.step_number != null ? step.step_number : (arrayIndex + 1);
-      const inv = step.invocation || 0;
-      const base3 = String(num).padStart(3, '0') + '_' + step.id;
-      const dirName = inv === 0 ? base3 : base3 + '_x' + String(inv).padStart(2, '0');
-      const base = '/v1/jobs/' + jobId + '/files/steps/' + dirName + '/';
-      if (step.type === 'voice') {
-        const audioFile = step.output_file || 'output.wav';
-        const ar = await fetch(base + audioFile).catch(() => null);
-        const audioUrl = ar && ar.ok ? base + audioFile : null;
-        return { audioUrl };
-      }
-      if (['write_context','image_prompt','save_wildcard','create_ticket'].includes(step.type)) {
-        const jr = await fetch(base + 'output.json').catch(() => null);
-        if (jr && jr.ok) {
-          const data = await jr.json().catch(() => null);
-          return { outputJson: data };
-        }
-        return {};
-      }
-      const fetches = [
-        fetch(base + 'context.txt'),
-        fetch(base + 'prompt.txt'),
-        fetch(base + 'output.txt'),
-      ];
-      const hasTools = step.tools && step.tools.length > 0;
-      if (hasTools) fetches.push(fetch(base + 'tool_calls.json'));
-      const [cr, pr, or, tcr] = await Promise.allSettled(fetches);
-      const contextText   = cr  && cr.status  === 'fulfilled' && cr.value.ok  ? await cr.value.text()  : null;
-      const promptText    = pr  && pr.status  === 'fulfilled' && pr.value.ok  ? await pr.value.text()  : null;
-      const outputText    = or  && or.status  === 'fulfilled' && or.value.ok  ? await or.value.text()  : null;
-      const toolCallsData = tcr && tcr.status === 'fulfilled' && tcr.value.ok ? await tcr.value.json().catch(() => null) : null;
-      return { contextText, promptText, outputText, toolCallsData };
-    }
-
     function _fmtBytes(n) {
       if (n < 1024) return n + ' B';
       if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
@@ -1126,61 +1092,6 @@
       }
       container.innerHTML = html;
       panel.style.display = 'block';
-    }
-
-    async function _pollChainJob(jobId) {
-      try {
-        const msg           = document.getElementById('chain-msg');
-        const stepStatusDiv = document.getElementById('chain-step-status');
-        const outputDiv     = document.getElementById('chain-output');
-
-        const r = await fetch('/v1/jobs/' + jobId + '/files/status.json');
-        if (!r.ok) return;
-        const job = await r.json();
-
-        if (job.status === 'done' || job.status === 'error') {
-          clearInterval(_chainJobPollTimer); _chainJobPollTimer = null;
-          if (job.status === 'done') {
-            msg.style.color = '#2a6'; msg.textContent = 'Done.';
-          } else {
-            msg.style.color = '#e44';
-            msg.textContent = 'Error: ' + (job.error || 'unknown');
-          }
-          try {
-            const sr = await fetch('/v1/jobs/' + jobId + '/steps');
-            if (sr.ok) {
-              const sd = await sr.json();
-              const steps = sd.steps || [];
-              const fileResults = await Promise.allSettled(
-                steps.map((step, i) => _fetchStepFiles(jobId, step, i))
-              );
-              stepStatusDiv.innerHTML = steps.map((step, i) => {
-                const files = fileResults[i].status === 'fulfilled' ? fileResults[i].value : {};
-                return _stepCollapseHtml(step, i + 1, files);
-              }).join('');
-            }
-          } catch (_) {}
-
-          try {
-            const or = await fetch('/v1/jobs/' + jobId + '/files/final_output.txt');
-            if (or.ok) {
-              document.getElementById('chain-output-pre').textContent = await or.text();
-              outputDiv.style.display = 'block';
-            }
-          } catch (_) {}
-
-          try {
-            const ar = await fetch('/v1/jobs/' + jobId + '/files/artifacts.json');
-            if (ar.ok) await _renderArtifacts(jobId, await ar.json());
-          } catch (_) {}
-
-        } else {
-          const stepInfo = job.current_step_name
-            ? ' · step ' + job.current_step_index + '/' + job.step_count + ': ' + job.current_step_name
-            : '';
-          msg.textContent = 'Job ' + jobId.slice(0, 8) + '… ' + job.status + stepInfo;
-        }
-      } catch (_) {}
     }
 
     // ── Recreate hydration (best-effort) ─────────────────────────────
@@ -1220,6 +1131,11 @@
       }
       _renumberSteps();
       requestAnimationFrame(redrawGotoArrows);
+      // Replay the original job's timeline alongside the rebuilt form.
+      try {
+        _resetOutputPane();
+        _attachEventSourceFor(jobId);
+      } catch (_) {}
     }
 
     // ── Init ────────────────────────────────────────────────────────

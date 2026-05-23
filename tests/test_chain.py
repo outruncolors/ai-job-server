@@ -8,6 +8,30 @@ import httpx
 import pytest
 
 
+def _make_chat_stream_mock(outputs):
+    """Mock ``client.chat_stream`` to yield one StreamChunk per call.
+
+    Each call returns an async generator that emits a single chunk containing
+    the next entry from ``outputs``. If the entry is a RuntimeError instance,
+    the generator raises it instead — letting tests simulate mid-stream errors.
+    """
+    from app.chain.llm_client import StreamChunk
+
+    iterator = iter(outputs)
+
+    def factory(*args, **kwargs):
+        nxt = next(iterator)
+
+        async def gen():
+            if isinstance(nxt, Exception):
+                raise nxt
+            yield StreamChunk(content=nxt, finish_reason="stop")
+
+        return gen()
+
+    return MagicMock(side_effect=factory)
+
+
 # ---------------------------------------------------------------------------
 # 1. Request validation: empty steps rejected
 # ---------------------------------------------------------------------------
@@ -266,7 +290,7 @@ async def test_execute_chain_job_two_steps(tmp_path):
 
     with patch("app.chain.executor.OpenAICompatibleLLMClient") as MockClient:
         instance = MockClient.return_value
-        instance.generate = AsyncMock(side_effect=["output_one", "output_two"])
+        instance.chat_stream = _make_chat_stream_mock(["output_one", "output_two"])
         await execute_chain_job(job_id, job_dir, req)
 
     assert (job_dir / "final_output.txt").read_text(encoding="utf-8") == "output_two"
@@ -318,8 +342,8 @@ async def test_execute_chain_job_step2_error(tmp_path):
 
     with patch("app.chain.executor.OpenAICompatibleLLMClient") as MockClient:
         instance = MockClient.return_value
-        instance.generate = AsyncMock(
-            side_effect=["output_one", RuntimeError("step 2 failed")]
+        instance.chat_stream = _make_chat_stream_mock(
+            ["output_one", RuntimeError("step 2 failed")]
         )
         await execute_chain_job(job_id, job_dir, req)
 
@@ -509,16 +533,16 @@ async def test_executor_calls_ensure_loaded_with_step_preset(tmp_path, monkeypat
 
     with patch("app.chain.executor.OpenAICompatibleLLMClient") as MockClient:
         instance = MockClient.return_value
-        instance.generate = AsyncMock(return_value="model-said-hi")
+        instance.chat_stream = _make_chat_stream_mock(["model-said-hi"])
         await execute_chain_job(job_id, job_dir, req)
 
     # ensure-loaded hits the FastAPI control plane (typically :8090 locally).
     assert posted["url"] == "http://127.0.0.1:8090/v1/llamacpp/ensure-loaded"
     assert posted["json"] == {"preset": "alpha"}
 
-    # generate was called with the overridden llm config (api_base + model).
+    # chat_stream was called with the overridden llm config (api_base + model).
     # The chat-completion api_base points at the llama-server data plane (:8080).
-    call_args = instance.generate.await_args
+    call_args = instance.chat_stream.call_args
     used_llm = call_args.args[1]
     assert used_llm.api_base == "http://127.0.0.1:8080/v1"
     assert used_llm.model == "alpha"
@@ -566,7 +590,7 @@ async def test_executor_falls_back_to_default_preset(tmp_path, monkeypatch):
 
     with patch("app.chain.executor.OpenAICompatibleLLMClient") as MockClient:
         instance = MockClient.return_value
-        instance.generate = AsyncMock(return_value="ok")
+        instance.chat_stream = _make_chat_stream_mock(["ok"])
         await execute_chain_job(job_id, job_dir, req)
 
     assert posted["json"] == {"preset": "beta"}
@@ -604,11 +628,11 @@ async def test_executor_step_errors_on_ensure_loaded_failure(tmp_path, monkeypat
 
     with patch("app.chain.executor.OpenAICompatibleLLMClient") as MockClient:
         instance = MockClient.return_value
-        instance.generate = AsyncMock(return_value="should-not-run")
+        instance.chat_stream = _make_chat_stream_mock(["should-not-run"])
         await execute_chain_job(job_id, job_dir, req)
 
     parent_status = json.loads((job_dir / "status.json").read_text())
     assert parent_status["status"] == "error"
     assert "ensure-loaded" in parent_status["error"]
-    # generate must not have been called once ensure-loaded failed
-    instance.generate.assert_not_awaited()
+    # chat_stream must not have been called once ensure-loaded failed
+    instance.chat_stream.assert_not_called()

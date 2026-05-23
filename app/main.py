@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
@@ -150,7 +150,12 @@ def _build_recovery_runner(entry: dict):
             return None
 
         async def runner():
-            await execute_chain_job(job_id, job_dir, req)
+            queue = get_job_queue()
+            bus = queue.create_bus(job_id)
+            try:
+                await execute_chain_job(job_id, job_dir, req, event_bus=bus)
+            finally:
+                queue.close_bus(job_id)
 
         return runner
     return None
@@ -252,11 +257,20 @@ async def create_chain_job(req: ChainJobRequest):
     job_id = data["job_id"]
     job_dir = find_job_dir(job_id)
     patch_initial_chain_status(job_dir, len(req.steps))
+    queue = get_job_queue()
+    # Create the bus eagerly so an SSE client opening EventSource immediately
+    # after the POST 202 returns sees the live bus rather than falling through
+    # to the disk-snapshot path before the worker picks the job up.
+    queue.create_bus(job_id)
 
     async def runner():
-        await execute_chain_job(job_id, job_dir, req)
+        bus = queue.get_bus(job_id)
+        try:
+            await execute_chain_job(job_id, job_dir, req, event_bus=bus)
+        finally:
+            queue.close_bus(job_id)
 
-    await get_job_queue().enqueue(job_id, runner)
+    await queue.enqueue(job_id, runner)
     return JobCreatedResponse(**data)
 
 
@@ -363,6 +377,35 @@ def get_job_file_endpoint(job_id: str, filename: str):
     if path is None:
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(path)
+
+
+@app.get("/v1/jobs/{job_id}/stream")
+async def stream_chain_job(job_id: str, request: Request):
+    """Server-Sent Events stream of chain job events.
+
+    For a live job: subscribes to the in-memory EventBus, replaying history
+    first then forwarding new events until ``job_done``. For a job whose bus
+    has expired (or never existed): synthesizes events from disk artifacts.
+    """
+    from .chain.sse import event_stream_from_bus, event_stream_from_disk
+
+    job_dir = find_job_dir(job_id)
+    if job_dir is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    bus = get_job_queue().get_bus(job_id)
+    if bus is not None:
+        gen = event_stream_from_bus(bus, request)
+    else:
+        gen = event_stream_from_disk(job_id, job_dir)
+    return StreamingResponse(
+        gen,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.get("/v1/chain-sequences")

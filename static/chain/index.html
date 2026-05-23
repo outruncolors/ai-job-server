@@ -76,32 +76,18 @@
     <div id="panel-right">
       <p class="section-label" style="margin-bottom:14px;">OUTPUT</p>
       <div id="chain-msg" class="msg" style="margin-top:0;"></div>
-      <div id="chain-step-status" style="margin-top:14px;"></div>
-      <details id="chain-final-context" class="section-collapse" style="display:none;margin-top:16px;">
-        <summary>CONTEXT</summary>
-        <pre id="chain-final-context-pre" class="output-pre"></pre>
-      </details>
-      <details id="chain-final-input" class="section-collapse" style="display:none;margin-top:16px;">
-        <summary>FINAL INPUT</summary>
-        <pre id="chain-final-input-pre" class="output-pre"></pre>
-      </details>
-      <details id="chain-final-tool-calls" class="section-collapse" style="display:none;margin-top:16px;">
-        <summary>TOOL CALLS</summary>
-        <div id="chain-final-tool-calls-body">
-          <pre id="chain-final-tool-calls-pre" class="output-pre" style="font-size:0.68rem;"></pre>
-        </div>
-      </details>
-      <div id="chain-final-audio" style="display:none;margin-top:16px;">
-        <p class="section-label" style="margin-bottom:6px;">FINAL AUDIO</p>
-        <audio id="chain-final-audio-player" controls style="width:100%;margin-top:4px;"></audio>
+
+      <div id="chain-timeline-wrap" style="margin-top:14px;">
+        <div id="chain-timeline"></div>
       </div>
-      <div id="chain-output" style="display:none;margin-top:16px;">
-        <p class="section-label" style="margin-bottom:6px;">FINAL OUTPUT</p>
-        <pre id="chain-output-pre" class="output-pre"></pre>
-      </div>
+
       <details id="chain-artifacts" class="section-collapse" style="display:none;margin-top:16px;">
         <summary>ARTIFACTS</summary>
         <div id="chain-artifacts-list"></div>
+      </details>
+      <details id="chain-final-output-collapse" class="section-collapse" style="display:none;margin-top:16px;">
+        <summary>RAW FINAL OUTPUT</summary>
+        <pre id="chain-output-pre" class="output-pre"></pre>
       </details>
       <div id="chain-right-hint" class="hint">
         Run a chain job to see output here.
@@ -130,6 +116,7 @@
   <script src="/js/escape.js"></script>
   <script src="/js/poll.js"></script>
   <script src="/js/toast.js"></script>
+  <script src="timeline.js"></script>
   <script src="chain.js"></script>
   <script src="/js/nav-mobile.js"></script>
 </body>

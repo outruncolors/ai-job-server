@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from .events import EventBus
 from .llm_client import OpenAICompatibleLLMClient
 from .models import Alternative, ChainJobRequest, ChainStep
 
@@ -221,10 +222,52 @@ def _render(
     )
 
 
+def _emit_summary_from_output(
+    bus: Optional[EventBus],
+    step_dir: Path,
+    output_file: str,
+    step_number: int,
+    invocation: int,
+    kind: str,
+) -> None:
+    """Read the runner's ``output.json`` and emit a `summary` event.
+
+    Each "side-effect" step type (write_context, image_prompt, save_wildcard,
+    create_ticket) writes a small JSON describing what it did; we synthesize a
+    one-line caption from those fields and put the full payload in `detail` so
+    the timeline node can render rich content if desired.
+    """
+    if bus is None:
+        return
+    try:
+        data = json.loads((step_dir / output_file).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if kind == "write_context":
+        title = data.get("title") or ""
+        summary = f"Saved to context: {title}" if title else "Wrote context item"
+    elif kind == "image_prompt":
+        name = data.get("name") or ""
+        summary = f"Saved image prompt: {name}" if name else "Saved image prompt"
+    elif kind == "save_wildcard":
+        action = data.get("action") or "save"
+        wc = data.get("wildcard") or {}
+        name = wc.get("name") or ""
+        summary = f"Wildcard {action}: {name}" if name else f"Wildcard {action}"
+    elif kind == "create_ticket":
+        title = data.get("title") or ""
+        summary = f"Created ticket: {title}" if title else "Created ticket"
+    else:
+        summary = kind
+    bus.emit("summary", step_number=step_number, invocation=invocation,
+             kind=kind, summary=summary, detail=data)
+
+
 async def execute_chain_job(
     job_id: str,
     job_dir: Path,
     request: ChainJobRequest,
+    event_bus: Optional[EventBus] = None,
 ) -> None:
     from .sequences import list_sequences
 
@@ -232,6 +275,11 @@ async def execute_chain_job(
     steps_dir.mkdir(exist_ok=True)
 
     seq_map = {s["id"]: s for s in list_sequences()}
+    start_ts_mono = datetime.now(timezone.utc)
+
+    def _emit(event_type: str, **payload: Any) -> None:
+        if event_bus is not None:
+            event_bus.emit(event_type, **payload)
 
     # Ensure top-level steps carry positive unique numbers, then expand sequences inline.
     try:
@@ -240,11 +288,16 @@ async def execute_chain_job(
     except (RuntimeError, ValueError) as exc:
         _write_chain_status(job_dir, "error", error=str(exc))
         _append_log(job_dir, f"[expansion error] {exc}\n")
+        _emit("job_done", status="error", error=str(exc), final_output=None, artifacts=[],
+              duration_ms=int((datetime.now(timezone.utc) - start_ts_mono).total_seconds() * 1000))
         return
 
     if not flat_steps:
         _write_chain_status(job_dir, "error", error="no steps after expansion")
         _append_log(job_dir, "[expansion error] no steps after expansion\n")
+        _emit("job_done", status="error", error="no steps after expansion", final_output=None,
+              artifacts=[],
+              duration_ms=int((datetime.now(timezone.utc) - start_ts_mono).total_seconds() * 1000))
         return
 
     step_by_number: dict[int, ChainStep] = {s.number: s for s in flat_steps}
@@ -259,6 +312,7 @@ async def execute_chain_job(
         current_step_name=None,
     )
     _append_log(job_dir, f"[start] chain job {job_id} with {step_count} steps\n")
+    _emit("job_start", job_id=job_id, step_count=step_count)
 
     client = OpenAICompatibleLLMClient()
     text_output = request.input
@@ -309,12 +363,14 @@ async def execute_chain_job(
                     job_dir,
                     f"[goto step {ptr}] fall_through (weights chose alt with fall_through)\n",
                 )
+                _emit("goto", from_step=ptr, target_step=None, fall_through=True)
                 ptr = _next_in_order(ptr)
             else:
                 _append_log(
                     job_dir,
                     f"[goto step {ptr}] jump → step {alt.target_step}\n",
                 )
+                _emit("goto", from_step=ptr, target_step=alt.target_step, fall_through=False)
                 ptr = alt.target_step
             continue
 
@@ -347,6 +403,12 @@ async def execute_chain_job(
             status="running", started_at=step_started_at,
             step_number=ptr, invocation=inv,
         )
+        alt_index = step.alternatives.index(alt) if alt in step.alternatives else 0
+        _emit(
+            "step_start",
+            step_number=ptr, invocation=inv, step_id=step_id,
+            name=step.name, step_type=step.type, alt_index=alt_index,
+        )
 
         try:
             if step.type == "llm":
@@ -364,6 +426,9 @@ async def execute_chain_job(
                     step_inputs=step_inputs,
                     step_outputs=step_outputs,
                     variables=variables,
+                    event_bus=event_bus,
+                    job_id=job_id,
+                    invocation=inv,
                 )
                 step_inputs[ptr].append(rendered_prompt)
                 step_outputs[ptr].append(new_output)
@@ -376,6 +441,12 @@ async def execute_chain_job(
                     step_number=ptr, invocation=inv,
                 )
                 _append_log(job_dir, f"[step {ptr} inv {inv}] llm done: {step_id}\n")
+                _emit(
+                    "step_done",
+                    step_number=ptr, invocation=inv, status="done",
+                    output_file=f"steps/{step_dir_name}/{output_file}",
+                    full_text=new_output,
+                )
 
             elif step.type == "voice":
                 from .steps.voice import run_voice_step
@@ -385,8 +456,12 @@ async def execute_chain_job(
                 )
                 step_inputs[ptr].append(rendered_prompt or text_output)
                 speak_text = rendered_prompt.strip() or text_output
+                _emit("step_input", step_number=ptr, invocation=inv,
+                      rendered_prompt=speak_text)
                 output_file = await run_voice_step(
-                    step_dir, step, alt, speak_text, client=client, llm_config=request.llm
+                    step_dir, step, alt, speak_text, client=client, llm_config=request.llm,
+                    event_bus=event_bus, job_id=job_id, step_number=ptr, invocation=inv,
+                    step_dir_name=step_dir_name,
                 )
                 step_outputs[ptr].append("")
                 _write_step_status(
@@ -396,10 +471,17 @@ async def execute_chain_job(
                     output_file=output_file, step_number=ptr, invocation=inv,
                 )
                 _append_log(job_dir, f"[step {ptr} inv {inv}] voice done: {step_id}\n")
+                _emit(
+                    "step_done",
+                    step_number=ptr, invocation=inv, status="done",
+                    output_file=f"steps/{step_dir_name}/{output_file}",
+                )
 
             elif step.type == "write_context":
                 from .steps.write_context import run_write_context_step
                 step_inputs[ptr].append(text_output)
+                _emit("step_input", step_number=ptr, invocation=inv,
+                      rendered_prompt=text_output)
                 output_file = run_write_context_step(step_dir, step, alt, text_output)
                 step_outputs[ptr].append("")
                 _write_step_status(
@@ -409,6 +491,14 @@ async def execute_chain_job(
                     output_file=output_file, step_number=ptr, invocation=inv,
                 )
                 _append_log(job_dir, f"[step {ptr} inv {inv}] write_context done: {step_id}\n")
+                _emit_summary_from_output(
+                    event_bus, step_dir, output_file, ptr, inv, "write_context",
+                )
+                _emit(
+                    "step_done",
+                    step_number=ptr, invocation=inv, status="done",
+                    output_file=f"steps/{step_dir_name}/{output_file}",
+                )
 
             elif step.type == "image_prompt":
                 from .steps.image_prompt import run_image_prompt_step
@@ -423,6 +513,8 @@ async def execute_chain_job(
                     variables=variables,
                 )
                 step_inputs[ptr].append(rendered_body or text_output)
+                _emit("step_input", step_number=ptr, invocation=inv,
+                      rendered_prompt=rendered_body or text_output)
                 output_file = run_image_prompt_step(
                     step_dir, step, alt, rendered_name, rendered_body, text_output
                 )
@@ -434,6 +526,14 @@ async def execute_chain_job(
                     output_file=output_file, step_number=ptr, invocation=inv,
                 )
                 _append_log(job_dir, f"[step {ptr} inv {inv}] image_prompt done: {step_id}\n")
+                _emit_summary_from_output(
+                    event_bus, step_dir, output_file, ptr, inv, "image_prompt",
+                )
+                _emit(
+                    "step_done",
+                    step_number=ptr, invocation=inv, status="done",
+                    output_file=f"steps/{step_dir_name}/{output_file}",
+                )
 
             elif step.type == "save_wildcard":
                 from .steps.save_wildcard import run_save_wildcard_step
@@ -448,6 +548,8 @@ async def execute_chain_job(
                     variables=variables,
                 )
                 step_inputs[ptr].append(rendered_body or text_output)
+                _emit("step_input", step_number=ptr, invocation=inv,
+                      rendered_prompt=rendered_body or text_output)
                 output_file = run_save_wildcard_step(
                     step_dir, step, alt, rendered_name, rendered_body, text_output
                 )
@@ -459,6 +561,14 @@ async def execute_chain_job(
                     output_file=output_file, step_number=ptr, invocation=inv,
                 )
                 _append_log(job_dir, f"[step {ptr} inv {inv}] save_wildcard done: {step_id}\n")
+                _emit_summary_from_output(
+                    event_bus, step_dir, output_file, ptr, inv, "save_wildcard",
+                )
+                _emit(
+                    "step_done",
+                    step_number=ptr, invocation=inv, status="done",
+                    output_file=f"steps/{step_dir_name}/{output_file}",
+                )
 
             elif step.type == "create_ticket":
                 from .steps.create_ticket import run_create_ticket_step
@@ -473,6 +583,8 @@ async def execute_chain_job(
                     variables=variables,
                 )
                 step_inputs[ptr].append(rendered_title)
+                _emit("step_input", step_number=ptr, invocation=inv,
+                      rendered_prompt=rendered_title)
                 output_file = run_create_ticket_step(
                     step_dir, step, alt, rendered_title, rendered_desc, text_output
                 )
@@ -484,6 +596,14 @@ async def execute_chain_job(
                     output_file=output_file, step_number=ptr, invocation=inv,
                 )
                 _append_log(job_dir, f"[step {ptr} inv {inv}] create_ticket done: {step_id}\n")
+                _emit_summary_from_output(
+                    event_bus, step_dir, output_file, ptr, inv, "create_ticket",
+                )
+                _emit(
+                    "step_done",
+                    step_number=ptr, invocation=inv, status="done",
+                    output_file=f"steps/{step_dir_name}/{output_file}",
+                )
 
             else:
                 err = f"unsupported step type {step.type!r}"
@@ -498,6 +618,10 @@ async def execute_chain_job(
             )
             _write_chain_status(job_dir, "error", error=str(exc))
             _append_log(job_dir, f"[step {ptr} inv {inv}] error: {exc}\n")
+            _emit("step_error", step_number=ptr, invocation=inv, error=str(exc))
+            _emit("job_done", status="error", error=str(exc), final_output=None,
+                  artifacts=[],
+                  duration_ms=int((datetime.now(timezone.utc) - start_ts_mono).total_seconds() * 1000))
             return
 
         ptr = _next_in_order(ptr)
@@ -550,3 +674,10 @@ async def execute_chain_job(
         outputs={"final_output": "final_output.txt"},
     )
     _append_log(job_dir, f"[done] chain job {job_id} completed\n")
+    _emit(
+        "job_done",
+        status="done",
+        final_output=text_output,
+        artifacts=artifacts,
+        duration_ms=int((datetime.now(timezone.utc) - start_ts_mono).total_seconds() * 1000),
+    )

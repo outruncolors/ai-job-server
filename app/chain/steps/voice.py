@@ -15,6 +15,12 @@ async def run_voice_step(
     text: str,
     client: Any = None,
     llm_config: Any = None,
+    *,
+    event_bus: Any = None,
+    job_id: str = "",
+    step_number: int = 0,
+    invocation: int = 0,
+    step_dir_name: str = "",
 ) -> str:
     """Execute a voice step. Returns the output filename."""
     from ...omnivoice.config import get_config
@@ -142,4 +148,14 @@ async def run_voice_step(
             await runner.run(tts_text, output_path, step_dir, **common_run_kwargs)
     finally:
         manager.active_voice_jobs -= 1
+    if event_bus is not None and job_id and step_dir_name:
+        event_bus.emit(
+            "artifact_ready",
+            step_number=step_number,
+            invocation=invocation,
+            kind="audio",
+            filename=output_path.name,
+            file_url=f"/v1/jobs/{job_id}/files/steps/{step_dir_name}/{output_path.name}",
+            mime=f"audio/{config.response_format}",
+        )
     return output_path.name

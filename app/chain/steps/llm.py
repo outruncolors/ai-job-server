@@ -43,7 +43,13 @@ async def _execute_llm_with_tools(
     alt: Any,
     client: Any,
     llm_config: Any,
-) -> tuple[str, list[dict]]:
+) -> tuple[list[dict], list[dict]]:
+    """Run the tool loop, returning the messages array *before* the final
+    assistant turn so the caller can re-issue it streamed.
+
+    Returns (messages, tool_call_log) where `messages` ends with the most
+    recent tool result and is ready for one more streamed assistant turn.
+    """
     import logging
     from ...mcp.executor import execute as mcp_execute
     from ...mcp.models import ToolCallError
@@ -74,10 +80,10 @@ async def _execute_llm_with_tools(
             raw_tool_calls = _parse_gemma_tool_calls(message["content"])
 
         if not raw_tool_calls:
-            content = message.get("content") or ""
-            if not content:
-                raise RuntimeError("LLM tool-loop response has empty content on finish")
-            return content, tool_call_log
+            # Final turn arrived buffered; discard the assistant message and
+            # let the caller stream it. messages[-1] is still the last tool
+            # result (or the user prompt if zero tool calls were ever made).
+            return messages, tool_call_log
 
         messages.append({
             "role": "assistant",
@@ -121,6 +127,35 @@ async def _execute_llm_with_tools(
     )
 
 
+async def _stream_assistant_turn(
+    messages: list[dict],
+    client: Any,
+    llm_config: Any,
+    event_bus: Any,
+    step_number: int,
+    invocation: int,
+) -> str:
+    """Stream one final assistant turn from ``messages`` (no tools).
+
+    Emits ``llm_chunk`` per content delta and returns the accumulated content.
+    """
+    accumulated: list[str] = []
+    async for chunk in client.chat_stream(messages, llm_config, tools=None):
+        if chunk.content:
+            accumulated.append(chunk.content)
+            if event_bus is not None:
+                event_bus.emit(
+                    "llm_chunk",
+                    step_number=step_number,
+                    invocation=invocation,
+                    delta=chunk.content,
+                )
+    output = "".join(accumulated)
+    if not output:
+        raise RuntimeError("LLM stream produced no content")
+    return output
+
+
 async def run_llm_step(
     step_dir: Path,
     step: Any,
@@ -133,6 +168,9 @@ async def run_llm_step(
     step_inputs: Optional[dict] = None,
     step_outputs: Optional[dict] = None,
     variables: Optional[dict] = None,
+    event_bus: Any = None,
+    job_id: str = "",
+    invocation: int = 0,
 ) -> tuple[str, str, str]:
     """Execute an LLM step. Returns (new text_output, output filename, rendered prompt)."""
     from ..context import resolve_context_ids
@@ -162,14 +200,30 @@ async def run_llm_step(
         prompt = rendered
     (step_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
 
+    if event_bus is not None:
+        event_bus.emit(
+            "step_input",
+            step_number=step_index,
+            invocation=invocation,
+            rendered_prompt=rendered,
+            context=context or None,
+        )
+
     if alt.tools:
-        output, tool_call_log = await _execute_llm_with_tools(
+        messages, tool_call_log = await _execute_llm_with_tools(
             prompt, alt, client, request.llm
         )
         (step_dir / "tool_calls.json").write_text(
             json.dumps(tool_call_log, indent=2), encoding="utf-8"
         )
+        output = await _stream_assistant_turn(
+            messages, client, request.llm, event_bus, step_index, invocation,
+        )
     else:
-        output = await client.generate(prompt, request.llm)
+        # No tools: stream a single user-only chat directly.
+        messages = [{"role": "user", "content": prompt}]
+        output = await _stream_assistant_turn(
+            messages, client, request.llm, event_bus, step_index, invocation,
+        )
     (step_dir / "output.txt").write_text(output, encoding="utf-8")
     return output, "output.txt", prompt
