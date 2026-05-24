@@ -187,6 +187,91 @@ def test_list_workflows_finds_json(tmp_path, monkeypatch):
     assert results[0]["error"] is None
 
 
+SAMPLE_WORKFLOW_WITH_REFS = {
+    "76": {
+        "class_type": "LoadImage",
+        "_meta": {"title": "REF_IMAGE_1"},
+        "inputs": {"image": "default1.png"},
+    },
+    "81": {
+        "class_type": "LoadImage",
+        "_meta": {"title": "REF_IMAGE_2"},
+        "inputs": {"image": "default2.png"},
+    },
+    "99": {
+        "class_type": "LoadImage",
+        "_meta": {"title": "RANDOM"},
+        "inputs": {"image": "ignored.png"},
+    },
+    "135": {
+        "class_type": "CLIPTextEncode",
+        "_meta": {"title": "PROMPT"},
+        "inputs": {"text": "edit me"},
+    },
+}
+
+
+def test_find_image_param_nodes_picks_up_known_titles():
+    from app.comfyui.workflows import find_image_param_nodes
+    result = find_image_param_nodes(SAMPLE_WORKFLOW_WITH_REFS)
+    assert result == {"REF_IMAGE_1": "76", "REF_IMAGE_2": "81"}
+
+
+def test_find_image_param_nodes_empty_on_t2i():
+    from app.comfyui.workflows import find_image_param_nodes
+    assert find_image_param_nodes(SAMPLE_WORKFLOW_VALID) == {}
+
+
+def test_find_image_param_nodes_skips_duplicates():
+    from app.comfyui.workflows import find_image_param_nodes
+    wf = {
+        "a": {"class_type": "LoadImage", "_meta": {"title": "REF_IMAGE_1"}, "inputs": {"image": "x.png"}},
+        "b": {"class_type": "LoadImage", "_meta": {"title": "REF_IMAGE_1"}, "inputs": {"image": "y.png"}},
+    }
+    assert find_image_param_nodes(wf) == {}
+
+
+def test_find_image_param_nodes_skips_non_loadimage():
+    from app.comfyui.workflows import find_image_param_nodes
+    wf = {
+        "a": {"class_type": "SomeOtherNode", "_meta": {"title": "REF_IMAGE_1"}, "inputs": {"image": "x.png"}},
+    }
+    assert find_image_param_nodes(wf) == {}
+
+
+def test_inject_image_param_writes_filename():
+    from app.comfyui.workflows import inject_image_param
+    wf = inject_image_param(SAMPLE_WORKFLOW_WITH_REFS, "REF_IMAGE_1", "uploaded.png")
+    assert wf["76"]["inputs"]["image"] == "uploaded.png"
+    # Other ref untouched
+    assert wf["81"]["inputs"]["image"] == "default2.png"
+    # Original untouched
+    assert SAMPLE_WORKFLOW_WITH_REFS["76"]["inputs"]["image"] == "default1.png"
+
+
+def test_inject_image_param_unknown_title():
+    from app.comfyui.workflows import inject_image_param
+    with pytest.raises(ValueError, match="REF_IMAGE_2"):
+        inject_image_param(SAMPLE_WORKFLOW_VALID, "REF_IMAGE_2", "x.png")
+
+
+def test_list_workflows_includes_image_params(tmp_path, monkeypatch):
+    import app.comfyui.workflows as wf_mod
+    wf_dir = tmp_path / "workflows"
+    wf_dir.mkdir()
+    monkeypatch.setattr(wf_mod, "WORKFLOWS_DIR", wf_dir)
+    (wf_dir / "t2i.json").write_text(json.dumps(SAMPLE_WORKFLOW_VALID))
+    (wf_dir / "edit.json").write_text(json.dumps(SAMPLE_WORKFLOW_WITH_REFS))
+
+    from app.comfyui.workflows import list_workflows
+    by_name = {w["name"]: w for w in list_workflows()}
+    assert by_name["t2i"]["imageParams"] == []
+    assert by_name["edit"]["imageParams"] == [
+        {"name": "REF_IMAGE_1", "nodeId": "76"},
+        {"name": "REF_IMAGE_2", "nodeId": "81"},
+    ]
+
+
 def test_list_workflows_invalid_workflow(tmp_path, monkeypatch):
     import app.comfyui.workflows as wf_mod
     wf_dir = tmp_path / "workflows"

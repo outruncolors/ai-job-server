@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 class ImageJobRequest(BaseModel):
     workflow: str
     prompt: str
+    image_params: dict[str, str] = Field(default_factory=dict)
 
 
 class VoiceSegment(BaseModel):

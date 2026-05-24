@@ -8,6 +8,7 @@ from typing import Any, Optional
 from .config import WORKFLOWS_DIR
 
 _PROMPT_TITLE = "PROMPT"
+_REF_IMAGE_TITLES: tuple[str, ...] = ("REF_IMAGE_1", "REF_IMAGE_2")
 
 
 def find_prompt_node(workflow: dict) -> Optional[tuple[str, dict]]:
@@ -58,6 +59,41 @@ def inject_prompt(workflow: dict, prompt: str) -> dict:
     return result
 
 
+def find_image_param_nodes(workflow: dict) -> dict[str, str]:
+    """Return {title: node_id} for known REF_IMAGE_* LoadImage nodes.
+
+    Skips titles that appear more than once or whose node isn't a LoadImage
+    with a replaceable `image` input — the workflow stays valid, those fields
+    just don't get exposed.
+    """
+    by_title: dict[str, list[str]] = {t: [] for t in _REF_IMAGE_TITLES}
+    for nid, node in workflow.items():
+        if not isinstance(node, dict):
+            continue
+        title = node.get("_meta", {}).get("title")
+        if title not in by_title:
+            continue
+        if node.get("class_type") != "LoadImage":
+            continue
+        if "image" not in node.get("inputs", {}):
+            continue
+        by_title[title].append(nid)
+    return {title: ids[0] for title, ids in by_title.items() if len(ids) == 1}
+
+
+def inject_image_param(workflow: dict, title: str, filename: str) -> dict:
+    """Return a deep copy with the named LoadImage node's `image` set to filename.
+
+    Unknown titles raise ValueError so callers can surface bad input.
+    """
+    found = find_image_param_nodes(workflow)
+    if title not in found:
+        raise ValueError(f'Workflow has no LoadImage node titled "{title}"')
+    result = copy.deepcopy(workflow)
+    result[found[title]]["inputs"]["image"] = filename
+    return result
+
+
 def load_workflow(name: str) -> dict:
     """Load a workflow JSON by name (filename without .json)."""
     path = WORKFLOWS_DIR / f"{name}.json"
@@ -80,11 +116,17 @@ def list_workflows() -> list[dict[str, Any]]:
             continue
         err = validate_workflow(workflow)
         prompt_node = find_prompt_node(workflow)
+        image_params = find_image_param_nodes(workflow)
         result.append({
             "name": path.stem,
             "filename": path.name,
             "valid": err is None,
             "promptNodeId": prompt_node[0] if prompt_node else None,
+            "imageParams": [
+                {"name": title, "nodeId": image_params[title]}
+                for title in _REF_IMAGE_TITLES
+                if title in image_params
+            ],
             "error": err,
         })
     return result

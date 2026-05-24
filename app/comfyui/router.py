@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response
+import tempfile
+from pathlib import Path
+
+import httpx
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
 from .config import ComfyUIConfig, get_config, save_config
 from .downloader import DownloadError, get_downloader
 from .manager import get_manager
 from .workflows import list_workflows
+
+_ALLOWED_UPLOAD_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 router = APIRouter(prefix="/v1/comfyui", tags=["comfyui"])
 
@@ -51,6 +57,57 @@ def update_comfyui_config(new_config: ComfyUIConfig) -> ComfyUIConfig:
 @router.get("/workflows")
 def get_workflows() -> dict:
     return {"workflows": list_workflows()}
+
+
+@router.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)) -> dict:
+    """Proxy a single image upload to ComfyUI's /upload/image.
+
+    Returns the stored filename so callers can reference it as a LoadImage input.
+    """
+    content_type = (file.content_type or "").lower()
+    if content_type not in _ALLOWED_UPLOAD_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"unsupported content_type: {content_type or 'unknown'}",
+        )
+
+    from .client import ComfyUIClient
+    cfg = get_config()
+    client = ComfyUIClient(f"http://{cfg.host}:{cfg.port}")
+
+    suffix = Path(file.filename or "upload").suffix or ".png"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+        try:
+            data = await file.read()
+            tmp.write(data)
+            tmp.flush()
+            try:
+                resp = await client.upload_image(
+                    tmp_path,
+                    content_type=content_type,
+                    filename=file.filename or tmp_path.name,
+                )
+            except httpx.HTTPError as exc:
+                raise HTTPException(
+                    status_code=503, detail=f"ComfyUI unavailable: {exc}"
+                )
+        finally:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+    name = resp.get("name") or ""
+    subfolder = resp.get("subfolder") or ""
+    image = f"{subfolder}/{name}" if subfolder else name
+    return {
+        "image": image,
+        "filename": name,
+        "subfolder": subfolder,
+        "type": resp.get("type", "input"),
+    }
 
 
 @router.get("/system_stats")

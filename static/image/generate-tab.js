@@ -1,9 +1,10 @@
 // Generate tab — workflow picker, prompt input, job submission + polling.
 
-let _workflows = [];  // [{name, filename, valid, promptNodeId, error}]
+let _workflows = [];  // [{name, filename, valid, promptNodeId, imageParams, error}]
 let _savedPrompts = [];  // [{id, name, prompt, workflow, ...}]
 let _pollHandle = null;
 let _currentJobId = null;
+let _uploadedImageParams = {};  // { REF_IMAGE_1: 'man.png', ... } — keyed by node title
 const _recreateId = sessionStorage.getItem('recreate_job_id');
 if (_recreateId) sessionStorage.removeItem('recreate_job_id');
 
@@ -66,9 +67,22 @@ async function _hydrateFromRecreate(jobId) {
     document.getElementById('gen-prompt').value = req.prompt;
   }
 
+  const wfMeta = _workflows.find(w => w.name === req.workflow);
+  const hadRefs = req.image_params && Object.keys(req.image_params).length > 0;
+  const hasRefSlots = wfMeta && (wfMeta.imageParams || []).length > 0;
+  const noteLines = [];
   if (missing.length > 0) {
-    notice.innerHTML = 'Recreate notice — these references no longer exist:<br>· ' +
-      missing.map(m => String(m).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')).join('<br>· ');
+    noteLines.push('Recreate notice — these references no longer exist:');
+    missing.forEach(m => noteLines.push('· ' + m));
+  }
+  if (hadRefs || hasRefSlots) {
+    if (noteLines.length > 0) noteLines.push('');
+    noteLines.push('Reference images aren\'t restored on recreate — re-upload them above.');
+  }
+  if (noteLines.length > 0) {
+    notice.innerHTML = noteLines
+      .map(s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'))
+      .join('<br>');
     notice.style.display = 'block';
   }
 }
@@ -78,9 +92,11 @@ function onWorkflowChange() {
   const name = sel.value;
   const submitBtn = document.getElementById('gen-submit');
   const errEl = document.getElementById('gen-workflow-error');
+  _uploadedImageParams = {};
   if (!name) {
     submitBtn.disabled = true;
     errEl.style.display = 'none';
+    _renderImageParamFields([]);
     return;
   }
   const wf = _workflows.find(w => w.name === name);
@@ -88,10 +104,131 @@ function onWorkflowChange() {
     submitBtn.disabled = true;
     errEl.textContent = wf.error || 'Workflow is not compatible';
     errEl.style.display = '';
+    _renderImageParamFields([]);
   } else {
     submitBtn.disabled = false;
     errEl.style.display = 'none';
+    _renderImageParamFields((wf && wf.imageParams) || []);
   }
+}
+
+function _renderImageParamFields(params) {
+  const container = document.getElementById('gen-image-params');
+  if (!container) return;
+  container.innerHTML = '';
+  params.forEach((p, idx) => {
+    const row = document.createElement('div');
+    row.className = 'image-param-row';
+
+    const label = document.createElement('label');
+    label.textContent = 'Reference image ' + (idx + 1) + ' (' + p.name + ')';
+
+    const pickrow = document.createElement('div');
+    pickrow.className = 'image-param-pickrow';
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/webp';
+    input.dataset.param = p.name;
+
+    const paste = document.createElement('div');
+    paste.className = 'image-param-paste';
+    paste.tabIndex = 0;
+    paste.dataset.param = p.name;
+    paste.textContent = 'or click here and paste (Ctrl/Cmd+V)';
+
+    const status = document.createElement('span');
+    status.className = 'image-param-status';
+    status.textContent = 'optional — leaves the workflow default in place';
+
+    paste.addEventListener('focus', () => paste.classList.add('focused'));
+    paste.addEventListener('blur', () => paste.classList.remove('focused'));
+    paste.addEventListener('paste', (e) => _handlePastedImage(e, p.name, status, paste, input));
+
+    input.addEventListener('change', () => {
+      const f = input.files && input.files[0];
+      if (!f) {
+        _clearImageParam(p.name, status, paste);
+        return;
+      }
+      _uploadFileForParam(f, p.name, status, paste);
+    });
+
+    pickrow.appendChild(input);
+    pickrow.appendChild(paste);
+
+    row.appendChild(label);
+    row.appendChild(pickrow);
+    row.appendChild(status);
+    container.appendChild(row);
+  });
+}
+
+function _clearImageParam(title, statusEl, pasteEl) {
+  delete _uploadedImageParams[title];
+  statusEl.className = 'image-param-status';
+  statusEl.textContent = 'optional — leaves the workflow default in place';
+  if (pasteEl) {
+    pasteEl.classList.remove('has-image');
+    pasteEl.textContent = 'or click here and paste (Ctrl/Cmd+V)';
+  }
+}
+
+function _handlePastedImage(event, title, statusEl, pasteEl, fileInputEl) {
+  const items = (event.clipboardData && event.clipboardData.items) || [];
+  for (const it of items) {
+    if (it.kind === 'file' && /^image\//.test(it.type)) {
+      const blob = it.getAsFile();
+      if (blob) {
+        event.preventDefault();
+        // Clear the file input so the field reflects the pasted source.
+        try { fileInputEl.value = ''; } catch (_) {}
+        _uploadFileForParam(blob, title, statusEl, pasteEl);
+        return;
+      }
+    }
+  }
+  statusEl.className = 'image-param-status err';
+  statusEl.textContent = 'paste failed: no image found in clipboard';
+}
+
+async function _uploadFileForParam(file, title, statusEl, pasteEl) {
+  statusEl.className = 'image-param-status';
+  statusEl.textContent = 'uploading…';
+  try {
+    const form = new FormData();
+    // Pasted Blobs don't carry a filename; supply one so multipart parsing works.
+    const sendName = file.name || ('pasted-' + Date.now() + _extForType(file.type));
+    form.append('file', file, sendName);
+    const r = await fetch('/v1/comfyui/upload-image', { method: 'POST', body: form });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(txt || ('HTTP ' + r.status));
+    }
+    const data = await r.json();
+    if (!data.image) throw new Error('upload returned no filename');
+    _uploadedImageParams[title] = data.image;
+    statusEl.className = 'image-param-status ok';
+    statusEl.textContent = 'uploaded as ' + data.image;
+    if (pasteEl) {
+      pasteEl.classList.add('has-image');
+      pasteEl.textContent = '✓ ' + data.image + ' — paste again to replace';
+    }
+  } catch (e) {
+    delete _uploadedImageParams[title];
+    statusEl.className = 'image-param-status err';
+    statusEl.textContent = 'upload failed: ' + e.message;
+    if (pasteEl) {
+      pasteEl.classList.remove('has-image');
+    }
+  }
+}
+
+function _extForType(mime) {
+  if (mime === 'image/png') return '.png';
+  if (mime === 'image/jpeg') return '.jpg';
+  if (mime === 'image/webp') return '.webp';
+  return '';
 }
 
 async function loadSavedPromptList() {
@@ -175,8 +312,15 @@ async function submitGenerate() {
 
   if (_pollHandle) { _pollHandle.stop(); _pollHandle = null; }
 
+  const wf = _workflows.find(w => w.name === workflow);
+  const allowed = new Set(((wf && wf.imageParams) || []).map(p => p.name));
+  const image_params = {};
+  Object.entries(_uploadedImageParams).forEach(([k, v]) => {
+    if (allowed.has(k) && v) image_params[k] = v;
+  });
+
   try {
-    const job = await api('/jobs/image', 'POST', { workflow, prompt });
+    const job = await api('/jobs/image', 'POST', { workflow, prompt, image_params });
     _currentJobId = job.job_id;
     statusEl.textContent = 'Job ' + job.job_id + ' — queued';
     _pollHandle = pollJob(_currentJobId, {

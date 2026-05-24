@@ -57,12 +57,15 @@ class ComfyUIClient:
             r.raise_for_status()
             return r.content
 
-    async def upload_image(self, path: Path) -> dict:
+    async def upload_image(
+        self, path: Path, *, content_type: str = "image/png", filename: Optional[str] = None
+    ) -> dict:
+        send_name = filename or path.name
         async with httpx.AsyncClient(timeout=60.0) as c:
             with path.open("rb") as f:
                 r = await c.post(
                     f"{self.base}/upload/image",
-                    files={"image": (path.name, f, "image/png")},
+                    files={"image": (send_name, f, content_type)},
                 )
             r.raise_for_status()
             return r.json()

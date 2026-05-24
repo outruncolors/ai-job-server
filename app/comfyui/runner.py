@@ -8,7 +8,12 @@ from typing import Any
 from .client import ComfyUIClient
 from .config import ComfyUIConfig
 from .manager import ComfyUIManager
-from .workflows import inject_prompt, load_workflow
+from .workflows import (
+    find_image_param_nodes,
+    inject_image_param,
+    inject_prompt,
+    load_workflow,
+)
 
 
 def _write_status(job_dir: Path, status: str, *, error: str | None = None) -> None:
@@ -49,6 +54,29 @@ async def execute_image_job(
 
         workflow = load_workflow(request.workflow)
         workflow = inject_prompt(workflow, request.prompt)
+
+        image_params: dict[str, str] = dict(getattr(request, "image_params", None) or {})
+        available = find_image_param_nodes(workflow)
+        # If REF_IMAGE_2 is exposed but the caller only filled REF_IMAGE_1,
+        # mirror REF_IMAGE_1 into REF_IMAGE_2 so the user can drive image-edit
+        # workflows with a single upload.
+        if (
+            "REF_IMAGE_2" in available
+            and "REF_IMAGE_2" not in image_params
+            and image_params.get("REF_IMAGE_1")
+        ):
+            image_params["REF_IMAGE_2"] = image_params["REF_IMAGE_1"]
+            _append_log(
+                job_dir, "[image_param] REF_IMAGE_2 mirrored from REF_IMAGE_1\n"
+            )
+        for title, filename in image_params.items():
+            if title not in available:
+                _append_log(
+                    job_dir, f"[image_param] skipped {title!r} (not in workflow)\n"
+                )
+                continue
+            workflow = inject_image_param(workflow, title, filename)
+            _append_log(job_dir, f"[image_param] {title}={filename}\n")
 
         client = ComfyUIClient(f"http://{config.host}:{config.port}")
 
