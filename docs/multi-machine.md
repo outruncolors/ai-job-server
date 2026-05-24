@@ -352,9 +352,11 @@ Status rules:
 - **amber** — peer reachable but `git_sha` differs (or either side has no SHA known). Functional, but flagged.
 - **red** — peer unreachable or returned 5xx within the 5s timeout. `last_seen` and `git_sha` stay sticky from the prior successful poll so the UI can show the most recent known state.
 
-The topnav widget (`static/js/peer-status-widget.js`) draws one colored dot per peer with a tooltip carrying the full status detail. When any peer is amber it also renders a fixed banner under the topnav:
+The topnav widget (`static/js/peer-status-widget.js`) draws one colored dot per peer with a tooltip carrying the full status detail. When any peer is amber it also renders a fixed banner under the topnav with an inline **Deploy now** button:
 
-> Peer `gpu.local` is on commit `abc1234`, this machine is on `def5678` — consider running `scripts/deploy-secondary.sh`.
+> Peer `gpu.local` is on commit `abc1234`, this machine is on `def5678`. **[Deploy now]**
+
+The button POSTs `/v1/server/deploy-secondary`, which spawns `scripts/deploy-secondary.sh` on the primary and streams stdout/stderr into a bounded ring buffer (`app/deploy_secondary.py`). A floating log panel polls `GET /v1/server/deploy-secondary` once a second and shows live output. Since the script restarts the local FastAPI process at the end, the widget treats a burst of fetch failures after the last `running` snapshot as expected and prompts the user to refresh — it does not flag it as an error.
 
 Both the server-side poll and the client-side fetch are pull-based; nothing pushes status. To eyeball it without a browser:
 

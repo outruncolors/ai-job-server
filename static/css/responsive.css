@@ -296,6 +296,87 @@
   padding: 0 2px;
   font-family: var(--font-family);
 }
+.peer-skew-msg { margin-right: 10px; }
+.peer-skew-deploy-btn {
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  padding: 2px 10px;
+  background: var(--color-warn);
+  color: #1a1a1a;
+  border: 1px solid var(--color-border-hi);
+  border-radius: 3px;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+.peer-skew-deploy-btn:hover { filter: brightness(1.1); }
+.peer-skew-deploy-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+/* Floating deploy log panel — opened by the banner's Deploy now button. */
+.peer-deploy-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border-hi);
+  border-radius: 4px;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  z-index: 200;
+}
+.peer-deploy-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+.peer-deploy-title {
+  color: var(--color-text-dim);
+  letter-spacing: 0.04em;
+}
+.peer-deploy-status {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 3px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+.peer-deploy-status-running { color: var(--color-warn);   border-color: var(--color-warn); }
+.peer-deploy-status-done    { color: var(--color-accent); border-color: var(--color-accent); }
+.peer-deploy-status-error   { color: var(--color-danger); border-color: var(--color-danger); }
+.peer-deploy-close {
+  background: transparent;
+  color: var(--color-text-dim);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.peer-deploy-close:hover { color: var(--color-text); border-color: var(--color-border-hi); }
+.peer-deploy-log {
+  margin: 0;
+  padding: 8px 10px;
+  background: #0a0a0a;
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  overflow: auto;
+  white-space: pre;
+  flex: 1 1 auto;
+  min-height: 120px;
+}
 
 /* ── Responsive overrides (@media max-width: 768px) ─────────────────────── */
 @media (max-width: 768px) {

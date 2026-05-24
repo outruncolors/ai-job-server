@@ -18,6 +18,15 @@
   let bannerEl = null;
   let pollTimer = null;
 
+  // Deploy log overlay state (only created when the user clicks Deploy now).
+  let deployPanelEl = null;
+  let deployLogEl = null;
+  let deployStatusEl = null;
+  let deployCloseBtn = null;
+  let deployPollTimer = null;
+  let deployFailStreak = 0;
+  let deployLastSawRunning = false;
+
   async function fetchPeers() {
     try {
       const r = await fetch('/v1/server/peers');
@@ -126,11 +135,175 @@
     }
     const peerSha = shortSha(info.h && info.h.git_sha);
     const localSha = shortSha(info.localSha);
+    const peerHost = info.peer.host;
     bannerEl.innerHTML =
-      `Peer <code>${esc(info.peer.host)}</code> is on commit ` +
-      `<code>${esc(peerSha)}</code>, this machine is on ` +
-      `<code>${esc(localSha)}</code> — consider running ` +
-      `<code>scripts/deploy-secondary.sh</code>.`;
+      `<span class="peer-skew-msg">` +
+        `Peer <code>${esc(peerHost)}</code> is on commit ` +
+        `<code>${esc(peerSha)}</code>, this machine is on ` +
+        `<code>${esc(localSha)}</code>.` +
+      `</span>` +
+      `<button type="button" class="peer-skew-deploy-btn" ` +
+        `data-peer="${esc(peerHost)}">Deploy now</button>`;
+    const btn = bannerEl.querySelector('.peer-skew-deploy-btn');
+    if (btn) {
+      btn.addEventListener('click', () => startDeploy(btn.dataset.peer || ''));
+    }
+  }
+
+  /* ── Deploy panel ────────────────────────────────────────────────────── */
+
+  function ensureDeployPanel() {
+    if (deployPanelEl) return;
+    deployPanelEl = document.createElement('div');
+    deployPanelEl.id = 'peer-deploy-panel';
+    deployPanelEl.className = 'peer-deploy-panel';
+    deployPanelEl.innerHTML =
+      `<div class="peer-deploy-header">` +
+        `<span class="peer-deploy-title">deploy-secondary.sh</span>` +
+        `<span class="peer-deploy-status" data-role="status">starting…</span>` +
+        `<button type="button" class="peer-deploy-close" data-role="close" ` +
+          `aria-label="Close">×</button>` +
+      `</div>` +
+      `<pre class="peer-deploy-log" data-role="log"></pre>`;
+    document.body.appendChild(deployPanelEl);
+    deployLogEl = deployPanelEl.querySelector('[data-role="log"]');
+    deployStatusEl = deployPanelEl.querySelector('[data-role="status"]');
+    deployCloseBtn = deployPanelEl.querySelector('[data-role="close"]');
+    deployCloseBtn.addEventListener('click', closeDeployPanel);
+  }
+
+  function closeDeployPanel() {
+    if (deployPollTimer) {
+      clearInterval(deployPollTimer);
+      deployPollTimer = null;
+    }
+    if (deployPanelEl) {
+      deployPanelEl.remove();
+      deployPanelEl = null;
+      deployLogEl = null;
+      deployStatusEl = null;
+      deployCloseBtn = null;
+    }
+    deployFailStreak = 0;
+    deployLastSawRunning = false;
+  }
+
+  async function startDeploy(peerHost) {
+    ensureDeployPanel();
+    setDeployStatus('running', 'starting…');
+    setDeployLog(['$ scripts/deploy-secondary.sh ' + (peerHost || '')]);
+
+    // Disable the banner button so double-clicks don't pile up requests.
+    const btn = bannerEl && bannerEl.querySelector('.peer-skew-deploy-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Deploying…';
+    }
+
+    try {
+      const r = await fetch('/v1/server/deploy-secondary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(peerHost ? { peer_host: peerHost } : {}),
+      });
+      if (!r.ok) {
+        let msg = `HTTP ${r.status}`;
+        try {
+          const j = await r.json();
+          if (j && j.detail) msg = String(j.detail);
+        } catch (_) { /* keep status-line msg */ }
+        appendDeployLine('ERROR: ' + msg);
+        setDeployStatus('error', 'failed to start');
+        if (btn) { btn.disabled = false; btn.textContent = 'Deploy now'; }
+        return;
+      }
+    } catch (e) {
+      appendDeployLine('ERROR: ' + (e && e.message ? e.message : String(e)));
+      setDeployStatus('error', 'failed to start');
+      if (btn) { btn.disabled = false; btn.textContent = 'Deploy now'; }
+      return;
+    }
+
+    deployFailStreak = 0;
+    deployLastSawRunning = false;
+    if (deployPollTimer) clearInterval(deployPollTimer);
+    deployPollTimer = setInterval(pollDeploy, 1000);
+    pollDeploy(); // immediate first poll
+  }
+
+  async function pollDeploy() {
+    let snap = null;
+    try {
+      const r = await fetch('/v1/server/deploy-secondary');
+      if (r.ok) snap = await r.json();
+    } catch (_) { /* network/restart hiccup */ }
+
+    if (!snap) {
+      deployFailStreak += 1;
+      // The script restarts the local FastAPI process near the end, so a
+      // burst of fetch failures while status=running is expected. Only call
+      // it actually-failed after enough consecutive misses.
+      if (deployLastSawRunning && deployFailStreak >= 15) {
+        appendDeployLine(
+          '— local server appears restarted; refresh the page to confirm —'
+        );
+        setDeployStatus('done', 'local restarted');
+        if (deployPollTimer) { clearInterval(deployPollTimer); deployPollTimer = null; }
+      } else if (!deployLastSawRunning && deployFailStreak >= 5) {
+        appendDeployLine('ERROR: lost contact with server');
+        setDeployStatus('error', 'lost contact');
+        if (deployPollTimer) { clearInterval(deployPollTimer); deployPollTimer = null; }
+      }
+      return;
+    }
+
+    deployFailStreak = 0;
+    setDeployLog(snap.lines || []);
+
+    if (snap.status === 'running') {
+      deployLastSawRunning = true;
+      setDeployStatus('running', 'running…');
+      return;
+    }
+
+    if (snap.status === 'done') {
+      setDeployStatus('done', 'done (exit 0)');
+    } else if (snap.status === 'error') {
+      const ec = (snap.exit_code != null) ? snap.exit_code : '?';
+      setDeployStatus('error', `error (exit ${ec})`);
+    } else {
+      setDeployStatus(snap.status || 'idle', snap.status || 'idle');
+    }
+    if (deployPollTimer) { clearInterval(deployPollTimer); deployPollTimer = null; }
+
+    // Re-enable button so the user can retry if it failed.
+    const btn = bannerEl && bannerEl.querySelector('.peer-skew-deploy-btn');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = (snap.status === 'done') ? 'Deploy again' : 'Deploy now';
+    }
+  }
+
+  function setDeployStatus(kind, text) {
+    if (!deployStatusEl) return;
+    deployStatusEl.className = `peer-deploy-status peer-deploy-status-${kind}`;
+    deployStatusEl.textContent = text;
+  }
+
+  function setDeployLog(lines) {
+    if (!deployLogEl) return;
+    const nearBottom =
+      deployLogEl.scrollTop + deployLogEl.clientHeight >= deployLogEl.scrollHeight - 8;
+    deployLogEl.textContent = (lines || []).join('\n');
+    if (nearBottom) deployLogEl.scrollTop = deployLogEl.scrollHeight;
+  }
+
+  function appendDeployLine(line) {
+    if (!deployLogEl) return;
+    const nearBottom =
+      deployLogEl.scrollTop + deployLogEl.clientHeight >= deployLogEl.scrollHeight - 8;
+    deployLogEl.textContent += (deployLogEl.textContent ? '\n' : '') + line;
+    if (nearBottom) deployLogEl.scrollTop = deployLogEl.scrollHeight;
   }
 
   async function refresh() {

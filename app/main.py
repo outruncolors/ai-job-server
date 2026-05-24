@@ -95,6 +95,7 @@ from .peer_health import (
     start_peer_poller,
     stop_peer_poller,
 )
+from .deploy_secondary import get_runner as get_deploy_runner
 from .omnivoice.config import get_config
 from .omnivoice.manager import get_manager
 from .omnivoice.router import router as omnivoice_router
@@ -977,6 +978,29 @@ def server_health():
 def server_restart(background_tasks: BackgroundTasks):
     background_tasks.add_task(schedule_restart)
     return ServerRestartResponse(ok=True, message="Restart scheduled")
+
+
+@app.post("/v1/server/deploy-secondary")
+async def server_deploy_secondary(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    peer_host = (body or {}).get("peer_host") if isinstance(body, dict) else None
+
+    runner = get_deploy_runner()
+    try:
+        snap = runner.start(peer_host=peer_host)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return snap
+
+
+@app.get("/v1/server/deploy-secondary")
+def server_deploy_secondary_status():
+    return get_deploy_runner().snapshot()
 
 
 def _doc_title(path: Path) -> str:
