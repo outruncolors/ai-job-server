@@ -69,6 +69,21 @@ Each page under `static/<page>/` has three files (minimum):
 
 Pages can split into multiple JS modules. Script load order: `nav.js` → (page deps / tab modules) → `<page>.js` → `nav-mobile.js`. The voice page loads `voice-segments.js` before `voice.js`. The image page loads `generate-tab.js`, `prompts-tab.js` before `image.js`. The server page loads `comfyui-tab.js`, `llm-tab.js`, `llm-models-tab.js` before `server.js` (LLM tab has two sub-tabs: Models + Endpoints).
 
+### Apps (consumer experiences, walled off from the systems nav)
+
+`app/apps/<name>/` (backend) + `static/apps/<name>/` (frontend), bridged by a single `Apps` entry in `static/js/nav.js`. The `/apps` landing and app pages do **not** load the systems nav (`nav.js`); they style off `responsive.css` tokens and reuse `api.js`/`escape.js`. Design lives under `docs/apps/<name>/`.
+
+| File | Purpose |
+|------|---------|
+| `app/apps/blaboratory/models.py` | `Personality`, `Resident` (v1), `ResidentDraft` (Optional-field LLM-output target) |
+| `app/apps/blaboratory/residents_store.py` | File-per-doc store at `config/blaboratory/residents/<id>.json`; `create_resident` assigns id/timestamps/schema_version |
+| `app/apps/blaboratory/rooms.py` | Occupancy over 16 fixed rooms (`config/blaboratory/occupancy.json`); `set_occupant` rejects out-of-range/occupied |
+| `app/apps/blaboratory/prompts.py` | Id-keyed prompt registry (`IDEATE_FREE_TEXT`/`IDEATE_GUIDED`/`ASSEMBLE`) |
+| `app/apps/blaboratory/generator.py` | `run_generation()` — runs `execute_chain_job` **directly** (not the `JobQueue`); ideate→assemble, parse w/ ≤2 retries, persist resident then occupancy; `job_type="blaboratory_resident"` |
+| `app/apps/blaboratory/router.py` | Routes at `/v1/apps/blaboratory` (`GET /rooms`, `GET /residents/{id}`, `POST /rooms/{room_id}/residents`); included in `app/main.py` |
+
+Status: Part 1 (resident-creation MVP) built. Part 2 (simulation: ticks/channels/memory) is shaped in `docs/apps/blaboratory/design.md` but unbuilt.
+
 ## Architecture
 
 - **Jobs** stored at `JOBS_BASE/YYYY-MM-DD/<uuid>/` with `request.json`, `status.json`, `logs.txt`, `artifacts.json`
