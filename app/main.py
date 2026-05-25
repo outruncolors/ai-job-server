@@ -190,7 +190,12 @@ async def lifespan(app: FastAPI):
             await queue.enqueue(entry["job_id"], runner)
     await start_scheduler()
     await start_peer_poller()
+    from .apps.blaboratory.config import SIM_AUTOSTART
+    from .apps.blaboratory.sim_clock import start_sim_clock, stop_sim_clock
+    if SIM_AUTOSTART:
+        await start_sim_clock()
     yield
+    await stop_sim_clock()
     await stop_peer_poller()
     await stop_scheduler()
     await queue.stop()

@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import time
+from collections import deque
 from datetime import datetime, timezone
+from enum import IntEnum
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
@@ -14,7 +16,15 @@ from .chain.events import EventBus
 log = logging.getLogger(__name__)
 
 Runner = Callable[[], Awaitable[Any]]
-_SENTINEL: tuple = (None, None)
+
+
+class Priority(IntEnum):
+    """Queue lane. HIGH (real/interactive jobs) is always drained before LOW
+    (background game generation). HIGH is the default so existing callers are
+    unaffected."""
+
+    HIGH = 0
+    LOW = 1
 
 # How long a closed EventBus is kept around for late SSE subscribers to replay.
 EVENT_BUS_RETENTION_SECONDS = int(os.environ.get("CHAIN_EVENT_RETENTION_SECONDS", "300"))
@@ -35,7 +45,11 @@ class JobQueue:
     """
 
     def __init__(self) -> None:
-        self._queue: asyncio.Queue[tuple[Optional[str], Optional[Runner]]] = asyncio.Queue()
+        # Two FIFO lanes sharing one worker; HIGH is always drained before LOW.
+        self._high: deque[tuple[str, Runner]] = deque()
+        self._low: deque[tuple[str, Runner]] = deque()
+        # Counts queued items across both lanes (+1 extra released on stop).
+        self._avail = asyncio.Semaphore(0)
         self._pending_ids: set[str] = set()
         self._worker_task: Optional[asyncio.Task] = None
         self._stop_event = asyncio.Event()
@@ -62,7 +76,7 @@ class JobQueue:
         if self._worker_task is None:
             return
         self._stop_event.set()
-        await self._queue.put(_SENTINEL)
+        self._avail.release()  # wake a worker parked on an empty lane
         try:
             await self._worker_task
         except Exception:  # noqa: BLE001
@@ -82,13 +96,17 @@ class JobQueue:
         self._bus_expiry.clear()
         log.info("Job queue worker stopped")
 
-    async def enqueue(self, job_id: str, runner: Runner) -> None:
+    async def enqueue(
+        self, job_id: str, runner: Runner, priority: Priority = Priority.HIGH
+    ) -> None:
         if self._worker_task is None or self._worker_task.done():
             # Lazy-start in case the queue is used without going through the
             # FastAPI lifespan (tests that don't `with TestClient(app)`).
             await self.start()
         self._pending_ids.add(job_id)
-        await self._queue.put((job_id, runner))
+        lane = self._high if priority == Priority.HIGH else self._low
+        lane.append((job_id, runner))
+        self._avail.release()
         # Yield one event-loop tick so the worker (parked on `get()`) can pick
         # this item up before the caller returns. In production the worker
         # would get scheduled anyway; in tests with TestClient the loop only
@@ -162,13 +180,18 @@ class JobQueue:
 
         while True:
             try:
-                job_id, runner = await self._queue.get()
+                await self._avail.acquire()
             except asyncio.CancelledError:
-                return
-            if job_id is None or runner is None:
                 return
             if self._stop_event.is_set():
                 return
+            item = self._high.popleft() if self._high else (
+                self._low.popleft() if self._low else None
+            )
+            if item is None:
+                # Spurious wake (e.g. an item was cancel-skipped) — re-park.
+                continue
+            job_id, runner = item
             self._pending_ids.discard(job_id)
 
             if not _job_still_queued(find_job_dir(job_id)):

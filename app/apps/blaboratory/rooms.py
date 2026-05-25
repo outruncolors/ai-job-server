@@ -56,6 +56,20 @@ def is_empty(room_id: int) -> bool:
     return get_room(room_id) is None
 
 
+def room_of(resident_id: str) -> Optional[int]:
+    """The room a resident occupies, or None if they're not placed."""
+    for room_id, occ in _read().items():
+        if occ == resident_id:
+            return int(room_id)
+    return None
+
+
+def occupied_rooms() -> list[tuple[int, str]]:
+    """(room_id, resident_id) pairs for every occupied room, ascending by room."""
+    occ = _read()
+    return [(int(r), occ[str(r)]) for r in ROOM_IDS if occ[str(r)] is not None]
+
+
 def set_occupant(room_id: int, resident_id: str) -> None:
     """Place a resident in a room. Rejects out-of-range rooms and refuses to
     overwrite an already-occupied room.
