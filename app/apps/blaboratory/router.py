@@ -16,10 +16,33 @@ from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import residents_store, rooms
+from . import (
+    context_pipeline,
+    event_store,
+    residents_store,
+    rooms,
+    sim_clock,
+    tick_runner,
+    utterance_store,
+)
 from .generator import GenerationError, run_generation
 
 router = APIRouter(prefix="/v1/apps/blaboratory", tags=["blaboratory"])
+
+# Map an action name to the single word shown on its room's grid cell.
+_ACTION_WORD = {
+    "use_computer": "computer",
+    "use_televisor": "televisor",
+    "use_speakerphone": "phone",
+    "sleep": "asleep",
+    "idle": "idle",
+}
+
+
+def _action_word(action: Optional[str]) -> Optional[str]:
+    if not action:
+        return None
+    return _ACTION_WORD.get(action, action)
 
 
 class CreateResidentRequest(BaseModel):
@@ -90,3 +113,82 @@ async def create_resident_in_room(room_id: int, body: CreateResidentRequest) -> 
         raise HTTPException(status_code=502, detail=f"generation failed: {exc}")
 
     return {"resident": resident, "room_id": room_id, "job_id": job_id}
+
+
+# ---- simulation: timeline / events / clock -------------------------------
+
+
+@router.get("/ticks/latest")
+async def get_latest_tick() -> dict:
+    return {"tick": event_store.max_tick()}
+
+
+@router.get("/ticks/{tick}/rooms")
+async def get_rooms_at_tick(tick: int) -> dict:
+    """Per-room most-recent-action word at/under ``tick`` (master grid)."""
+    occ = rooms.list_occupancy()
+    out = []
+    for rid in rooms.ROOM_IDS:
+        occupant = _occupant_summary(occ[str(rid)])
+        word = None
+        if occupant is not None:
+            ev = event_store.latest_event_for_room(rid, until_tick=tick)
+            word = _action_word(ev["action"]) if ev else None
+        out.append({"room_id": rid, "occupant": occupant, "action_word": word})
+    return {"tick": tick, "rooms": out}
+
+
+@router.get("/residents/{resident_id}/events")
+async def get_resident_events(resident_id: str, until_tick: Optional[int] = None) -> dict:
+    """A resident's event log, newest-first, truncated at the playhead."""
+    if residents_store.get_resident(resident_id) is None:
+        raise HTTPException(status_code=404, detail="resident not found")
+    return {
+        "resident_id": resident_id,
+        "until_tick": until_tick,
+        "events": event_store.events_for_resident(resident_id, until_tick=until_tick),
+    }
+
+
+@router.get("/residents/{resident_id}/context")
+async def get_resident_context(resident_id: str, tick: Optional[int] = None) -> dict:
+    """The resident's active context/knowledge block (debug/inspection)."""
+    resident = residents_store.get_resident(resident_id)
+    if resident is None:
+        raise HTTPException(status_code=404, detail="resident not found")
+    t = tick if tick is not None else event_store.max_tick()
+    return {"resident_id": resident_id, "tick": t, "context": context_pipeline.build_context(resident, tick=t)}
+
+
+@router.get("/rooms/{room_id}/utterances")
+async def get_room_utterances(room_id: int, until_tick: Optional[int] = None) -> dict:
+    """Phone-call lines surfaced in a room (newest-first, truncated at playhead)."""
+    if room_id not in rooms.ROOM_IDS:
+        raise HTTPException(status_code=422, detail="room_id must be 1–16")
+    return {
+        "room_id": room_id,
+        "utterances": utterance_store.utterances_for_room(room_id, until_tick=until_tick),
+    }
+
+
+@router.post("/ticks/fire")
+async def fire_tick_now() -> dict:
+    """Manually fire one tick now (runs on the LOW background lane)."""
+    tick = tick_runner.next_tick()
+    job_id = await sim_clock.fire_tick(tick)
+    return {"tick": tick, "job_id": job_id}
+
+
+@router.get("/clock")
+async def get_clock() -> dict:
+    return {"running": sim_clock.get_sim_clock().running}
+
+
+@router.post("/clock/{command}")
+async def control_clock(command: Literal["start", "stop"]) -> dict:
+    clock = sim_clock.get_sim_clock()
+    if command == "start":
+        await clock.start()
+    else:
+        await clock.stop()
+    return {"running": clock.running}

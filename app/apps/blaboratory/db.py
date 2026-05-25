@@ -46,7 +46,11 @@ def get_connection() -> sqlite3.Connection:
         _conn.close()
         _conn = None
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(target)
+    # check_same_thread=False: the single connection is shared between the event
+    # loop thread (async routes) and worker/threadpool threads. Access is
+    # effectively serialized (one queue worker; handlers await on one loop), and
+    # sqlite serializes statements on the connection, so this is safe here.
+    conn = sqlite3.connect(target, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
