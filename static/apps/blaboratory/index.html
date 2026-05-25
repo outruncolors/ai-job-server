@@ -14,6 +14,21 @@
     <p class="subtitle">Sixteen rooms. Fill them with residents.</p>
   </header>
 
+  <!-- Timeline scrubber + sim controls -->
+  <div id="timeline">
+    <div class="tl-scrub">
+      <button type="button" id="tl-prev" aria-label="Previous tick">◀</button>
+      <span id="tl-label" class="tl-label">Tick 0</span>
+      <button type="button" id="tl-next" aria-label="Next tick">▶</button>
+      <button type="button" id="tl-latest" class="secondary">Jump to latest</button>
+    </div>
+    <div class="tl-sim">
+      <button type="button" id="tl-fire">⊕ Fire tick</button>
+      <button type="button" id="tl-clock" class="secondary">▶ Start clock</button>
+      <span id="tl-status" class="tl-status"></span>
+    </div>
+  </div>
+
   <main id="grid" aria-busy="false"></main>
 
   <!-- Fill Room dialog -->

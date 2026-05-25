@@ -28,12 +28,17 @@
   let currentRoom = null;
   let currentMode = 'free_text';
 
+  // ── Timeline state ────────────────────────────────────────────────────
+  let latestTick = 0;   // newest tick the server has produced
+  let playhead = 0;     // tick currently being viewed (manual scrub)
+  let following = true; // playhead tracks latest until the user scrubs back
+
   // ── Grid ──────────────────────────────────────────────────────────────
   async function loadGrid() {
     grid.setAttribute('aria-busy', 'true');
     let data;
     try {
-      data = await api(`${APP}/rooms`);
+      data = await api(`${APP}/ticks/${playhead}/rooms`);
     } catch (e) {
       grid.innerHTML = `<p class="error">Could not load rooms: ${_escHtml(e.message)}</p>`;
       return;
@@ -47,16 +52,82 @@
     const n = room.room_id;
     if (room.occupant) {
       const o = room.occupant;
+      const word = room.action_word
+        ? `<span class="cell-action">${_escHtml(room.action_word)}</span>` : '';
       return `<button class="cell occupied" data-room="${n}" data-rid="${_escHtml(o.id)}">
         <span class="cell-num">#${n}</span>
         <span class="cell-name">${_escHtml(o.name)}</span>
         <span class="cell-occ">${_escHtml(o.occupation)}</span>
+        ${word}
       </button>`;
     }
     return `<button class="cell empty" data-room="${n}" data-fill="1">
       <span class="cell-num">#${n}</span>
       <span class="cell-fill">+ Fill Room</span>
     </button>`;
+  }
+
+  // ── Timeline scrubber + sim controls ──────────────────────────────────
+  function renderTimeline() {
+    $('tl-label').textContent =
+      `Tick ${playhead}` + (playhead === latestTick ? ' (latest)' : ` / ${latestTick}`);
+    $('tl-prev').disabled = playhead <= 0;
+    $('tl-next').disabled = playhead >= latestTick;
+    $('tl-latest').disabled = playhead === latestTick;
+  }
+
+  async function refreshLatest() {
+    try {
+      const data = await api(`${APP}/ticks/latest`);
+      latestTick = data.tick;
+      if (following) playhead = latestTick;
+    } catch (e) { /* leave prior values on a transient error */ }
+  }
+
+  async function setPlayhead(t) {
+    playhead = Math.max(0, Math.min(t, latestTick));
+    following = playhead === latestTick;
+    renderTimeline();
+    await loadGrid();
+  }
+
+  async function fireTick() {
+    const status = $('tl-status');
+    status.textContent = 'Firing tick…';
+    try {
+      await api(`${APP}/ticks/fire`, 'POST');
+      status.textContent = 'Tick queued (runs in the background).';
+    } catch (e) {
+      status.textContent = `Could not fire tick: ${e.message}`;
+    }
+  }
+
+  async function toggleClock() {
+    const btn = $('tl-clock');
+    try {
+      const cur = await api(`${APP}/clock`);
+      const next = cur.running ? 'stop' : 'start';
+      const res = await api(`${APP}/clock/${next}`, 'POST');
+      reflectClock(res.running);
+    } catch (e) {
+      $('tl-status').textContent = `Clock error: ${e.message}`;
+    }
+  }
+
+  function reflectClock(running) {
+    const btn = $('tl-clock');
+    btn.textContent = running ? '⏸ Stop clock' : '▶ Start clock';
+    btn.classList.toggle('running', running);
+  }
+
+  // Poll for newly-finished ticks; live-append when following the latest.
+  async function poll() {
+    const prevLatest = latestTick;
+    await refreshLatest();
+    if (latestTick !== prevLatest) {
+      renderTimeline();
+      if (following) await loadGrid();
+    }
   }
 
   grid.addEventListener('click', (e) => {
@@ -183,7 +254,65 @@
       ]),
       r.backstory ? `<section class="d-sec"><h4>Backstory</h4>
         <p class="d-prose">${_escHtml(r.backstory)}</p></section>` : '',
+      `<section class="d-sec" id="d-events"><h4>Event log <span class="d-sub">(through tick ${playhead})</span></h4>
+        <div class="d-log">Loading…</div></section>`,
+      `<details class="d-sec"><summary>Active context / knowledge</summary>
+        <pre class="d-context" id="d-context">Loading…</pre></details>`,
     ].join('');
+
+    loadActivity(rid, r.room_id);
+  }
+
+  // Event log (newest-first, truncated at playhead) + the call lines for this
+  // resident's room + the active-context inspection panel.
+  async function loadActivity(rid, roomId) {
+    try {
+      const [ev, ctx] = await Promise.all([
+        api(`${APP}/residents/${rid}/events?until_tick=${playhead}`),
+        api(`${APP}/residents/${rid}/context?tick=${playhead}`),
+      ]);
+      let utter = { utterances: [] };
+      if (roomId != null) {
+        utter = await api(`${APP}/rooms/${roomId}/utterances?until_tick=${playhead}`);
+      }
+      renderLog($('d-events').querySelector('.d-log'), ev.events, utter.utterances);
+      const ctxEl = $('d-context');
+      if (ctxEl) ctxEl.textContent = ctx.context || '(empty)';
+    } catch (e) {
+      const log = $('d-events') && $('d-events').querySelector('.d-log');
+      if (log) log.innerHTML = `<p class="error">${_escHtml(e.message)}</p>`;
+    }
+  }
+
+  function renderLog(el, events, utterances) {
+    // Merge events + utterances into one newest-first list keyed by tick.
+    const rows = [];
+    (events || []).forEach((e) => rows.push({
+      tick: e.tick, id: `e${e.id}`,
+      text: `${_actionVerb(e.action || e.kind)}${_summaryOf(e)}`,
+    }));
+    (utterances || []).forEach((u) => rows.push({
+      tick: u.tick, id: `u${u.id}`, speaker: u.speaker_resident_id,
+      text: `📞 “${u.body}”`,
+    }));
+    rows.sort((a, b) => (b.tick - a.tick) || b.id.localeCompare(a.id));
+    if (!rows.length) { el.innerHTML = '<p class="hint">No activity yet.</p>'; return; }
+    el.innerHTML = rows.map((r) =>
+      `<div class="log-row"><span class="log-tick">#${r.tick}</span>
+        <span class="log-text">${_escHtml(r.text)}</span></div>`).join('');
+  }
+
+  function _actionVerb(a) {
+    const map = {
+      use_computer: 'Used the computer', use_televisor: 'Watched the televisor',
+      use_speakerphone: 'Used the speakerphone', sleep: 'Slept', idle: 'Idled',
+    };
+    return map[a] || (a || 'Acted');
+  }
+
+  function _summaryOf(e) {
+    const s = e.payload && e.payload.summary;
+    return s ? ` — ${s}` : '';
   }
 
   // ── Wiring ───────────────────────────────────────────────────────────
@@ -195,5 +324,18 @@
   $('fill-close').addEventListener('click', () => $('fill-dialog').close());
   $('detail-close').addEventListener('click', () => $('detail-dialog').close());
 
-  loadGrid();
+  // Timeline + sim controls.
+  $('tl-prev').addEventListener('click', () => setPlayhead(playhead - 1));
+  $('tl-next').addEventListener('click', () => setPlayhead(playhead + 1));
+  $('tl-latest').addEventListener('click', () => setPlayhead(latestTick));
+  $('tl-fire').addEventListener('click', fireTick);
+  $('tl-clock').addEventListener('click', toggleClock);
+
+  (async function init() {
+    await refreshLatest();
+    renderTimeline();
+    await loadGrid();
+    try { reflectClock((await api(`${APP}/clock`)).running); } catch (e) { /* ignore */ }
+    setInterval(poll, 5000);
+  })();
 })();

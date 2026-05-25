@@ -20,6 +20,46 @@ body {
 #lab-header h1 { margin: 12px 0 4px; font-size: 1.5rem; letter-spacing: 0.04em; color: #fff; }
 #lab-header .subtitle { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-sm); }
 
+/* ── Timeline scrubber + sim controls ── */
+#timeline {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 4px 24px 0;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--gap-sm);
+}
+#timeline button {
+  background: var(--color-bg-panel); color: var(--color-text-sub);
+  border: 1px solid var(--color-border); border-radius: 8px;
+  padding: 6px 12px; font-family: inherit; font-size: var(--font-size-xs); cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+#timeline button:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
+#timeline button:disabled { opacity: 0.4; cursor: default; }
+#timeline button.running { border-color: var(--color-accent); color: var(--color-accent); }
+.tl-scrub, .tl-sim { display: flex; align-items: center; gap: var(--gap-sm); }
+.tl-label { font-size: var(--font-size-xs); color: var(--color-text-muted); min-width: 9ch; text-align: center; }
+.tl-status { font-size: var(--font-size-micro); color: var(--color-text-muted); }
+
+/* most-recent-action word on an occupied cell */
+.cell-action {
+  font-size: var(--font-size-micro); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--color-accent); margin-top: 2px;
+}
+
+/* ── Detail: event log + context ── */
+.d-sub { color: var(--color-text-dim); font-weight: 400; font-size: var(--font-size-micro); }
+.d-log { display: flex; flex-direction: column; gap: 4px; }
+.log-row { display: flex; gap: 8px; font-size: var(--font-size-xs); }
+.log-tick { color: var(--color-text-dim); flex: 0 0 auto; }
+.log-text { color: var(--color-text-sub); }
+.d-context {
+  white-space: pre-wrap; word-break: break-word; font-size: var(--font-size-micro);
+  color: var(--color-text-muted); background: var(--color-bg); border: 1px solid var(--color-border);
+  border-radius: 8px; padding: 10px; margin: 6px 0 0; max-height: 280px; overflow: auto;
+}
+details.d-sec > summary { cursor: pointer; color: var(--color-text-sub); font-weight: 700; }
+
 /* ── Grid ── */
 #grid {
   max-width: 880px;
