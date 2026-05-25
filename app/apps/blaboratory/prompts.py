@@ -74,6 +74,17 @@ strings), and "speech_style" (string)
 Respond with JSON only — no markdown, no code fences, no commentary."""
 
 
+# Composable prompt nodes (design.md Part 2 → Prompt system). These have no
+# `{{var.NAME}}` variables yet — only chain tokens ({{input}}/{{previous}}),
+# which `compose` deliberately leaves intact for the chain executor — so each
+# composes back to its literal text. Expressing them as nodes lets later
+# action/call prompts reuse fragments by reference.
+NODES: dict[str, dict] = {
+    "IDEATE_FREE_TEXT": {"prompt": IDEATE_FREE_TEXT},
+    "IDEATE_GUIDED": {"prompt": IDEATE_GUIDED},
+    "ASSEMBLE": {"prompt": ASSEMBLE},
+}
+
 _REGISTRY: dict[str, str] = {
     "IDEATE_FREE_TEXT": IDEATE_FREE_TEXT,
     "IDEATE_GUIDED": IDEATE_GUIDED,
@@ -82,5 +93,11 @@ _REGISTRY: dict[str, str] = {
 
 
 def get_prompt(prompt_id: str) -> str:
-    """Look up a prompt template by id (raises KeyError if unknown)."""
-    return _REGISTRY[prompt_id]
+    """Look up a prompt template by id (raises KeyError if unknown).
+
+    Resolves through the composable-prompt resolver, so any `{{var.NAME}}`
+    fragments added later are expanded while chain tokens pass through untouched.
+    """
+    from .prompt_compose import compose
+
+    return compose(NODES[prompt_id])
