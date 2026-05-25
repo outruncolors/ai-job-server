@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Blaboratory · Apps</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header id="lab-header">
+    <a href="/apps/" class="back-link">&larr; Apps</a>
+    <h1>⚗ Blaboratory</h1>
+    <p class="subtitle">Sixteen rooms. Fill them with residents.</p>
+  </header>
+
+  <main id="grid" aria-busy="false"></main>
+
+  <!-- Fill Room dialog -->
+  <dialog id="fill-dialog">
+    <form id="fill-form" method="dialog">
+      <div class="dlg-head">
+        <h3 id="fill-title">Fill Room</h3>
+        <button type="button" class="x" id="fill-close" aria-label="Close">×</button>
+      </div>
+
+      <div class="mode-toggle">
+        <button type="button" class="mode-btn active" data-mode="free_text">Describe</button>
+        <button type="button" class="mode-btn" data-mode="guided">Build</button>
+      </div>
+
+      <!-- Describe (free_text) -->
+      <div id="mode-free_text" class="mode-panel">
+        <label>Describe the resident</label>
+        <textarea id="free-text" rows="5"
+          placeholder="e.g. a grumpy retired astronomer who hoards teacups"></textarea>
+      </div>
+
+      <!-- Build (guided) -->
+      <div id="mode-guided" class="mode-panel" hidden>
+        <p class="hint">Fill what you want; the model invents the rest.</p>
+        <div class="field-grid" id="guided-fields"></div>
+      </div>
+
+      <div id="fill-msg" class="msg"></div>
+      <div class="dlg-actions">
+        <button type="button" class="secondary" id="fill-cancel">Cancel</button>
+        <button type="button" id="fill-submit">Generate resident</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Resident detail dialog -->
+  <dialog id="detail-dialog">
+    <div class="dlg-head">
+      <h3 id="detail-name">Resident</h3>
+      <button type="button" class="x" id="detail-close" aria-label="Close">×</button>
+    </div>
+    <div id="detail-body"></div>
+  </dialog>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="blaboratory.js"></script>
+</body>
+</html>

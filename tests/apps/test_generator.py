@@ -130,6 +130,19 @@ async def test_guided_fields_win_over_model(monkeypatch):
     assert resident["age"] == 71
 
 
+async def test_missing_default_llm_raises_generation_error(monkeypatch):
+    _patch_llm(monkeypatch, [IDEATE_PROSE, VALID_JSON])
+
+    def _no_default():
+        raise RuntimeError("No default LLM preset configured")
+
+    monkeypatch.setattr(generator, "get_default_as_chain_llm_config", _no_default)
+
+    with pytest.raises(generator.GenerationError):
+        await generator.run_generation(room_id=7, mode="free_text", free_text="x")  # no llm passed
+    assert rooms.is_empty(7)
+
+
 async def test_occupied_room_rejected_before_generation(monkeypatch):
     state = _patch_llm(monkeypatch, [IDEATE_PROSE, VALID_JSON])
     rooms.set_occupant(6, "someone-else")

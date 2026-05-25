@@ -158,7 +158,12 @@ async def run_generation(
     if not rooms.is_empty(room_id):
         raise GenerationError(f"room {room_id} is already occupied")
 
-    llm = llm or get_default_as_chain_llm_config()
+    if llm is None:
+        try:
+            llm = get_default_as_chain_llm_config()
+        except RuntimeError as exc:
+            # e.g. no default endpoint preset configured — report cleanly, not 500.
+            raise GenerationError(str(exc)) from exc
     request = build_generation_request(mode, free_text, fields, llm)
 
     status = create_job(JOB_TYPE, request.model_dump(), request.input)

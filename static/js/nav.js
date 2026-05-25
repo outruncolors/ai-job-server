@@ -11,7 +11,8 @@
     { href: '/tickets/', label: 'Tickets',  page: 'tickets' },
     { href: '/server',   label: 'Server',   page: 'server'  },
     { href: '/jobs',     label: 'Jobs',     page: 'jobs'    },
-    { href: '/docs/',    label: 'Docs',     page: 'docs'    },
+    { href: '/docs/',    label: 'Docs',     page: 'docs',   groupEnd: true },
+    { href: '/apps/',    label: 'Apps',     page: 'apps'    },
   ];
 
   const nav = document.getElementById('topnav');
