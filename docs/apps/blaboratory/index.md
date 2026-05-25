@@ -1,8 +1,9 @@
 # Blaboratory
 
-A virtual lab of AI **residents** living in 16 rooms. The MVP (built — Part 1)
-is the **resident-creation loop**; simulation (ticks, channels, actions) is
-future work (Part 2).
+A virtual lab of AI **residents** living in 16 rooms. Part 1 (built) is the
+**resident-creation loop**; Part 2 (built, minus two deferred systems) adds the
+**simulation** — ticks, actions/channels, memory, phone calls, and a scrubable
+timeline. Deferred: the vector retrieval index and the televisor/news generator.
 
 - **[Design](design.md)** — the canonical "what & why" (Part 1 MVP + Part 2 shape).
 - **[Part 1 — MVP build plan](mvp-build-plan.md)** — phased sequencing for the resident-creation loop (built).
@@ -41,3 +42,28 @@ With a missing/failed model the request returns `502`.
 - **API** (`router.py`, prefix `/v1/apps/blaboratory`) — `GET /rooms`,
   `GET /residents/{id}`, `POST /rooms/{room_id}/residents` (`409` occupied,
   `422` bad body, `502` generation failure), `GET /residents` (debug).
+
+## Simulation (Part 2)
+
+Once rooms are filled, the world can run. Every **tick**, each occupant takes one
+action (the LLM chooses: `use_computer`, `use_televisor`, `use_speakerphone`,
+`sleep`, `idle`, or Continue an ongoing activity). Actions read a fixed-section
+context block (`[Overview]`/`[Everyone Knows]`/`[Some Know]`/`[You Know]`/`[Your
+Action]`) and write back to an append-only SQLite log
+(`config/blaboratory/blaboratory.db`). Visibility = consumption: a resident only
+knows chat/news it has consumed (tracked by per-resident cursors).
+
+- **Driving it** — the page's timeline bar has **Fire tick** (one tick now) and
+  **Start/Stop clock** (auto-fire every `BLAB_TICK_INTERVAL_SECONDS`, default 300s).
+  The clock does **not** auto-start at boot unless `BLAB_SIM_AUTOSTART=1`. Tick
+  work runs on the job queue's **LOW** lane so it never starves real jobs.
+- **Watching it** — scrub the **tick** timeline (no auto-advance); each occupied
+  room shows its most-recent-action word; a room's detail shows the event log
+  (truncated at the playhead) + the resident's active context. Phone-call lines
+  render in both participants' rooms.
+- **Sim API** — `GET /ticks/latest`, `GET /ticks/{tick}/rooms`,
+  `GET /residents/{id}/events?until_tick=`, `GET /residents/{id}/context?tick=`,
+  `GET /rooms/{id}/utterances`, `POST /ticks/fire`, `GET`+`POST /clock`.
+
+See **[Part 2 — Simulation build plan](part2-build-plan.md)** for module map and
+**[Design](design.md)** §"Part 2 — Build notes" for what landed.

@@ -276,3 +276,47 @@ covers it); optionally a Claude skill generates the JSON. Game sequences stay co
 - **Live append:** a finishing tick appears as a new timeline entry (poll the event log or a
   lightweight SSE feed — NOT the per-job EventBus).
 - A phone call's utterances render in **both** participants' rooms.
+
+---
+
+## Part 2 — Build notes (what landed / drifted)
+
+Part 2 is built **except** the two deferred systems (vector retrieval, news generator). Phased
+sequencing lived in [`part2-build-plan.md`](./part2-build-plan.md). Decisions made during the build,
+recorded so the design stays truthful:
+
+- **Persistence** — `app/apps/blaboratory/db.py` owns the connection + `PRAGMA user_version`
+  migrations; per-table helpers are `event_store` / `chat_store` / `cursor_store` / `utterance_store`.
+  The connection uses `check_same_thread=False` (the single connection is shared between the event
+  loop and worker/threadpool threads; access is effectively serialized).
+- **Context pipeline** — `context_pipeline.build_context` fills the five fixed sections; `[Some Know]`
+  is **emitted empty** (rule still TBD). `[Everyone Knows]` reads `config/blaboratory/lore/world.json`
+  (the news-generator *writer* is deferred). Retrieval is mechanical recency/size-cap
+  (`gather_memories` + `apply_caps`); the vector index will later slot in behind `gather_memories`.
+- **Priority queue** — `app/job_queue.py` gained two FIFO lanes (`Priority.HIGH`/`LOW`) sharing the
+  one worker via a counting semaphore. **HIGH is the default**, so no existing call site changed; tick
+  work enqueues on LOW.
+- **All occupants act each tick**; `sleep` is just an action (no awake/enabled flag). Current
+  multi-tick activity (action + count) lives in `activity_store`; the per-tick decision is an LLM
+  free-choice (`tick_runner.decide`/`run_tick`) with Continue as one option and the activity's
+  breakpoint clause composed into the prompt as `count` climbs.
+- **Sim clock** — `sim_clock.SimClock` clones the `TickScheduler` loop and fires **one LOW job per
+  tick**. It is wired into the FastAPI lifespan but **auto-start is gated by `BLAB_SIM_AUTOSTART`
+  (default off)** so the server never silently runs continuous LLM generation; the clock is otherwise
+  driven via `POST /clock/{start,stop}` and `POST /ticks/fire`.
+- **Phone call** — `call_sequence.run_call` runs inside the caller's tick (the callee is marked busy
+  and forfeits its action). The turn loop (accept/decline → topic → alternating lines →
+  continue/segue/end) is **orchestrated in Python, reusing `execute_chain_job` per turn** rather than
+  encoded as literal weighted-`goto` steps — a deliberate, testable simplification of the
+  single-goto-chain framing; re-encoding it as goto steps is a clean later refactor. Each line is
+  written to **both** rooms. Callee selection is a random other occupant.
+- **Prompt composition** — `prompt_compose.compose` resolves `{prompt, variables}` nodes (literal /
+  nested / stored-by-id), substituting only `{{var.NAME}}` and leaving chain tokens intact;
+  `prompts_store` backs `{"prompt_id": ...}` references. Part 1 prompts now route through it
+  (`prompts.get_prompt` unchanged externally).
+- **Timeline UI** — the existing `static/apps/blaboratory/` trio gained a tick scrubber, per-cell
+  action word, an event log (merged with call utterances) + active-context panel, and **polling-based**
+  live append (`/ticks/latest` every 5s — no new SSE).
+
+Still deferred / open: the **vector retrieval index** (sqlite-vec + llama.cpp embeddings), the
+**televisor/news generator**, the **`[Some Know]`** scoping rule, and ComfyUI image slideshows.

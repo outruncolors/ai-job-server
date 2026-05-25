@@ -78,11 +78,22 @@ Pages can split into multiple JS modules. Script load order: `nav.js` → (page 
 | `app/apps/blaboratory/models.py` | `Personality`, `Resident` (v1), `ResidentDraft` (Optional-field LLM-output target) |
 | `app/apps/blaboratory/residents_store.py` | File-per-doc store at `config/blaboratory/residents/<id>.json`; `create_resident` assigns id/timestamps/schema_version |
 | `app/apps/blaboratory/rooms.py` | Occupancy over 16 fixed rooms (`config/blaboratory/occupancy.json`); `set_occupant` rejects out-of-range/occupied |
-| `app/apps/blaboratory/prompts.py` | Id-keyed prompt registry (`IDEATE_FREE_TEXT`/`IDEATE_GUIDED`/`ASSEMBLE`) |
+| `app/apps/blaboratory/prompts.py` | Id-keyed prompt registry (`IDEATE_FREE_TEXT`/`IDEATE_GUIDED`/`ASSEMBLE`); `get_prompt` now routes through `compose` (back-compat) |
 | `app/apps/blaboratory/generator.py` | `run_generation()` — runs `execute_chain_job` **directly** (not the `JobQueue`); ideate→assemble, parse w/ ≤2 retries, persist resident then occupancy; `job_type="blaboratory_resident"` |
-| `app/apps/blaboratory/router.py` | Routes at `/v1/apps/blaboratory` (`GET /rooms`, `GET /residents/{id}`, `POST /rooms/{room_id}/residents`); included in `app/main.py` |
+| `app/apps/blaboratory/router.py` | Routes at `/v1/apps/blaboratory` — Part 1 (`GET /rooms`, `GET /residents/{id}`, `POST /rooms/{room_id}/residents`) + Part 2 sim (`GET /ticks/latest`, `GET /ticks/{tick}/rooms`, `GET /residents/{id}/events`, `GET /residents/{id}/context`, `GET /rooms/{id}/utterances`, `POST /ticks/fire`, `GET`+`POST /clock`); included in `app/main.py` |
+| `app/apps/blaboratory/db.py` | Owns the SQLite connection (`config/blaboratory/blaboratory.db`, `check_same_thread=False`) + `PRAGMA user_version` migrations. Tables: `events`, `chat`, `utterances`, `calls`, `consumption_cursors` |
+| `app/apps/blaboratory/{event,chat,cursor,utterance}_store.py` | Per-table query/append helpers over `db.py` (newest-first reads, JSON payloads, consumption cursors, call/utterance ranges) |
+| `app/apps/blaboratory/context_pipeline.py` | `build_context()` fills the 5 fixed sections (`[Some Know]` empty; `[Everyone Knows]` reads `lore/world.json`); `gather_memories`+`apply_caps` (mechanical recency); `write_phase()` persists an action + advances consumption cursors (visibility = consumption) |
+| `app/apps/blaboratory/prompt_compose.py` + `prompts_store.py` | `compose(node)` resolver over `{prompt, variables}` (literal/nested/`prompt_id`), substitutes only `{{var.NAME}}` (chain tokens pass through); file-per-doc prompt assets |
+| `app/apps/blaboratory/actions/` | Action plugins (mirror MCP tools): `use_computer`/`use_televisor`/`use_speakerphone`/`sleep`/`idle` + `registry`; `Action` carries `breakpoints`+`multi_tick`; each `run()` returns the `write_phase` result dict |
+| `app/apps/blaboratory/activity_store.py` | Current multi-tick activity per resident (`{action, count}`) for sleep/Continue |
+| `app/apps/blaboratory/tick_runner.py` | `run_tick()` — every occupant takes one action; per-tick LLM free-choice (`_choose` runs one decision chain job each via `execute_chain_job` direct), Continue option + breakpoint clause |
+| `app/apps/blaboratory/sim_clock.py` | `SimClock` (clones `TickScheduler`) fires one LOW-lane job per tick; `fire_tick()`; lifespan-wired, auto-start gated by `BLAB_SIM_AUTOSTART` (default off) |
+| `app/apps/blaboratory/call_sequence.py` | `run_call()` — phone call inside the caller's tick (callee accepts/declines, topic→lines→continue/segue/end), reuses `execute_chain_job` per turn; lines written to both rooms; callee marked busy |
+| `app/apps/blaboratory/config.py` | Sim tunables: `TICK_INTERVAL_SECONDS`, `MAX_MEMORY_ITEMS/CHARS`, `SIM_AUTOSTART` (env-overridable) |
+| `app/job_queue.py` | `JobQueue` now has two FIFO lanes (`Priority.HIGH`/`LOW`, HIGH default) sharing the one worker via a counting semaphore — HIGH drained first, running job never interrupted |
 
-Status: Part 1 (resident-creation MVP) built. Part 2 (simulation: ticks/channels/memory) is shaped in `docs/apps/blaboratory/design.md` but unbuilt.
+Status: Part 1 (resident-creation MVP) **and** Part 2 (simulation: ticks/channels/memory/phone calls/timeline) built — see `docs/apps/blaboratory/part2-build-plan.md`. Deferred: vector retrieval index (sqlite-vec + llama.cpp embeddings) and the televisor/news generator; `[Some Know]` scoping rule TBD.
 
 ## Architecture
 
