@@ -59,6 +59,7 @@ from .comfyui.router import router as comfyui_router
 from .comfyui.runner import execute_image_job
 from .llamacpp.manager import get_manager as get_llamacpp_manager
 from .llamacpp.router import router as llamacpp_router
+from .apps.blaboratory.router import router as blaboratory_router
 from . import jobs as _jobs_module
 from .jobs import (
     build_jobs_zip,
@@ -205,6 +206,7 @@ app.include_router(omnivoice_router, dependencies=[Depends(requires_capability("
 app.include_router(llamacpp_router, dependencies=[Depends(requires_capability("llm"))])
 app.include_router(presets_router)
 app.include_router(mcp_router)
+app.include_router(blaboratory_router)
 
 
 @app.get("/health", response_model=HealthResponse)
