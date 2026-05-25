@@ -1,9 +1,10 @@
 """use_speakerphone — call another resident on the speakerphone.
 
-Phase 4 stub: records the intent as an event. The real behavior — an atomic
-phone-call chain sequence where the callee accepts/declines and the two trade
-utterances, with the callee forfeiting its own action that tick — is wired in
-Phase 6 (``call_sequence.run_call``).
+Picks a random other occupant and runs the atomic phone-call sequence
+(``call_sequence.run_call``) inside the caller's tick: the callee accepts or
+declines from its own context, and on accept the two trade lines while the
+callee forfeits its own action (marked busy on ``deps``). The lines surface in
+both rooms; this action contributes the caller's top-level event.
 """
 
 from __future__ import annotations
@@ -13,10 +14,34 @@ from .base import Action
 
 
 async def _run(resident, tick, context, args, deps=None):
+    from ..call_sequence import pick_callee, run_call
+
+    room_id = rooms.room_of(resident["id"])
+    llm = getattr(deps, "llm", None)
+    busy = getattr(deps, "busy", set())
+
+    callee = pick_callee(resident["id"], busy=busy) if llm is not None else None
+    if callee is None:
+        return {
+            "action": "use_speakerphone",
+            "room_id": room_id,
+            "payload": {"summary": "picked up the speakerphone but had no one to call"},
+        }
+
+    result = await run_call(resident, callee, tick, llm, deps=deps)
+    if result["accepted"]:
+        summary = f"called {callee['name']} and talked ({result['lines']} lines)"
+    else:
+        summary = f"called {callee['name']} — no answer"
     return {
         "action": "use_speakerphone",
-        "room_id": rooms.room_of(resident["id"]),
-        "payload": {"summary": "reached for the speakerphone (no call placed yet)"},
+        "room_id": room_id,
+        "payload": {
+            "summary": summary,
+            "callee_id": callee["id"],
+            "call_id": result["call_id"],
+            "accepted": result["accepted"],
+        },
     }
 
 
