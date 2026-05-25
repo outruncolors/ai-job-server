@@ -5,7 +5,8 @@ is the **resident-creation loop**; simulation (ticks, channels, actions) is
 future work (Part 2).
 
 - **[Design](design.md)** — the canonical "what & why" (Part 1 MVP + Part 2 shape).
-- **[MVP build plan](mvp-build-plan.md)** — phased build sequencing.
+- **[Part 1 — MVP build plan](mvp-build-plan.md)** — phased sequencing for the resident-creation loop (built).
+- **[Part 2 — Simulation build plan](part2-build-plan.md)** — phased sequencing for ticks, channels, memory, and the timeline UI.
 
 ## Using it (MVP)
 
