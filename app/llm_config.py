@@ -51,14 +51,20 @@ def list_presets() -> dict:
 
 def save_preset(data: dict) -> LLMPreset:
     doc = _read()
-    existing = next((p for p in doc.presets if p.name == data["name"]), None)
+    incoming_id = data.get("id")
+    existing = None
+    if incoming_id:
+        existing = next((p for p in doc.presets if p.id == incoming_id), None)
+    if existing is None:
+        existing = next((p for p in doc.presets if p.name == data["name"]), None)
     if existing:
         for k, v in data.items():
             if k != "id" and hasattr(existing, k):
                 setattr(existing, k, v)
         _write(doc)
         return existing
-    preset = LLMPreset(id=str(uuid.uuid4()), **{k: v for k, v in data.items() if k != "id"})
+    preset = LLMPreset(id=incoming_id or str(uuid.uuid4()),
+                      **{k: v for k, v in data.items() if k != "id"})
     doc.presets.append(preset)
     _write(doc)
     return preset

@@ -57,6 +57,10 @@ class ChainLLMConfig(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, ge=1)
     timeout_seconds: int = Field(default=120, ge=1)
+    # Passed through verbatim as the OpenAI-compatible `chat_template_kwargs`
+    # request field (llama.cpp honors it; servers that don't simply ignore it).
+    # Used e.g. to disable a reasoning model's thinking: {"enable_thinking": False}.
+    chat_template_kwargs: Optional[dict] = None
 
 
 class SequenceVariable(BaseModel):

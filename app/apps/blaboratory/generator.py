@@ -164,6 +164,11 @@ async def run_generation(
         except RuntimeError as exc:
             # e.g. no default endpoint preset configured — report cleanly, not 500.
             raise GenerationError(str(exc)) from exc
+    # Resident generation wants prose/JSON, not a reasoning trace. Reasoning
+    # models (e.g. the supergemma thinking build) otherwise spend the whole
+    # token budget thinking and stream back empty content; this disables it.
+    if llm.chat_template_kwargs is None:
+        llm = llm.model_copy(update={"chat_template_kwargs": {"enable_thinking": False}})
     request = build_generation_request(mode, free_text, fields, llm)
 
     status = create_job(JOB_TYPE, request.model_dump(), request.input)

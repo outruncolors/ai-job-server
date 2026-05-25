@@ -39,6 +39,8 @@ class OpenAICompatibleLLMClient:
             "max_tokens": llm_config.max_tokens,
             "stream": False,
         }
+        if llm_config.chat_template_kwargs:
+            payload["chat_template_kwargs"] = llm_config.chat_template_kwargs
         try:
             async with httpx.AsyncClient(timeout=llm_config.timeout_seconds) as client:
                 resp = await client.post(url, json=payload)
@@ -82,6 +84,8 @@ class OpenAICompatibleLLMClient:
         if tools:  # omit key entirely when empty — some servers reject []
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+        if llm_config.chat_template_kwargs:
+            payload["chat_template_kwargs"] = llm_config.chat_template_kwargs
         try:
             async with httpx.AsyncClient(timeout=llm_config.timeout_seconds) as client:
                 resp = await client.post(url, json=payload)
@@ -127,6 +131,8 @@ class OpenAICompatibleLLMClient:
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+        if llm_config.chat_template_kwargs:
+            payload["chat_template_kwargs"] = llm_config.chat_template_kwargs
         try:
             async with httpx.AsyncClient(timeout=llm_config.timeout_seconds) as client:
                 async with client.stream("POST", url, json=payload) as resp:
