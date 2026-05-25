@@ -99,13 +99,45 @@ def get_default() -> Optional[LLMPreset]:
 
 
 def get_default_as_chain_llm_config() -> ChainLLMConfig:
+    """The base LLM config for chain jobs that don't carry their own.
+
+    Prefers an explicitly-configured default endpoint preset. When none is set
+    (the common case — `config/llm_config.json` is gitignored and easily lost),
+    falls back to the LLM-capable node's llama-server instead of failing: the
+    local server when this node has the `llm` capability, otherwise the `llm`
+    peer. For multi-machine the per-step swap (`ensure_loaded_for_step`)
+    overrides `api_base`/`model` at run time anyway, so this is just a sane base.
+    """
     preset = get_default()
-    if preset is None:
-        raise RuntimeError("No default LLM preset configured — set one on the Server page")
-    return ChainLLMConfig(
-        api_base=preset.api_base,
-        model=preset.model,
-        temperature=preset.temperature,
-        max_tokens=preset.max_tokens,
-        timeout_seconds=preset.timeout_seconds,
-    )
+    if preset is not None:
+        return ChainLLMConfig(
+            api_base=preset.api_base,
+            model=preset.model,
+            temperature=preset.temperature,
+            max_tokens=preset.max_tokens,
+            timeout_seconds=preset.timeout_seconds,
+        )
+    return _llm_node_fallback_config()
+
+
+def _llm_node_fallback_config() -> ChainLLMConfig:
+    """Synthesize a base config pointing at whatever node runs the LLM."""
+    from .llamacpp.config import get_config as llamacpp_get_config
+    from .server import find_peer_for_capability, get_local_capabilities
+
+    if "llm" in get_local_capabilities():
+        cfg = llamacpp_get_config()
+        return ChainLLMConfig(
+            api_base=f"http://127.0.0.1:{cfg.port}/v1",
+            model=cfg.default_preset or "default",
+        )
+
+    peer = find_peer_for_capability("llm")
+    if peer is None:
+        raise RuntimeError(
+            "No LLM available: this node lacks the 'llm' capability and no 'llm' "
+            "peer is configured in config/server.json"
+        )
+    # api_base/model here are a placeholder; ensure_loaded_for_step discovers the
+    # peer's real llama-server data-plane URL and overrides them per step.
+    return ChainLLMConfig(api_base=f"http://{peer.host}:8080/v1", model="default")

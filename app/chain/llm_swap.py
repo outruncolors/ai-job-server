@@ -98,11 +98,20 @@ async def ensure_loaded_for_step(
     Raises:
         LLMSwapError on resolution failure, HTTP error, or timeout.
     """
+    from ..server import get_local_capabilities
+
     preset_name = resolve_preset_name(alt)
     if preset_name is None:
-        # Legacy / single-machine mode: no preset selected and no default configured.
-        # Skip ensure-loaded and use the caller's request.llm verbatim.
-        return base_llm, prev_preset, None
+        # No preset to swap to. If this node runs the LLM itself, use the caller's
+        # request.llm verbatim (legacy / single-machine). If the LLM lives on a
+        # peer, still route there: discover the peer's llama-server data plane and
+        # override api_base (no model swap — use whatever it has loaded).
+        if "llm" in get_local_capabilities():
+            return base_llm, prev_preset, None
+        api_base = resolve_llm_peer_api_base()
+        llama_url = await resolve_llm_server_url(api_base)
+        new_llm = base_llm.model_copy(update={"api_base": f"{llama_url}/v1"})
+        return new_llm, prev_preset, f"LLM route → {llama_url} (no swap)"
     api_base = resolve_llm_peer_api_base()
 
     started = time.monotonic()
