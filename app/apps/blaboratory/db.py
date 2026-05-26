@@ -17,12 +17,47 @@ the cached connection is transparently reopened when the path changes.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Callable, Optional
 
+logger = logging.getLogger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DB_PATH: Path = PROJECT_ROOT / "config" / "blaboratory" / "blaboratory.db"
+
+# Set True once sqlite-vec has successfully loaded on at least one connection.
+# When False, the vector migration (migration 2) is a no-op and retrieval falls
+# back to mechanical recency — a node without the extension still runs.
+VEC_AVAILABLE: bool = False
+# Guard so the "extension unavailable" line is logged at most once per process.
+_vec_load_logged: bool = False
+
+
+def _load_vec_extension(conn: sqlite3.Connection) -> None:
+    """Best-effort load of the sqlite-vec loadable extension on ``conn``.
+
+    On success sets the module flag ``VEC_AVAILABLE``; on any failure (extension
+    missing, ``enable_load_extension`` unsupported) leaves it False and logs once.
+    """
+    global VEC_AVAILABLE, _vec_load_logged
+    try:
+        import sqlite_vec
+
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        VEC_AVAILABLE = True
+    except Exception as exc:  # noqa: BLE001 — any failure → degrade, don't crash
+        VEC_AVAILABLE = False
+        if not _vec_load_logged:
+            logger.warning(
+                "sqlite-vec unavailable (%s); vector retrieval disabled, "
+                "falling back to mechanical recency",
+                exc,
+            )
+            _vec_load_logged = True
 
 # Cached connection + the path it was opened for, so a monkeypatched DB_PATH
 # (tests) transparently triggers a reopen.
@@ -54,6 +89,7 @@ def get_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    _load_vec_extension(conn)
     _conn = conn
     _conn_path = target
     migrate(conn)
@@ -132,9 +168,41 @@ def _migration_1(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_2(conn: sqlite3.Connection) -> None:
+    """Vector store for memory/lore retrieval (D1).
+
+    No-op when sqlite-vec is unavailable: the ``vec0`` virtual table can't be
+    created without the extension, so retrieval stays mechanical. ``user_version``
+    still advances to 2 either way (the schema *intent* is at v2); a node that
+    later gains the extension would need a re-index, not a re-migration.
+    """
+    if not VEC_AVAILABLE:
+        return
+    conn.executescript(
+        """
+        -- the vector store (vec0 virtual table; dim is fixed at 384 for bge-small)
+        CREATE VIRTUAL TABLE vec_memories USING vec0(
+            embedding   float[384],
+            resident_id text,        -- NULL = global (lore); else the owning resident
+            kind        text,        -- 'event' | 'chat' | 'utterance' | 'lore'
+            ref_id      integer,     -- source row id in its table
+            tick        integer
+        );
+        -- maps an indexed source row -> its vec_memories rowid (dedupe / "indexed?")
+        CREATE TABLE vec_rowmap (
+            kind   text NOT NULL,
+            ref_id integer NOT NULL,
+            vec_id integer NOT NULL,
+            PRIMARY KEY (kind, ref_id)
+        );
+        """
+    )
+
+
 # MIGRATIONS[i] upgrades the schema from user_version i to i+1.
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _migration_1,
+    _migration_2,
 ]
 
 
