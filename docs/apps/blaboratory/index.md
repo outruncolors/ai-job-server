@@ -8,6 +8,7 @@ timeline. Deferred: the vector retrieval index and the televisor/news generator.
 - **[Design](design.md)** — the canonical "what & why" (Part 1 MVP + Part 2 shape).
 - **[Part 1 — MVP build plan](mvp-build-plan.md)** — phased sequencing for the resident-creation loop (built).
 - **[Part 2 — Simulation build plan](part2-build-plan.md)** — phased sequencing for ticks, channels, memory, and the timeline UI.
+- **[D1 — Vector memory & lore retrieval build plan](d1-vector-build-plan.md)** — phased sequencing for the deferred embedding-retrieval index (sqlite-vec + bge-small via llama.cpp).
 
 ## Using it (MVP)
 
