@@ -25,6 +25,12 @@ class LlamaCppConfig(BaseModel):
     port: int = 8080
     default_preset: Optional[str] = None
     models_dir: str = "/opt/ai-stack/models"
+    # Embed server (D1): a second, always-on llama-server serving /v1/embeddings.
+    # Managed by LlamaCppEmbedManager on llm-capable nodes (default bge-small,
+    # 384-dim, CLS pooling). `embed_model_path` None → embed server stays down.
+    embed_port: int = 8081
+    embed_model_path: Optional[str] = None
+    embed_pooling: str = "cls"
 
 
 def load_config() -> LlamaCppConfig:

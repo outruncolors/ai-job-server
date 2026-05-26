@@ -59,6 +59,8 @@ from .comfyui.router import router as comfyui_router
 from .comfyui.runner import execute_image_job
 from .llamacpp.manager import get_manager as get_llamacpp_manager
 from .llamacpp.router import router as llamacpp_router
+from .llamacpp.embed_manager import get_embed_manager
+from .llamacpp.embed_router import router as llamacpp_embed_router
 from .apps.blaboratory.router import router as blaboratory_router
 from . import jobs as _jobs_module
 from .jobs import (
@@ -182,6 +184,14 @@ async def lifespan(app: FastAPI):
                 pass
         except Exception as exc:
             print(f"llama.cpp adoption check skipped: {exc}")
+        # Embed server (D1): adopt if already running, else start it (no-op when
+        # embed_model_path is unset — start() raises and we just log + skip).
+        embed_mgr = get_embed_manager()
+        try:
+            if not await embed_mgr.adopt():
+                await embed_mgr.start()
+        except Exception as exc:
+            print(f"embed server start skipped: {exc}")
     queue = get_job_queue()
     await queue.start()
     for entry in recover_interrupted_jobs(_jobs_module.JOBS_BASE):
@@ -195,6 +205,11 @@ async def lifespan(app: FastAPI):
     if SIM_AUTOSTART:
         await start_sim_clock()
     yield
+    if "llm" in get_local_capabilities():
+        try:
+            await get_embed_manager().stop()
+        except Exception as exc:
+            print(f"embed server stop skipped: {exc}")
     await stop_sim_clock()
     await stop_peer_poller()
     await stop_scheduler()
@@ -209,6 +224,7 @@ DOCS_DIR = Path(__file__).parent.parent / "docs"
 app.include_router(comfyui_router, dependencies=[Depends(requires_capability("image"))])
 app.include_router(omnivoice_router, dependencies=[Depends(requires_capability("voice"))])
 app.include_router(llamacpp_router, dependencies=[Depends(requires_capability("llm"))])
+app.include_router(llamacpp_embed_router, dependencies=[Depends(requires_capability("llm"))])
 app.include_router(presets_router)
 app.include_router(mcp_router)
 app.include_router(blaboratory_router)
