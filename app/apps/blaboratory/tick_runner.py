@@ -22,7 +22,14 @@ from ...chain.executor import execute_chain_job
 from ...chain.models import Alternative, ChainJobRequest, ChainLLMConfig, ChainStep
 from ...jobs import create_job, find_job_dir
 from ...llm_config import get_default_as_chain_llm_config
-from . import activity_store, context_pipeline, event_store, residents_store, rooms
+from . import (
+    activity_store,
+    context_pipeline,
+    event_store,
+    memory_index,
+    residents_store,
+    rooms,
+)
 from .actions import breakpoint_clause, get_action, list_actions
 from .generator import _strip_fences
 
@@ -111,7 +118,7 @@ async def _act_one(resident: dict, tick: int, llm: ChainLLMConfig, deps) -> str:
     rid = resident["id"]
     activity = activity_store.get_activity(rid)
     node = decision_node(activity)
-    context = context_pipeline.build_context(resident, action_node=node, tick=tick)
+    context = await context_pipeline.build_context(resident, action_node=node, tick=tick)
     choice, args = await _choose(context, llm, label=f"{resident.get('name', rid)} @ tick {tick}")
 
     if choice == "continue" and activity:
@@ -147,6 +154,13 @@ async def run_tick(tick_number: Optional[int] = None, *, llm: Optional[ChainLLMC
             log.warning("Blaboratory tick %s skipped: %s", tick_number, exc)
             return {"tick": tick_number, "acted": [], "skipped": "no_default_llm"}
     llm = _disable_thinking(llm)
+
+    # Backfill the vector index before any gather so retrieval sees this tick's
+    # and prior un-indexed rows. No-op (logged once) without the embed server.
+    try:
+        await memory_index.index_pending()
+    except Exception:  # noqa: BLE001 — indexing must never abort the tick
+        log.exception("Blaboratory tick %s: index_pending failed", tick_number)
 
     deps = SimpleNamespace(busy=set(), llm=llm)
     acted: list[dict] = []

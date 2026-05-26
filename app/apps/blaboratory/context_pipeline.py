@@ -28,7 +28,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import chat_store, cursor_store, event_store
-from .config import MAX_MEMORY_CHARS, MAX_MEMORY_ITEMS
+from .config import (
+    MAX_MEMORY_CHARS,
+    MAX_MEMORY_ITEMS,
+    RECENCY_FLOOR_ITEMS,
+    RELEVANT_TOP_K,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # Shared world lore registry (= [Everyone Knows]). Read here; the deferred news
@@ -96,6 +101,71 @@ def gather_memories(resident_id: str, caps: Optional[Caps] = None) -> list[str]:
     return lines
 
 
+def _build_query(recent: list[str]) -> str:
+    """The retrieval query: the resident's recency window joined.
+
+    "What's on my mind right now" — the most-recent items, embedded to pull
+    older semantically-related memories beyond the recency floor.
+    """
+    return "\n".join(recent[:RECENCY_FLOOR_ITEMS])
+
+
+async def retrieve_memories(resident: dict, caps: Optional[Caps] = None) -> list[str]:
+    """Hybrid recent∪relevant memory retrieval for the ``[You Know]`` section.
+
+    1. ``recent`` — the most-recent RECENCY_FLOOR_ITEMS consumed items, verbatim
+       (the floor: a just-happened memory can never be evicted for irrelevance).
+    2. ``relevant`` — top-k by similarity to the recency-window query, scoped to
+       this resident (own events + their utterances + global lore) with chat
+       limited to the consumption cursor, **minus** anything already in ``recent``.
+    3. ``recent ++ relevant``, then :func:`apply_caps` (recent wins ties).
+
+    Falls back to the **mechanical** capped gather — byte-identical to the
+    pre-D1 behavior — when the vector extension is unavailable, nothing is
+    indexed yet, or the embed server is unreachable. Never raises.
+    """
+    caps = caps or Caps()
+    rid = resident["id"]
+    full = gather_memories(rid, caps)
+    if not full:
+        return []
+
+    # Lazy imports keep this module importable without the vector stack.
+    from . import embeddings, memory_index, vector_index
+    from .db import get_connection
+
+    if not vector_index.is_available():
+        return apply_caps(full, caps)
+    # Nothing indexed yet → mechanical (and skip a pointless embed round-trip).
+    conn = get_connection()
+    if conn.execute("SELECT 1 FROM vec_memories LIMIT 1").fetchone() is None:
+        return apply_caps(full, caps)
+
+    try:
+        qvecs = await embeddings.embed_texts([_build_query(full)], is_query=True)
+    except embeddings.EmbedError:
+        return apply_caps(full, caps)
+    if not qvecs:
+        return apply_caps(full, caps)
+
+    recent = full[:RECENCY_FLOOR_ITEMS]
+    recent_set = set(recent)
+    seen = cursor_store.get_cursor(rid, "chat")
+    hits = vector_index.query(
+        qvecs[0],
+        RELEVANT_TOP_K,
+        resident_id=rid,
+        kinds=list(vector_index.KINDS),
+        max_chat_id=seen,
+    )
+    relevant: list[str] = []
+    for kind, ref_id, _dist in hits:
+        line = memory_index.fetch_and_render(kind, ref_id)
+        if line and line not in recent_set and line not in relevant:
+            relevant.append(line)
+    return apply_caps(recent + relevant, caps)
+
+
 def apply_caps(items: list[str], caps: Optional[Caps] = None) -> list[str]:
     """Keep the newest items within both the item-count and char-budget caps.
 
@@ -113,12 +183,12 @@ def apply_caps(items: list[str], caps: Optional[Caps] = None) -> list[str]:
     return out
 
 
-def build_context(
+async def build_context(
     resident: dict, *, action_node: str = "", tick: int = 0, caps: Optional[Caps] = None
 ) -> str:
     """Assemble the fixed-section context block for one resident on one tick."""
     caps = caps or Caps()
-    you_know = apply_caps(gather_memories(resident["id"], caps), caps)
+    you_know = await retrieve_memories(resident, caps)
     sections = [
         "[Overview]",
         f"{OVERVIEW_FRAMING}\n{_identity_line(resident)}",
@@ -141,9 +211,11 @@ def build_context(
 # ---- read / write halves -------------------------------------------------
 
 
-def read_phase(resident: dict, tick: int, *, action_node: str = "", caps: Optional[Caps] = None) -> str:
+async def read_phase(
+    resident: dict, tick: int, *, action_node: str = "", caps: Optional[Caps] = None
+) -> str:
     """Read half: assemble the context block to feed the LLM."""
-    return build_context(resident, action_node=action_node, tick=tick, caps=caps)
+    return await build_context(resident, action_node=action_node, tick=tick, caps=caps)
 
 
 def write_phase(resident: dict, tick: int, action_result: dict[str, Any]) -> int:

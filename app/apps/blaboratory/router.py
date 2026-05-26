@@ -157,7 +157,8 @@ async def get_resident_context(resident_id: str, tick: Optional[int] = None) -> 
     if resident is None:
         raise HTTPException(status_code=404, detail="resident not found")
     t = tick if tick is not None else event_store.max_tick()
-    return {"resident_id": resident_id, "tick": t, "context": context_pipeline.build_context(resident, tick=t)}
+    context = await context_pipeline.build_context(resident, tick=t)
+    return {"resident_id": resident_id, "tick": t, "context": context}
 
 
 @router.get("/rooms/{room_id}/utterances")

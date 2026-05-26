@@ -69,6 +69,34 @@ def render_indexable(row: dict, kind: str) -> str:
     raise ValueError(f"unknown indexable kind: {kind!r}")
 
 
+_TABLE_FOR_KIND = {"event": "events", "chat": "chat", "utterance": "utterances"}
+
+
+def fetch_and_render(kind: str, ref_id: int) -> str | None:
+    """Fetch a source row by ``(kind, ref_id)`` and render its indexable line.
+
+    Returns None if the row is gone or the kind has no source table (e.g.
+    ``lore``, which has no row store until D2). Used by retrieval to map a KNN
+    hit back to the exact line a resident would read.
+    """
+    table = _TABLE_FOR_KIND.get(kind)
+    if table is None:
+        return None
+    conn = get_connection()
+    row = conn.execute(f"SELECT * FROM {table} WHERE id = ?", (ref_id,)).fetchone()
+    if row is None:
+        return None
+    d = dict(row)
+    if kind == "event" and d.get("payload"):
+        import json
+
+        try:
+            d["payload"] = json.loads(d["payload"])
+        except (json.JSONDecodeError, TypeError):
+            d["payload"] = None
+    return render_indexable(d, kind)
+
+
 # (kind, source table, payload-decode?, how to derive the stored resident_id)
 _SOURCES: list[tuple[str, str]] = [
     ("event", "events"),

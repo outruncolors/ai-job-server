@@ -143,7 +143,7 @@ async def run_call(
     both_rooms = [caller_room, callee_room]
 
     # 1. callee accepts/declines from its own context.
-    accept_ctx = context_pipeline.build_context(callee, action_node=_accept_node(caller), tick=tick)
+    accept_ctx = await context_pipeline.build_context(callee, action_node=_accept_node(caller), tick=tick)
     accepted = _parse_accept(await _run_llm(accept_ctx, llm, label="accept?"))
     call_id = utterance_store.create_call(
         tick=tick,
@@ -166,7 +166,7 @@ async def run_call(
     seq = 0
 
     opening = await _run_llm(
-        context_pipeline.build_context(caller, action_node=_topic_node(caller, callee, None), tick=tick),
+        await context_pipeline.build_context(caller, action_node=_topic_node(caller, callee, None), tick=tick),
         llm,
         label="topic",
     )
@@ -186,7 +186,7 @@ async def run_call(
             break
         if decision == "segue":
             topic = await _run_llm(
-                context_pipeline.build_context(
+                await context_pipeline.build_context(
                     caller,
                     action_node=_topic_node(caller, callee, "\n".join(f"{w}: {l}" for w, l in history[-4:])),
                     tick=tick,
@@ -201,7 +201,7 @@ async def run_call(
         speaker, _room = participants[turn % len(participants)]
         other = caller if speaker["id"] == callee["id"] else callee
         line = await _run_llm(
-            context_pipeline.build_context(speaker, action_node=_line_node(speaker, other, topic, history), tick=tick),
+            await context_pipeline.build_context(speaker, action_node=_line_node(speaker, other, topic, history), tick=tick),
             llm,
             label="line",
         )

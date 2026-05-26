@@ -28,8 +28,8 @@ def _resident(rid="r1"):
     }
 
 
-def test_sections_in_fixed_order_and_some_know_empty():
-    ctx = build_context(_resident(), action_node="You are idling.", tick=1)
+async def test_sections_in_fixed_order_and_some_know_empty():
+    ctx = await build_context(_resident(), action_node="You are idling.", tick=1)
     # All five headers present, in order.
     headers = ["[Overview]", "[Everyone Knows]", "[Some Know]", "[You Know]", "[Your Action]"]
     positions = [ctx.index(h) for h in headers]
@@ -41,9 +41,9 @@ def test_sections_in_fixed_order_and_some_know_empty():
     assert between.strip() == ""
 
 
-def test_everyone_knows_reads_lore(tmp_path):
+async def test_everyone_knows_reads_lore(tmp_path):
     context_pipeline.LORE_PATH.write_text(json.dumps({"everyone_knows": "The sky is teal."}))
-    ctx = build_context(_resident(), tick=1)
+    ctx = await build_context(_resident(), tick=1)
     assert "The sky is teal." in ctx
 
 
@@ -97,3 +97,95 @@ def test_write_phase_posts_chat_then_consumes():
     # The post is in the feed and the cursor includes it (so it's consumed next read).
     assert chat_store.latest_chat_id() == cursor_store.get_cursor(r["id"], "chat")
     assert any("I posted this" in m for m in gather_memories(r["id"]))
+
+
+# ---- D1.4 hybrid retrieval ------------------------------------------------
+
+from app.apps.blaboratory import embeddings, vector_index
+from app.apps.blaboratory.context_pipeline import apply_caps, retrieve_memories
+
+DIM = vector_index.EMBEDDING_DIM
+
+
+def _vec(i: int) -> list[float]:
+    v = [0.0] * DIM
+    v[i] = 1.0
+    return v
+
+
+def _seed_events_and_index():
+    """Seed one distinctive old event + 5 recent ones; index them with vectors.
+
+    The old event's vector is e0; the recent events share e1 (far from e0), so a
+    query at e0 ranks the old 'comet' event first.
+    """
+    old = event_store.append_event(tick=0, kind="action", resident_id="r1", action="spotted a comet")
+    recent_ids = [
+        event_store.append_event(tick=t, kind="action", resident_id="r1", action=f"a{t}")
+        for t in range(1, 6)
+    ]
+    vector_index.add([{"embedding": _vec(0), "resident_id": "r1", "kind": "event", "ref_id": old, "tick": 0}])
+    vector_index.add(
+        [
+            {"embedding": _vec(1), "resident_id": "r1", "kind": "event", "ref_id": rid, "tick": t}
+            for t, rid in zip(range(1, 6), recent_ids)
+        ]
+    )
+    return old, recent_ids
+
+
+async def test_hybrid_surfaces_relevant_older_item(monkeypatch):
+    db.get_connection()
+    monkeypatch.setattr(context_pipeline, "RECENCY_FLOOR_ITEMS", 2)
+    _seed_events_and_index()
+
+    async def fake_embed(texts, *, is_query=False):
+        return [_vec(0)]  # query lands next to the 'comet' event
+
+    monkeypatch.setattr(embeddings, "embed_texts", fake_embed)
+
+    caps = Caps(max_items=4, max_chars=10_000)
+    result = await retrieve_memories(_resident(), caps)
+
+    comet = "[tick 0] you spotted a comet"
+    # mechanical recency alone would have dropped the comet (beyond the cap)
+    mechanical = apply_caps(gather_memories("r1", caps), caps)
+    assert comet not in mechanical
+    # hybrid keeps the recent floor AND resurfaces the relevant older comet
+    assert "[tick 5] you a5" in result and "[tick 4] you a4" in result
+    assert comet in result
+    # de-dupe + caps hold
+    assert len(result) == len(set(result)) == caps.max_items
+
+
+async def test_regression_mechanical_when_index_unavailable(monkeypatch):
+    db.get_connection()
+    _seed_events_and_index()
+    monkeypatch.setattr(vector_index, "is_available", lambda: False)
+
+    async def boom(texts, *, is_query=False):
+        raise AssertionError("embed must not be called when index unavailable")
+
+    monkeypatch.setattr(embeddings, "embed_texts", boom)
+
+    caps = Caps(max_items=4, max_chars=10_000)
+    resident = _resident()
+    you_know = await retrieve_memories(resident, caps)
+    # byte-identical to the pre-D1 mechanical gather
+    assert you_know == apply_caps(gather_memories("r1", caps), caps)
+
+    ctx = await build_context(resident, tick=5, caps=caps)
+    assert "\n".join(you_know) in ctx
+
+
+async def test_empty_index_skips_embed(monkeypatch):
+    db.get_connection()
+    event_store.append_event(tick=1, kind="action", resident_id="r1", action="idle")
+
+    async def boom(texts, *, is_query=False):
+        raise AssertionError("embed must not be called against an empty index")
+
+    monkeypatch.setattr(embeddings, "embed_texts", boom)
+    caps = Caps()
+    out = await retrieve_memories(_resident(), caps)
+    assert out == apply_caps(gather_memories("r1", caps), caps)
