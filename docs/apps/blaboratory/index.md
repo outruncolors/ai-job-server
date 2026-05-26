@@ -1,14 +1,16 @@
 # Blaboratory
 
 A virtual lab of AI **residents** living in 16 rooms. Part 1 (built) is the
-**resident-creation loop**; Part 2 (built, minus two deferred systems) adds the
-**simulation** — ticks, actions/channels, memory, phone calls, and a scrubable
-timeline. Deferred: the vector retrieval index and the televisor/news generator.
+**resident-creation loop**; Part 2 (built) adds the **simulation** — ticks,
+actions/channels, memory, phone calls, and a scrubable timeline. **D1 (built)**
+adds **hybrid vector retrieval** for memory/lore. Deferred: the televisor/news
+generator and the `[Some Know]` scoping rule.
 
-- **[Design](design.md)** — the canonical "what & why" (Part 1 MVP + Part 2 shape).
+- **[Design](design.md)** — the canonical "what & why" (Part 1 MVP + Part 2 shape + D1 build notes).
 - **[Part 1 — MVP build plan](mvp-build-plan.md)** — phased sequencing for the resident-creation loop (built).
 - **[Part 2 — Simulation build plan](part2-build-plan.md)** — phased sequencing for ticks, channels, memory, and the timeline UI.
-- **[D1 — Vector memory & lore retrieval build plan](d1-vector-build-plan.md)** — phased sequencing for the deferred embedding-retrieval index (sqlite-vec + bge-small via llama.cpp).
+- **[D1 — Vector memory & lore retrieval build plan](d1-vector-build-plan.md)** — phased sequencing for the embedding-retrieval index (sqlite-vec + bge-small via llama.cpp). **Built** (D1.1–D1.5).
+- **[D1 — Embeddings ops & deploy checklist](ops-d1-embeddings.md)** — operator notes: embed model file, config, verify, and the re-index-on-model-change warning.
 
 ## Using it (MVP)
 
@@ -68,3 +70,15 @@ knows chat/news it has consumed (tracked by per-resident cursors).
 
 See **[Part 2 — Simulation build plan](part2-build-plan.md)** for module map and
 **[Design](design.md)** §"Part 2 — Build notes" for what landed.
+
+## Memory retrieval (D1)
+
+The `[You Know]` section is **hybrid**: the most-recent items (a recency floor,
+kept verbatim) merged with the top-k **semantically similar** older memories, so a
+distinctive earlier moment can resurface many ticks later instead of falling out
+for being "old". An app-managed embed `llama-server` (bge-small, 384-dim, port
+8081 on the `llm` node) embeds rows once per tick into a `sqlite-vec` index that
+lives in `blaboratory.db` on the web node; KNN runs locally. If the embed server
+is down, retrieval **degrades to pure recency** and the sim keeps running. See
+**[Design → D1 build notes](design.md#d1--vector-memory--lore-retrieval--build-notes)**
+and the **[ops checklist](ops-d1-embeddings.md)**.

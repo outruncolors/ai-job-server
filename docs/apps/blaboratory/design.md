@@ -318,5 +318,54 @@ recorded so the design stays truthful:
   action word, an event log (merged with call utterances) + active-context panel, and **polling-based**
   live append (`/ticks/latest` every 5s — no new SSE).
 
-Still deferred / open: the **vector retrieval index** (sqlite-vec + llama.cpp embeddings), the
-**televisor/news generator**, the **`[Some Know]`** scoping rule, and ComfyUI image slideshows.
+Still deferred / open: the **televisor/news generator**, the **`[Some Know]`** scoping rule, and
+ComfyUI image slideshows. (The **vector retrieval index** landed in D1 — see below.)
+
+---
+
+## D1 — Vector memory & lore retrieval — Build notes (what landed / drifted)
+
+Built per [`d1-vector-build-plan.md`](./d1-vector-build-plan.md), phases D1.1–D1.5. Replaces the
+mechanical recency `[You Know]` gather with **hybrid** retrieval (recency floor ∪ relevance), one
+index serving resident memory now and lore (D2) later.
+
+- **Store** — `sqlite-vec==0.1.9` loaded on the shared `db.py` connection (`VEC_AVAILABLE` flag,
+  logged-once fallback). Migration 2 adds a `vec_memories` **vec0** vtable (`embedding float[384]` +
+  `resident_id`/`kind`/`ref_id`/`tick` metadata) and a `vec_rowmap` dedupe table. The migration is a
+  **no-op when the extension is unavailable** (retrieval stays mechanical), though `user_version`
+  still advances to 2. `vector_index.py` is the thin `is_available()`/`add()`/`query()` helper; scope
+  filters live in the KNN `WHERE` (resident match incl. global rows, `kind IN (...)`, and a chat-only
+  `ref_id <= max_chat_id` range honoring the consumption cursor).
+  - **Drift:** vec0 0.1.9 **rejects NULL** in TEXT/INTEGER metadata columns, so "global" (lore) rows
+    are stored as the **empty-string sentinel** rather than `NULL` as the plan's schema comment said;
+    `query()` surfaces/maps it transparently. KNN distance is L2 (euclidean), nearest-first.
+- **Embedder** — bge-small-en-v1.5, **384-dim**, served by a *second*, app-managed `llama-server`
+  (`LlamaCppEmbedManager`, `app/llamacpp/embed_manager.py`) on `llm`-capable nodes — fixed argv
+  (`--embeddings --pooling cls --port 8081 --ctx-size 512 -ngl 99`), adopt-if-running, `/health`
+  readiness, ring-buffer logs, `killpg` teardown. Config fields `embed_port`/`embed_model_path`/
+  `embed_pooling` on `LlamaCppConfig`; control routes `/v1/llamacpp-embed/{status,start,stop,restart,
+  logs}`; started/adopted at lifespan and stopped on shutdown, gated on the `llm` capability. With
+  `embed_model_path` unset the embed server simply stays down.
+- **Client + config** — `OpenAICompatibleLLMClient.embed()` (batched POST `/embeddings`, vectors in
+  index order, errors → `EmbedError`); `app/apps/blaboratory/embeddings.py` carries port/model/dim/
+  query_prefix and resolves the embed URL from the `llm` peer (local `127.0.0.1` when llm-capable).
+  The bge **query-instruction prefix is applied to queries only** (document/query asymmetry).
+- **Indexing** — `memory_index.index_pending()` runs once at the top of `run_tick`: a batched,
+  idempotent backfill of every `events`/`chat`/`utterances` row not yet in `vec_rowmap` (LEFT JOIN),
+  embedded and added. Scoping: events → `resident_id`, chat → **global** (the reader's cursor scopes
+  visibility at query time), utterances → speaker. Keeps embed calls **out** of the synchronous
+  `write_phase`; degrades to a logged-once no-op when the extension/embed server is unavailable.
+- **Retrieval** — `context_pipeline.build_context`/`read_phase` are now **async**;
+  `retrieve_memories()` merges the recency floor (`RECENCY_FLOOR_ITEMS`, kept verbatim) with the
+  top-k (`RELEVANT_TOP_K`) similar items (deduped, scoped), then `apply_caps` (recent wins ties). When
+  the index is unavailable, nothing is indexed yet, or the embed server is unreachable, it falls back
+  to the **byte-identical** mechanical capped gather — the sim never blocks on the index. All
+  `build_context` call sites (`tick_runner`, `call_sequence` ×4, the context route) were awaited.
+- **Re-index on model change (LOUD):** the 384-dim vec0 schema is **model-specific**. Switching the
+  embedder to a different dimension is **incompatible** with the existing vtable — you must `DROP TABLE
+  vec_memories`, clear `vec_rowmap`, and re-run `index_pending` to rebuild. There is no automatic
+  migration for a dimension change.
+
+**Still deferred:** `[Some Know]`/lore *content* (D2 — the schema already carries `kind='lore'`/global
+rows so it slots in without another migration); query-definition tuning (recency-window-as-query is the
+default knob). Ops/deploy steps live in [`ops-d1-embeddings.md`](./ops-d1-embeddings.md).
