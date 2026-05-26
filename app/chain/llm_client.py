@@ -29,7 +29,52 @@ class StreamChunk:
         self.finish_reason = finish_reason
 
 
+class EmbedError(RuntimeError):
+    """Raised when the embed server is unreachable or returns a bad response."""
+
+
 class OpenAICompatibleLLMClient:
+    async def embed(
+        self,
+        texts: list[str],
+        *,
+        api_base: str,
+        model: str,
+        timeout: float = 30.0,
+    ) -> list[list[float]]:
+        """Embed a batch of texts via an OpenAI-compatible ``/embeddings`` endpoint.
+
+        POSTs ``{"input": texts, "model": model}`` in a single call and returns
+        the vectors in input order. Errors (connect/timeout/HTTP/malformed) map
+        to :class:`EmbedError` so callers degrade rather than crash.
+        """
+        if not texts:
+            return []
+        url = f"{api_base.rstrip('/')}/embeddings"
+        payload = {"input": texts, "model": model}
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.ConnectError as exc:
+            raise EmbedError(f"embed server not reachable at {api_base}: {exc}") from exc
+        except httpx.TimeoutException as exc:
+            raise EmbedError(f"embed server timed out at {api_base}: {exc}") from exc
+        except httpx.HTTPStatusError as exc:
+            raise EmbedError(
+                f"embed server returned {exc.response.status_code}: {exc}"
+            ) from exc
+        except ValueError as exc:
+            raise EmbedError(f"embed server returned non-JSON body: {exc}") from exc
+        try:
+            items = data["data"]
+            # Order by the response's `index` (OpenAI guarantees it maps to input order).
+            ordered = sorted(items, key=lambda d: d.get("index", 0))
+            return [list(d["embedding"]) for d in ordered]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise EmbedError(f"malformed embeddings response: {exc}") from exc
+
     async def generate(self, prompt: str, llm_config: ChainLLMConfig) -> str:
         url = f"{llm_config.api_base.rstrip('/')}/chat/completions"
         payload = {
