@@ -56,9 +56,9 @@ These are environment changes the code can't do for itself. None block writing t
 The embed *server* is started and managed by the app (see Phase D1.2x below), so the only manual step
 is providing the model:
 
-1. **Get the GGUF.** Download a bge-small-en-v1.5 GGUF (f16 is fine, ~130MB) into
-   `/opt/ai-stack/models/`, e.g. `bge-small-en-v1.5-f16.gguf`
-   (HF: `CompendiumLabs/bge-small-en-v1.5-gguf` or `ChristianAzinn/bge-small-en-v1.5-gguf`).
+1. ✅ **GGUF in place.** `bge-small-en-v1.5-f16.gguf` (67MB) at `/opt/ai-stack/models/` on the gpu
+   node (HF: `CompendiumLabs/bge-small-en-v1.5-gguf`). Smoke-tested: serves `/v1/embeddings`,
+   dim = 384, `--pooling cls` on `LLAMA_CPP_TAG` b9204.
 2. **Reachability:** the web node must reach `gpu.local:8081`. (gpu.local already resolves from the
    server session for :8090/:8080.)
 
@@ -253,8 +253,10 @@ before real (non-mocked) end-to-end runs.
   fallback. The `VEC_AVAILABLE` guard stays anyway, so a node without the extension degrades to
   mechanical recency instead of crashing.
 - **Pooling/prefix correctness** — bge wants CLS pooling + a query-only instruction prefix; wrong
-  settings silently degrade similarity. D1.2 done-when should eyeball that "cat" ~ "kitten" >
-  "cat" ~ "tax return".
+  settings silently degrade similarity. ✅ Smoke-tested on the gpu node (`LLAMA_CPP_TAG` b9204):
+  `llama-server --model bge-small-en-v1.5-f16.gguf --embeddings --pooling cls --port 8081` serves a
+  valid OpenAI-shaped `/v1/embeddings` response with **dim = 384** confirmed. The query-prefix
+  asymmetry still wants an eyeball in D1.2b ("cat" ~ "kitten" > "cat" ~ "tax return").
 - **Re-index on model change** — the 384-dim schema is model-specific. Switching embedders = `DROP`
   the vtable + clear `vec_rowmap` + re-`index_pending`. Note this loudly in D1.5.
 - **`[Some Know]` + lore** — still empty/deferred (D2). The schema carries `kind='lore'`/global rows
