@@ -152,6 +152,9 @@ falls back). Vectors are written with `sqlite_vec.serialize_float32(list[float])
 
 ## Phases (dependency-ordered; one phase per session)
 
+> Paste-able session-starter prompts for each phase live in
+> **[`d1-prompts/`](./d1-prompts/README.md)** (cross-linked, one file per phase).
+
 ### Phase D1.1 — Extension load + schema + `VectorIndex` helper
 **Goal:** sqlite-vec loads on the shared connection; migration 2 adds the vtable + rowmap; a thin
 `vector_index.py` (`add(rows)`, `query(vec, k, *, resident_id, kinds, max_chat_id)`,
