@@ -105,6 +105,7 @@ from .omnivoice.manager import get_manager
 from .omnivoice.router import router as omnivoice_router
 from .voice_presets_router import router as presets_router
 from .mcp.router import router as mcp_router
+from .embed_lab.router import router as embed_lab_router
 from .profiles import (
     apply_from_zip,
     delete_profile,
@@ -228,6 +229,7 @@ app.include_router(llamacpp_router, dependencies=[Depends(requires_capability("l
 app.include_router(llamacpp_embed_router, dependencies=[Depends(requires_capability("llm"))])
 app.include_router(presets_router)
 app.include_router(mcp_router)
+app.include_router(embed_lab_router)
 app.include_router(blaboratory_router)
 
 

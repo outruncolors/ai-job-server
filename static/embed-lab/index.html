@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Embed Lab · AI Job Server</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav id="topnav"></nav>
+
+<div id="page">
+  <div class="status-bar">
+    <span id="status-text">Loading…</span>
+    <button class="ghost-btn" onclick="refreshStatus()">↻</button>
+  </div>
+
+  <!-- ── Compare ──────────────────────────────────────────────────── -->
+  <section class="lab-card">
+    <h2>Embed &amp; compare</h2>
+    <p class="hint">
+      Paste one text per line — they're embedded as documents (no query prefix) and
+      compared via cosine similarity. Higher = more similar (1.0 = identical).
+    </p>
+    <textarea id="compare-texts" rows="6" placeholder="alice baked a pie
+bob fixed the radio
+someone made dessert"></textarea>
+    <div class="row">
+      <button onclick="runCompare()" id="compare-btn">Compute similarity</button>
+      <span id="compare-msg" class="msg"></span>
+    </div>
+    <div id="compare-result"></div>
+  </section>
+
+  <!-- ── Playground index ─────────────────────────────────────────── -->
+  <section class="lab-card">
+    <h2>Playground index</h2>
+    <p class="hint">
+      A fresh sqlite-vec index (separate from the blaboratory sim).
+      Add some documents, then run a query — the embedder will use the
+      bge query-prefix automatically.
+    </p>
+
+    <div class="subhead">Add document</div>
+    <div class="row">
+      <input id="add-text" type="text" placeholder="e.g. alice cooked dinner for the lab">
+      <button onclick="addDoc()" id="add-btn">Add</button>
+    </div>
+    <div id="add-msg" class="msg"></div>
+
+    <div class="subhead row-between">
+      <span>Docs <span id="doc-count" class="count"></span></span>
+      <button class="danger-btn" onclick="clearDocs()" id="clear-btn">Clear all</button>
+    </div>
+    <div id="doc-list" class="doc-list"></div>
+
+    <div class="subhead">Query</div>
+    <div class="row">
+      <input id="query-text" type="text" placeholder="e.g. what did alice make">
+      <input id="query-k" type="number" min="1" max="200" value="10" title="k (top hits)">
+      <button onclick="runQuery()" id="query-btn">Search</button>
+    </div>
+    <div id="query-msg" class="msg"></div>
+    <div id="query-result"></div>
+  </section>
+</div>
+
+<script src="/js/nav.js"></script>
+<script src="/js/profiles-widget.js"></script>
+<script src="/js/peer-status-widget.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/escape.js"></script>
+<script src="embed-lab.js"></script>
+<script src="/js/nav-mobile.js"></script>
+</body>
+</html>

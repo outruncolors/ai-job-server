@@ -32,6 +32,8 @@
 | `app/chain/llm_client.py` | `OpenAICompatibleLLMClient` — uses `httpx`, not `requests` |
 | `app/mcp/registry.py` | Hardcoded tool definitions: `random_integer`, `generate_name`, `format_voice_segments`, plus `save_image_prompt`, `save_wildcard`, `create_ticket` (each mirroring a same-named chain step type so the work can happen either inside an LLM tool loop or as a direct chain step). |
 | `app/mcp/executor.py` | `execute()` — runs a named tool with validated arguments |
+| `app/embed_lab/db.py` | Standalone SQLite playground (`config/embed-lab/playground.db`) — separate from `blaboratory.db` so manual embed/KNN testing can't pollute the sim. Lazily loads sqlite-vec + creates `docs` + `vec_docs(embedding float[384], doc_id)`. |
+| `app/embed_lab/router.py` | Routes: `/v1/embed-lab/{compare,docs,query,status}` — paste N texts → cosine matrix; add/list/delete/clear docs; KNN query (bge prefix on queries). Embeds via `app.apps.blaboratory.embeddings.embed_texts` (reused as a thin client). Frontend at `/embed-lab/`. |
 | `app/comfyui/config.py` | `ComfyUIConfig` model, get/save from `config/comfyui.json` |
 | `app/comfyui/manager.py` | `ComfyUIManager` — long-lived process: start/stop/restart, readiness probe, GPU status |
 | `app/comfyui/client.py` | `ComfyUIClient` — httpx wrapper for ComfyUI HTTP API (port 8188) |
