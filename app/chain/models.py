@@ -155,7 +155,12 @@ class ChainJobRequest(BaseModel):
     schema_version: int = 2
     title: Optional[str] = None
     input: str = Field(default="")
-    llm: ChainLLMConfig
+    # Optional: when omitted, the route handler fills it via
+    # get_default_as_chain_llm_config() — which itself falls back to the `llm`
+    # peer (gpu.local) when no endpoint preset is configured. ensure_loaded_for_step
+    # then overrides api_base/model at run time anyway, so this is effectively a
+    # base config that callers rarely need to specify.
+    llm: Optional[ChainLLMConfig] = None
     steps: list[ChainStep] = Field(min_length=1)
     variables: dict[str, str] = {}
     sequence_variables: list[SequenceVariable] = []

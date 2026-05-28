@@ -17,6 +17,7 @@ from starlette.background import BackgroundTask
 
 from .llm_config import (
     delete_preset as delete_llm_endpoint,
+    get_default_as_chain_llm_config,
     list_presets as list_llm_endpoints,
     save_preset as save_llm_endpoint,
     set_default as set_llm_endpoint_default,
@@ -277,6 +278,14 @@ async def create_voice_job(req: VoiceJobRequest):
 
 @app.post("/v1/jobs/chain", response_model=JobCreatedResponse, status_code=202)
 async def create_chain_job(req: ChainJobRequest):
+    # Fill llm from the default endpoint preset (or the llm-peer fallback) when
+    # the caller didn't supply one. Keeps single-machine and multi-machine users
+    # from needing to configure an endpoint preset just to run chain jobs.
+    if req.llm is None:
+        try:
+            req.llm = get_default_as_chain_llm_config()
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
     data = create_job("chain", req.model_dump(), req.input)
     job_id = data["job_id"]
     job_dir = find_job_dir(job_id)

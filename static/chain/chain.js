@@ -957,12 +957,9 @@
       const validateErr = _validateSteps(steps);
       if (validateErr) { msg.style.color = '#e44'; msg.textContent = validateErr; return; }
 
+      // Endpoint preset is now optional — when none is configured the backend
+      // falls back to the llm-capable node (gpu.local in the multi-machine setup).
       const _defPreset = _chainPresets.find(p => p.id === _defaultPresetId) || _chainPresets[0] || null;
-      if (!_defPreset) {
-        msg.style.color = '#e44';
-        msg.textContent = 'No LLM preset configured — add one in Server → LLM.';
-        return;
-      }
 
       // Prompt for variable values if any are declared.
       let variableOverrides = {};
@@ -984,16 +981,18 @@
 
       const body = {
         schema_version: 2,
-        llm: {
-          api_base:    _defPreset.api_base,
-          model:       _defPreset.model,
-          temperature: _defPreset.temperature,
-          max_tokens:  _defPreset.max_tokens,
-        },
         steps,
         variables: variableOverrides,
         sequence_variables: _variables,
       };
+      if (_defPreset) {
+        body.llm = {
+          api_base:    _defPreset.api_base,
+          model:       _defPreset.model,
+          temperature: _defPreset.temperature,
+          max_tokens:  _defPreset.max_tokens,
+        };
+      }
 
       try {
         const job = await api('/jobs/chain', 'POST', body);
