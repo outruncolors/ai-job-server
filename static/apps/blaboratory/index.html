@@ -16,22 +16,95 @@
     <p class="subtitle">Sixteen rooms. Fill them with residents.</p>
   </header>
 
-  <!-- Timeline scrubber + sim controls -->
-  <div id="timeline">
-    <div class="tl-scrub">
-      <button type="button" id="tl-prev" aria-label="Previous tick">◀</button>
-      <span id="tl-label" class="tl-label">Tick 0</span>
-      <button type="button" id="tl-next" aria-label="Next tick">▶</button>
-      <button type="button" id="tl-latest" class="secondary">Jump to latest</button>
-    </div>
-    <div class="tl-sim">
-      <button type="button" id="tl-fire">⊕ Fire tick</button>
-      <button type="button" id="tl-clock" class="secondary">▶ Start clock</button>
-      <span id="tl-status" class="tl-status"></span>
-    </div>
+  <!-- Tabs (hash-routed: #rooms / #config) -->
+  <div class="tab-strip" id="lab-tabs">
+    <button type="button" class="tab-btn" data-tab="rooms">Rooms</button>
+    <button type="button" class="tab-btn" data-tab="config">Config</button>
   </div>
 
-  <main id="grid" aria-busy="false"></main>
+  <!-- Rooms tab: timeline scrubber (viewing) + the room grid -->
+  <section class="tab-pane" id="tab-rooms">
+    <div id="timeline">
+      <div class="tl-scrub">
+        <button type="button" id="tl-prev" aria-label="Previous tick">◀</button>
+        <span id="tl-label" class="tl-label">Tick 0</span>
+        <button type="button" id="tl-next" aria-label="Next tick">▶</button>
+        <button type="button" id="tl-latest" class="secondary">Jump to latest</button>
+      </div>
+    </div>
+
+    <main id="grid" aria-busy="false"></main>
+  </section>
+
+  <!-- Config tab: sim controls + hot-applied numeric knobs -->
+  <section class="tab-pane" id="tab-config" hidden>
+    <div class="cfg">
+
+      <div class="cfg-sec">
+        <h3>Simulation</h3>
+        <p class="cfg-hint">Start/stop the clock, or fire a single tick by hand.</p>
+        <div class="tl-sim">
+          <button type="button" id="tl-clock" class="secondary">▶ Start clock</button>
+          <button type="button" id="tl-fire">⊕ Fire tick</button>
+          <span id="tl-status" class="tl-status"></span>
+        </div>
+      </div>
+
+      <form class="cfg-sec" data-fields="tick_interval_seconds">
+        <h3>Clock</h3>
+        <p class="cfg-hint">Applies on the next tick.</p>
+        <div class="cfg-fields">
+          <div class="cfg-field">
+            <label for="cfg-tick_interval_seconds">Tick interval (seconds)</label>
+            <input type="number" id="cfg-tick_interval_seconds" min="1" max="86400" step="1">
+          </div>
+        </div>
+        <div class="cfg-actions">
+          <button type="submit" class="cfg-save">Save</button>
+          <span class="cfg-msg" role="status"></span>
+        </div>
+      </form>
+
+      <form class="cfg-sec" data-fields="max_memory_items,max_memory_chars">
+        <h3>Memory</h3>
+        <p class="cfg-hint">Caps on the assembled <code>[You Know]</code> block. Applies on the next context build.</p>
+        <div class="cfg-fields">
+          <div class="cfg-field">
+            <label for="cfg-max_memory_items">Max items</label>
+            <input type="number" id="cfg-max_memory_items" min="1" max="1000" step="1">
+          </div>
+          <div class="cfg-field">
+            <label for="cfg-max_memory_chars">Max chars</label>
+            <input type="number" id="cfg-max_memory_chars" min="1" max="1000000" step="1">
+          </div>
+        </div>
+        <div class="cfg-actions">
+          <button type="submit" class="cfg-save">Save</button>
+          <span class="cfg-msg" role="status"></span>
+        </div>
+      </form>
+
+      <form class="cfg-sec" data-fields="recency_floor_items,relevant_top_k">
+        <h3>Hybrid retrieval <span class="cfg-tag">D1</span></h3>
+        <p class="cfg-hint">Recency floor kept verbatim; top-K similar items layered on.</p>
+        <div class="cfg-fields">
+          <div class="cfg-field">
+            <label for="cfg-recency_floor_items">Recency floor items</label>
+            <input type="number" id="cfg-recency_floor_items" min="1" max="1000" step="1">
+          </div>
+          <div class="cfg-field">
+            <label for="cfg-relevant_top_k">Relevant top-K</label>
+            <input type="number" id="cfg-relevant_top_k" min="1" max="1000" step="1">
+          </div>
+        </div>
+        <div class="cfg-actions">
+          <button type="submit" class="cfg-save">Save</button>
+          <span class="cfg-msg" role="status"></span>
+        </div>
+      </form>
+
+    </div>
+  </section>
 
   <!-- Fill Room dialog -->
   <dialog id="fill-dialog">

@@ -21,6 +21,7 @@ from . import (
     event_store,
     residents_store,
     rooms,
+    settings_store,
     sim_clock,
     tick_runner,
     utterance_store,
@@ -49,6 +50,16 @@ class CreateResidentRequest(BaseModel):
     mode: Literal["free_text", "guided"]
     free_text: Optional[str] = None
     fields: Optional[dict] = None
+
+
+class SettingsPatch(BaseModel):
+    """Partial sim-settings update — every field optional; only sent keys apply."""
+
+    tick_interval_seconds: Optional[int] = None
+    max_memory_items: Optional[int] = None
+    max_memory_chars: Optional[int] = None
+    recency_floor_items: Optional[int] = None
+    relevant_top_k: Optional[int] = None
 
 
 def _occupant_summary(resident_id: Optional[str]) -> Optional[dict]:
@@ -193,3 +204,21 @@ async def control_clock(command: Literal["start", "stop"]) -> dict:
     else:
         await clock.stop()
     return {"running": clock.running}
+
+
+# ---- sim settings (Config tab) -------------------------------------------
+
+
+@router.get("/settings")
+async def get_settings() -> dict:
+    return settings_store.get_settings()
+
+
+@router.put("/settings")
+async def update_settings(patch: SettingsPatch) -> dict:
+    """Apply a partial settings update (hot — no restart). 422 on a bad value."""
+    body = patch.model_dump(exclude_none=True)
+    try:
+        return settings_store.update_settings(body)
+    except settings_store.SettingsError as exc:
+        raise HTTPException(status_code=422, detail={"field": exc.field, "message": str(exc)})

@@ -315,6 +315,71 @@
     return s ? ` — ${s}` : '';
   }
 
+  // ── Tabs (hash-routed) ─────────────────────────────────────────────────
+  const TABS = ['rooms', 'config'];
+
+  function switchTab(name) {
+    const tab = TABS.includes(name) ? name : 'rooms';
+    document.querySelectorAll('.tab-btn').forEach((b) =>
+      b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.tab-pane').forEach((p) => {
+      p.hidden = p.id !== `tab-${tab}`;
+    });
+    if (tab === 'config') loadSettings();
+  }
+
+  function syncTab() {
+    switchTab(location.hash.replace('#', '') || 'rooms');
+  }
+
+  // ── Config form (hot-applied sim settings) ─────────────────────────────
+  async function loadSettings() {
+    let s;
+    try { s = await api(`${APP}/settings`); }
+    catch (e) { return; }  // leave inputs blank on a transient error
+    Object.entries(s).forEach(([k, v]) => {
+      const el = $(`cfg-${k}`);
+      if (el) el.value = v;
+    });
+  }
+
+  function _settingsError(e) {
+    // api() throws Error(message); for our 422 it's JSON {field, message}.
+    try {
+      const d = JSON.parse(e.message);
+      if (d && d.message) return d.message;
+    } catch (_) { /* not our structured error */ }
+    return e.message || 'Save failed.';
+  }
+
+  async function saveSection(form) {
+    const fields = (form.dataset.fields || '').split(',').filter(Boolean);
+    const msg = form.querySelector('.cfg-msg');
+    const btn = form.querySelector('.cfg-save');
+    const body = {};
+    fields.forEach((f) => {
+      const el = $(`cfg-${f}`);
+      if (el && el.value !== '') body[f] = Number(el.value);
+    });
+    msg.className = 'cfg-msg busy';
+    msg.textContent = 'Saving…';
+    btn.disabled = true;
+    try {
+      const updated = await api(`${APP}/settings`, 'PUT', body);
+      Object.entries(updated).forEach(([k, v]) => {
+        const el = $(`cfg-${k}`);
+        if (el) el.value = v;
+      });
+      msg.className = 'cfg-msg ok';
+      msg.textContent = 'Saved.';
+    } catch (e) {
+      msg.className = 'cfg-msg error';
+      msg.textContent = _settingsError(e);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   // ── Wiring ───────────────────────────────────────────────────────────
   buildGuidedForm();
   document.querySelectorAll('.mode-btn').forEach((b) =>
@@ -331,7 +396,16 @@
   $('tl-fire').addEventListener('click', fireTick);
   $('tl-clock').addEventListener('click', toggleClock);
 
+  // Tabs: clicking sets the hash; hashchange drives the actual switch.
+  document.querySelectorAll('.tab-btn').forEach((b) =>
+    b.addEventListener('click', () => { location.hash = b.dataset.tab; }));
+  window.addEventListener('hashchange', syncTab);
+  // Per-section save (forms submit on button click or Enter).
+  document.querySelectorAll('.cfg-sec[data-fields]').forEach((form) =>
+    form.addEventListener('submit', (e) => { e.preventDefault(); saveSection(form); }));
+
   (async function init() {
+    syncTab();
     await refreshLatest();
     renderTimeline();
     await loadGrid();

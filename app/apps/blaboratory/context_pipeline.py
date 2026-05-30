@@ -23,17 +23,11 @@ action declares it consumed a channel — is what turns unseen events into memor
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from . import chat_store, cursor_store, event_store
-from .config import (
-    MAX_MEMORY_CHARS,
-    MAX_MEMORY_ITEMS,
-    RECENCY_FLOOR_ITEMS,
-    RELEVANT_TOP_K,
-)
+from . import chat_store, cursor_store, event_store, settings_store
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # Shared world lore registry (= [Everyone Knows]). Read here; the deferred news
@@ -49,8 +43,10 @@ OVERVIEW_FRAMING = (
 
 @dataclass
 class Caps:
-    max_items: int = MAX_MEMORY_ITEMS
-    max_chars: int = MAX_MEMORY_CHARS
+    # Resolved from settings at instantiation (per call) so an operator edit
+    # applies on the next context build — no module-level constant to rebind.
+    max_items: int = field(default_factory=settings_store.max_memory_items)
+    max_chars: int = field(default_factory=settings_store.max_memory_chars)
 
 
 # ---- section builders ----------------------------------------------------
@@ -107,13 +103,13 @@ def _build_query(recent: list[str]) -> str:
     "What's on my mind right now" — the most-recent items, embedded to pull
     older semantically-related memories beyond the recency floor.
     """
-    return "\n".join(recent[:RECENCY_FLOOR_ITEMS])
+    return "\n".join(recent[: settings_store.recency_floor_items()])
 
 
 async def retrieve_memories(resident: dict, caps: Optional[Caps] = None) -> list[str]:
     """Hybrid recent∪relevant memory retrieval for the ``[You Know]`` section.
 
-    1. ``recent`` — the most-recent RECENCY_FLOOR_ITEMS consumed items, verbatim
+    1. ``recent`` — the most-recent recency-floor consumed items, verbatim
        (the floor: a just-happened memory can never be evicted for irrelevance).
     2. ``relevant`` — top-k by similarity to the recency-window query, scoped to
        this resident (own events + their utterances + global lore) with chat
@@ -148,12 +144,12 @@ async def retrieve_memories(resident: dict, caps: Optional[Caps] = None) -> list
     if not qvecs:
         return apply_caps(full, caps)
 
-    recent = full[:RECENCY_FLOOR_ITEMS]
+    recent = full[: settings_store.recency_floor_items()]
     recent_set = set(recent)
     seen = cursor_store.get_cursor(rid, "chat")
     hits = vector_index.query(
         qvecs[0],
-        RELEVANT_TOP_K,
+        settings_store.relevant_top_k(),
         resident_id=rid,
         kinds=list(vector_index.KINDS),
         max_chat_id=seen,

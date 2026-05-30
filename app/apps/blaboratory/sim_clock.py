@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Optional
 
 from ...jobs import _write_status, create_job, find_job_dir
-from .config import SIM_AUTOSTART, TICK_INTERVAL_SECONDS
+from . import settings_store
+from .config import SIM_AUTOSTART
 from .tick_runner import next_tick, run_tick
 
 log = logging.getLogger(__name__)
@@ -94,7 +95,10 @@ class SimClock:
         self._task = asyncio.create_task(self._loop(), name="blaboratory-sim-clock")
         if persist:
             _write_desired("running")
-        log.info("Blaboratory sim clock started (interval %ss)", TICK_INTERVAL_SECONDS)
+        log.info(
+            "Blaboratory sim clock started (interval %ss)",
+            settings_store.tick_interval_seconds(),
+        )
 
     async def stop(self, *, persist: bool = True) -> None:
         self._running = False
@@ -114,7 +118,7 @@ class SimClock:
 
     async def _loop(self) -> None:
         while self._running:
-            await asyncio.sleep(TICK_INTERVAL_SECONDS)
+            await asyncio.sleep(settings_store.tick_interval_seconds())
             if not self._running:
                 break
             try:

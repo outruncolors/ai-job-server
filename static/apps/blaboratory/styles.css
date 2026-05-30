@@ -43,6 +43,59 @@ body {
 .tl-label { font-size: var(--font-size-xs); color: var(--color-text-muted); min-width: 9ch; text-align: center; }
 .tl-status { font-size: var(--font-size-micro); color: var(--color-text-muted); }
 
+/* ── Tabs (Rooms / Config) ── */
+.tab-strip {
+  max-width: 880px;
+  margin: 8px auto 0;
+  padding: 0 24px;
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+.tab-btn {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--color-text-muted); font-family: inherit; font-size: var(--font-size-sm);
+  letter-spacing: 0.04em; padding: 8px 14px; margin-bottom: -1px; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: var(--color-text-sub); }
+.tab-btn.active { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+.tab-pane[hidden] { display: none; }
+
+/* ── Config tab ── */
+.cfg { max-width: 880px; margin: 0 auto; padding: 16px 24px 64px; }
+.cfg-sec {
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: var(--gap-md);
+}
+.cfg-sec h3 {
+  margin: 0 0 4px; font-size: var(--font-size-label); letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--color-accent);
+}
+.cfg-hint { margin: 0 0 12px; color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.cfg-hint code { color: var(--color-text-sub); }
+.cfg-tag {
+  font-size: var(--font-size-micro); letter-spacing: 0.06em; color: var(--color-text-dim);
+  border: 1px solid var(--color-border-mid); border-radius: 4px; padding: 1px 5px; margin-left: 6px;
+}
+.cfg-fields { display: flex; flex-wrap: wrap; gap: var(--gap-md); }
+.cfg-field { flex: 1 1 160px; min-width: 140px; }
+.cfg-field input { width: 100%; box-sizing: border-box; }
+.cfg-actions { display: flex; align-items: center; gap: var(--gap-sm); margin-top: 14px; }
+.cfg-save {
+  padding: var(--btn-pad); border-radius: 6px; font-family: inherit; font-size: var(--font-size-sm);
+  cursor: pointer; background: var(--color-accent); color: #042; border: 1px solid var(--color-accent);
+  font-weight: 700;
+}
+.cfg-save:disabled { opacity: 0.6; cursor: progress; }
+.cfg-msg { font-size: var(--font-size-xs); }
+.cfg-msg.busy { color: var(--color-warn); }
+.cfg-msg.ok { color: var(--color-accent); }
+.cfg-msg.error { color: var(--color-danger); }
+
 /* most-recent-action word on an occupied cell */
 .cell-action {
   font-size: var(--font-size-micro); letter-spacing: 0.08em; text-transform: uppercase;
