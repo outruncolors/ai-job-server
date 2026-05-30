@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -286,6 +287,183 @@ def test_list_workflows_invalid_workflow(tmp_path, monkeypatch):
     assert results[0]["valid"] is False
     assert results[0]["promptNodeId"] is None
     assert results[0]["error"] is not None
+
+
+# ---------------------------------------------------------------------------
+# SEED + DENOISE param nodes
+# ---------------------------------------------------------------------------
+
+SAMPLE_WORKFLOW_SEED_DENOISE = {
+    "133": {
+        "class_type": "PrimitiveInt",
+        "_meta": {"title": "SEED"},
+        "inputs": {"value": 1337},
+    },
+    "140": {
+        "class_type": "PrimitiveFloat",
+        "_meta": {"title": "DENOISE"},
+        "inputs": {"value": 0.8},
+    },
+    "6": {
+        "class_type": "CLIPTextEncode",
+        "_meta": {"title": "PROMPT"},
+        "inputs": {"text": "hi"},
+    },
+}
+
+
+def test_find_seed_and_denoise_nodes():
+    from app.comfyui.workflows import find_seed_node, find_denoise_node
+    assert find_seed_node(SAMPLE_WORKFLOW_SEED_DENOISE) == "133"
+    assert find_denoise_node(SAMPLE_WORKFLOW_SEED_DENOISE) == "140"
+
+
+def test_find_seed_denoise_absent():
+    from app.comfyui.workflows import find_seed_node, find_denoise_node
+    assert find_seed_node(SAMPLE_WORKFLOW_VALID) is None
+    assert find_denoise_node(SAMPLE_WORKFLOW_VALID) is None
+
+
+def test_find_value_param_node_skips_wrong_class():
+    from app.comfyui.workflows import find_seed_node
+    # Right title, wrong class_type → not exposed.
+    wf = {"1": {"class_type": "KSampler", "_meta": {"title": "SEED"}, "inputs": {"value": 1}}}
+    assert find_seed_node(wf) is None
+
+
+def test_find_value_param_node_skips_duplicates():
+    from app.comfyui.workflows import find_seed_node
+    wf = {
+        "1": {"class_type": "PrimitiveInt", "_meta": {"title": "SEED"}, "inputs": {"value": 1}},
+        "2": {"class_type": "PrimitiveInt", "_meta": {"title": "SEED"}, "inputs": {"value": 2}},
+    }
+    assert find_seed_node(wf) is None
+
+
+def test_inject_seed_and_denoise():
+    from app.comfyui.workflows import inject_seed, inject_denoise
+    wf = inject_seed(SAMPLE_WORKFLOW_SEED_DENOISE, 18446744073709551615)
+    assert wf["133"]["inputs"]["value"] == 18446744073709551615
+    wf = inject_denoise(wf, 0.42)
+    assert wf["140"]["inputs"]["value"] == 0.42
+    # Original untouched
+    assert SAMPLE_WORKFLOW_SEED_DENOISE["133"]["inputs"]["value"] == 1337
+    assert SAMPLE_WORKFLOW_SEED_DENOISE["140"]["inputs"]["value"] == 0.8
+
+
+def test_inject_seed_absent_raises():
+    from app.comfyui.workflows import inject_seed
+    with pytest.raises(ValueError, match="SEED"):
+        inject_seed(SAMPLE_WORKFLOW_VALID, 5)
+
+
+def test_list_workflows_includes_seed_denoise(tmp_path, monkeypatch):
+    import app.comfyui.workflows as wf_mod
+    wf_dir = tmp_path / "workflows"
+    wf_dir.mkdir()
+    monkeypatch.setattr(wf_mod, "WORKFLOWS_DIR", wf_dir)
+    (wf_dir / "t2i.json").write_text(json.dumps(SAMPLE_WORKFLOW_VALID))
+    (wf_dir / "i2i.json").write_text(json.dumps(SAMPLE_WORKFLOW_SEED_DENOISE))
+
+    from app.comfyui.workflows import list_workflows
+    by_name = {w["name"]: w for w in list_workflows()}
+    assert by_name["t2i"]["seedNodeId"] is None
+    assert by_name["t2i"]["denoiseNodeId"] is None
+    assert by_name["i2i"]["seedNodeId"] == "133"
+    assert by_name["i2i"]["denoiseNodeId"] == "140"
+
+
+# ---------------------------------------------------------------------------
+# ImageJobRequest — seed string validation
+# ---------------------------------------------------------------------------
+
+def test_image_request_seed_accepts_big_digit_string():
+    from app.models import ImageJobRequest
+    req = ImageJobRequest(workflow="w", prompt="p", seed="18446744073709551615")
+    assert req.seed == "18446744073709551615"
+
+
+def test_image_request_seed_empty_becomes_none():
+    from app.models import ImageJobRequest
+    assert ImageJobRequest(workflow="w", prompt="p", seed="").seed is None
+
+
+def test_image_request_seed_rejects_non_digits():
+    from app.models import ImageJobRequest
+    with pytest.raises(ValueError):
+        ImageJobRequest(workflow="w", prompt="p", seed="-5")
+    with pytest.raises(ValueError):
+        ImageJobRequest(workflow="w", prompt="p", seed="abc")
+
+
+def test_image_request_denoise_bounds():
+    from app.models import ImageJobRequest
+    assert ImageJobRequest(workflow="w", prompt="p", denoise=0.5).denoise == 0.5
+    with pytest.raises(ValueError):
+        ImageJobRequest(workflow="w", prompt="p", denoise=1.5)
+
+
+# ---------------------------------------------------------------------------
+# Runner — seed selection branch (randomize / explicit / default)
+# ---------------------------------------------------------------------------
+
+def _resolved_workflow_after_run(tmp_path, monkeypatch, request_obj):
+    """Run execute_image_job with a fully mocked ComfyUI and return the
+    resolved workflow.json the runner wrote to job_dir."""
+    import app.comfyui.runner as runner_mod
+
+    job_dir = tmp_path / "job"
+    job_dir.mkdir()
+    (job_dir / "status.json").write_text(json.dumps({"status": "queued"}))
+    (job_dir / "artifacts.json").write_text(json.dumps([]))
+
+    monkeypatch.setattr(runner_mod, "load_workflow", lambda name: copy.deepcopy(SAMPLE_WORKFLOW_SEED_DENOISE))
+
+    async def _no_sleep(*a, **k):
+        return None
+    monkeypatch.setattr(runner_mod.asyncio, "sleep", _no_sleep)
+
+    mock_client = MagicMock()
+    mock_client.submit = AsyncMock(return_value={"prompt_id": "pid1"})
+    mock_client.history = AsyncMock(return_value={
+        "pid1": {"outputs": {"9": {"images": [{"filename": "out.png"}]}}, "status": {}},
+    })
+    mock_client.fetch_view = AsyncMock(return_value=b"PNGDATA")
+    monkeypatch.setattr(runner_mod, "ComfyUIClient", lambda url: mock_client)
+
+    manager = MagicMock()
+    manager._is_alive = AsyncMock(return_value=True)
+    config = MagicMock(host="127.0.0.1", port=8188, autostart=False)
+
+    import asyncio as _aio
+    _aio.run(
+        runner_mod.execute_image_job("job1", job_dir, request_obj, config, manager)
+    )
+    return json.loads((job_dir / "workflow.json").read_text())
+
+
+def test_runner_randomize_seed_in_range(tmp_path, monkeypatch):
+    import app.comfyui.runner as runner_mod
+    monkeypatch.setattr(runner_mod.random, "randint", lambda lo, hi: hi)  # max seed
+    from app.models import ImageJobRequest
+    req = ImageJobRequest(workflow="i2i", prompt="p", randomize_seed=True)
+    wf = _resolved_workflow_after_run(tmp_path, monkeypatch, req)
+    assert wf["133"]["inputs"]["value"] == 2**64 - 1
+
+
+def test_runner_explicit_seed(tmp_path, monkeypatch):
+    from app.models import ImageJobRequest
+    req = ImageJobRequest(workflow="i2i", prompt="p", seed="12345", denoise=0.3)
+    wf = _resolved_workflow_after_run(tmp_path, monkeypatch, req)
+    assert wf["133"]["inputs"]["value"] == 12345
+    assert wf["140"]["inputs"]["value"] == 0.3
+
+
+def test_runner_default_seed_untouched(tmp_path, monkeypatch):
+    from app.models import ImageJobRequest
+    req = ImageJobRequest(workflow="i2i", prompt="p")  # no seed, no randomize
+    wf = _resolved_workflow_after_run(tmp_path, monkeypatch, req)
+    assert wf["133"]["inputs"]["value"] == 1337  # workflow default
 
 
 # ---------------------------------------------------------------------------

@@ -3,13 +3,27 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ImageJobRequest(BaseModel):
     workflow: str
     prompt: str
     image_params: dict[str, str] = Field(default_factory=dict)
+    denoise: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # A digit string (not a number) so 64-bit seeds survive JSON/JS without
+    # precision loss; the runner parses it to a Python int.
+    seed: Optional[str] = None
+    randomize_seed: bool = False
+
+    @field_validator("seed")
+    @classmethod
+    def _seed_must_be_digits(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        if not v.isdigit():
+            raise ValueError("seed must be a non-negative integer string")
+        return v
 
 
 class VoiceSegment(BaseModel):

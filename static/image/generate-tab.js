@@ -68,6 +68,24 @@ async function _hydrateFromRecreate(jobId) {
   }
 
   const wfMeta = _workflows.find(w => w.name === req.workflow);
+
+  // Restore Denoise + Seed if the workflow still exposes them (rows already
+  // rendered by onWorkflowChange above).
+  if (wfMeta && wfMeta.denoiseNodeId && req.denoise != null) {
+    document.getElementById('gen-denoise').value = req.denoise;
+  }
+  if (wfMeta && wfMeta.seedNodeId) {
+    const randCb = document.getElementById('gen-seed-randomize');
+    if (req.randomize_seed) {
+      randCb.checked = true;
+    } else if (req.seed != null && req.seed !== '') {
+      randCb.checked = false;
+      onSeedRandomizeChange();
+      document.getElementById('gen-seed').value = String(req.seed);
+    }
+    onSeedRandomizeChange();
+  }
+
   const hadRefs = req.image_params && Object.keys(req.image_params).length > 0;
   const hasRefSlots = wfMeta && (wfMeta.imageParams || []).length > 0;
   const noteLines = [];
@@ -105,11 +123,73 @@ function onWorkflowChange() {
     errEl.textContent = wf.error || 'Workflow is not compatible';
     errEl.style.display = '';
     _renderImageParamFields([]);
+    _renderSeedDenoiseFields(null);
   } else {
     submitBtn.disabled = false;
     errEl.style.display = 'none';
     _renderImageParamFields((wf && wf.imageParams) || []);
+    _renderSeedDenoiseFields(wf || null);
   }
+}
+
+// Show/hide the Denoise + Seed rows based on whether the selected workflow
+// exposes the corresponding titled node. Resets to defaults each switch.
+function _renderSeedDenoiseFields(wf) {
+  const denoiseRow = document.getElementById('gen-denoise-row');
+  const seedRow = document.getElementById('gen-seed-row');
+
+  const hasDenoise = !!(wf && wf.denoiseNodeId);
+  denoiseRow.style.display = hasDenoise ? '' : 'none';
+  if (hasDenoise) document.getElementById('gen-denoise').value = '';
+
+  const hasSeed = !!(wf && wf.seedNodeId);
+  seedRow.style.display = hasSeed ? '' : 'none';
+  if (hasSeed) {
+    document.getElementById('gen-seed').value = '';
+    document.getElementById('gen-seed-used').textContent = '';
+    // Default to randomize on.
+    document.getElementById('gen-seed-randomize').checked = true;
+    onSeedRandomizeChange();
+  }
+}
+
+function onSeedRandomizeChange() {
+  const rand = document.getElementById('gen-seed-randomize').checked;
+  const seedInput = document.getElementById('gen-seed');
+  seedInput.disabled = rand;
+  if (rand) seedInput.value = '';
+}
+
+// After a run, read the concrete seed the job actually used out of its resolved
+// workflow.json and surface it so a randomized result can be reproduced.
+async function _showUsedSeed(jobId, workflowName) {
+  const out = document.getElementById('gen-seed-used');
+  if (!out) return;
+  const wf = _workflows.find(w => w.name === workflowName);
+  if (!wf || !wf.seedNodeId) { out.textContent = ''; return; }
+  try {
+    const r = await fetch('/v1/jobs/' + jobId + '/files/workflow.json');
+    if (!r.ok) return;
+    const resolved = await r.json();
+    const node = resolved[wf.seedNodeId];
+    const seed = node && node.inputs && node.inputs.value;
+    if (seed == null) return;
+    out.textContent = '';
+    const label = document.createElement('span');
+    label.textContent = 'seed used: ';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'seed-copy';
+    btn.textContent = String(seed);
+    btn.title = 'Click to reuse this seed';
+    btn.onclick = () => {
+      document.getElementById('gen-seed-randomize').checked = false;
+      onSeedRandomizeChange();
+      document.getElementById('gen-seed').value = String(seed);
+    };
+    out.appendChild(label);
+    out.appendChild(btn);
+  } catch (_) {}
 }
 
 function _renderImageParamFields(params) {
@@ -319,8 +399,32 @@ async function submitGenerate() {
     if (allowed.has(k) && v) image_params[k] = v;
   });
 
+  const body = { workflow, prompt, image_params };
+
+  if (wf && wf.denoiseNodeId) {
+    const dv = (document.getElementById('gen-denoise').value || '').trim();
+    if (dv !== '') body.denoise = parseFloat(dv);
+  }
+
+  if (wf && wf.seedNodeId) {
+    document.getElementById('gen-seed-used').textContent = '';  // clear stale readout
+    if (document.getElementById('gen-seed-randomize').checked) {
+      body.randomize_seed = true;
+    } else {
+      const sv = (document.getElementById('gen-seed').value || '').trim();
+      if (sv !== '') {
+        if (!/^\d+$/.test(sv)) {
+          statusEl.style.color = '#c44';
+          statusEl.textContent = 'Seed must be a whole number (digits only).';
+          return;
+        }
+        body.seed = sv;  // string — preserves 64-bit precision
+      }
+    }
+  }
+
   try {
-    const job = await api('/jobs/image', 'POST', { workflow, prompt, image_params });
+    const job = await api('/jobs/image', 'POST', body);
     _currentJobId = job.job_id;
     statusEl.textContent = 'Job ' + job.job_id + ' — queued';
     _pollHandle = pollJob(_currentJobId, {
@@ -335,6 +439,7 @@ async function submitGenerate() {
         const imagesEl = document.getElementById('gen-images');
         statusEl.style.color = '#2a6';
         statusEl.textContent = 'Done';
+        _showUsedSeed(_currentJobId, workflow);
         try {
           const artifactsResp = await fetch('/v1/jobs/' + _currentJobId + '/files/artifacts.json');
           if (artifactsResp.ok) {

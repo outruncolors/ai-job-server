@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -9,9 +10,13 @@ from .client import ComfyUIClient
 from .config import ComfyUIConfig
 from .manager import ComfyUIManager
 from .workflows import (
+    find_denoise_node,
     find_image_param_nodes,
+    find_seed_node,
+    inject_denoise,
     inject_image_param,
     inject_prompt,
+    inject_seed,
     load_workflow,
 )
 
@@ -77,6 +82,23 @@ async def execute_image_job(
                 continue
             workflow = inject_image_param(workflow, title, filename)
             _append_log(job_dir, f"[image_param] {title}={filename}\n")
+
+        # DENOISE — float strength, only when the workflow exposes the node.
+        denoise = getattr(request, "denoise", None)
+        if denoise is not None and find_denoise_node(workflow):
+            workflow = inject_denoise(workflow, float(denoise))
+            _append_log(job_dir, f"[denoise] {denoise}\n")
+
+        # SEED — randomize, explicit, or leave the workflow default in place.
+        if find_seed_node(workflow):
+            seed: int | None = None
+            if getattr(request, "randomize_seed", False):
+                seed = random.randint(0, 2**64 - 1)
+            elif getattr(request, "seed", None):
+                seed = int(request.seed)
+            if seed is not None:
+                workflow = inject_seed(workflow, seed)
+                _append_log(job_dir, f"[seed] {seed}\n")
 
         client = ComfyUIClient(f"http://{config.host}:{config.port}")
 

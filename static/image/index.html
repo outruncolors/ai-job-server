@@ -38,6 +38,25 @@
 
         <div id="gen-image-params"></div>
 
+        <div id="gen-denoise-row" class="param-row" style="display:none;">
+          <label>Denoise</label>
+          <input id="gen-denoise" type="number" min="0" max="1" step="0.01"
+                 placeholder="workflow default">
+        </div>
+
+        <div id="gen-seed-row" class="param-row" style="display:none;">
+          <label>Seed</label>
+          <div class="seed-controls">
+            <input id="gen-seed" type="text" inputmode="numeric"
+                   placeholder="workflow default" disabled>
+            <label class="seed-rand">
+              <input id="gen-seed-randomize" type="checkbox" onchange="onSeedRandomizeChange()">
+              randomize
+            </label>
+          </div>
+          <span id="gen-seed-used" class="seed-used"></span>
+        </div>
+
         <div id="gen-workflow-error" class="msg" style="color:#c44;display:none;"></div>
 
         <button id="gen-submit" onclick="submitGenerate()" disabled style="margin-top:20px;">
