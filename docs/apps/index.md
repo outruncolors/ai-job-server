@@ -8,6 +8,10 @@ logic in their own package (`app/apps/<name>/`, `static/apps/<name>/`).
 - **[Blaboratory](blaboratory/index.md)** — a virtual lab of AI residents. The
   MVP is the resident-creation loop: a 16-room grid where empty rooms can be
   filled with LLM-generated characters.
+- **[Hoodat](hoodat/index.md)** — create and manage characters from a versioned
+  template: generate from a prompt, regenerate any field, a Discord-style profile
+  page, avatar generation/upload, and Targeted Exports.
 
-The single bridge from the systems UI is one `Apps` entry in
-`static/js/nav.js`; apps pages do not carry the systems nav.
+Both apps dogfood the cross-app [Prompt Pal](../tools/prompt-pal.md) registry and
+the FieldControls hover affordance. The single bridge from the systems UI is one
+`Apps` entry in `static/js/nav.js`; apps pages do not carry the systems nav.

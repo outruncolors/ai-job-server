@@ -7,9 +7,9 @@ Use the tree on the left to navigate. Every page in the site has a matching doc;
 ## Sections
 
 - **[Generation](generation/index.md)** — the three creative tabs: Text (chain jobs), Audio (voice), Visual (image)
-- **[Tools](tools/index.md)** — content building blocks: context items, wildcards, ticks (schedules), MCP tools
+- **[Tools](tools/index.md)** — content building blocks: context items, wildcards, ticks (schedules), MCP tools, Prompt Pal
 - **[Management](management/index.md)** — server controls, the job list, this docs viewer
-- **[Apps](apps/index.md)** — consumer experiences behind the `/apps` landing (Blaboratory)
+- **[Apps](apps/index.md)** — consumer experiences behind the `/apps` landing (Blaboratory, Hoodat)
 - **[Reference](reference/index.md)** — architecture, REST API, configuration, design notes, UI standards
 - **[Multi-machine](multi-machine.md)** — primary/secondary deployment: bare repo, systemd, capability gating, cutover
 - **[Upgrading llama.cpp](llamacpp-upgrade.md)** — bumping the pinned `LLAMA_CPP_TAG` on the secondary

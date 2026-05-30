@@ -227,6 +227,40 @@ Body shape: `{ name, model_path, args: {...}, capabilities: ["text"\|"vision"], 
 Success: `{ "result": ..., "execution_ms": N, "timestamp": "..." }`.
 Validation error: `{ "error": "...", "validation_status": "invalid_arguments" }`.
 
+## Prompt Pal
+
+App-agnostic registry for apps' internal LLM prompts (see [Prompt Pal](../tools/prompt-pal.md)).
+Not capability-gated.
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/prompt-pal/entries` | List; optional `?app=` / `?tag=` filters |
+| GET | `/v1/prompt-pal/entries/{id}` | Fetch one |
+| POST | `/v1/prompt-pal/entries` | Create ad-hoc (`409` if `(app,key)` exists) |
+| PUT | `/v1/prompt-pal/entries/{id}` | Patch `title`/`description`/`tags`/`prompt`/`variables` (`app`/`key` immutable) |
+| DELETE | `/v1/prompt-pal/entries/{id}` | Remove |
+| POST | `/v1/prompt-pal/entries/{id}/preview` | `{ "variables": {...} }` → composed `{ "text": ... }` |
+
+## Apps — Hoodat
+
+Character creation/management (see [Hoodat](../apps/hoodat/index.md)). Prefix `/v1/apps/hoodat`.
+Text generation is not route-gated; avatar **generation** returns `503` on nodes without the
+`image` capability (upload and the rest stay available).
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/apps/hoodat/characters` | List (summaries) |
+| GET | `/v1/apps/hoodat/characters/{id}` | Full character (`404`) |
+| POST | `/v1/apps/hoodat/characters` | `{ name, prompt }` → generate (`422` no name, `502` gen failure); returns `{ character, job_id }` |
+| PUT | `/v1/apps/hoodat/characters/{id}` | Field patch (top-level + nested sections); `404` |
+| DELETE | `/v1/apps/hoodat/characters/{id}` | Remove (+ avatar file) |
+| POST | `/v1/apps/hoodat/characters/{id}/fields/{section}/{field}/generate` | Regenerate one field → `{ value, prompt_id, job_id }` |
+| GET | `/v1/apps/hoodat/characters/{id}/avatar` | Serve avatar PNG (`404` if none) |
+| POST | `/v1/apps/hoodat/characters/{id}/avatar/generate` | ComfyUI `image` workflow → `{ avatar_url, job_id }` (`503` no `image` cap) |
+| POST | `/v1/apps/hoodat/characters/{id}/avatar/upload` | Multipart `file` → `{ avatar_url }` |
+| GET | `/v1/apps/hoodat/characters/{id}/exports` | List export prompts + `detail_levels` |
+| POST | `/v1/apps/hoodat/characters/{id}/exports/{export_key}/run` | `{ detail }` → `{ text, job_id }` |
+
 ## OmniVoice
 
 | Method | Path | |

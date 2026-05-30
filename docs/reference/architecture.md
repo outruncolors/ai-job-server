@@ -40,6 +40,23 @@ app/
     executor.py          execute() — schema-validated tool invocation
     router.py            GET /v1/mcp/tools, POST /v1/mcp/tools/{name}/call
     validator.py         JSON Schema input validation
+  prompt_pal/            App-agnostic prompt registry (config/prompt_pal/<id>.json)
+    compose.py           compose() — {prompt, variables} / {prompt_id} resolver
+    models.py            PromptEntry, PromptEntryPatch
+    store.py             File-per-doc CRUD + get_by_app_key, node_for_id
+    registry.py          register() table + seed_registered() (seed-if-absent)
+    service.py           get_text(app, key) — store-wins-else-default; id_for()
+    router.py            /v1/prompt-pal/entries CRUD + /preview
+  apps/                  Consumer experiences (own package per app)
+    blaboratory/         Virtual lab of AI residents (rooms, sim, memory)
+    hoodat/              Character creation/management
+      models.py          Character / CharacterDraft, FIELD_SPECS
+      characters_store.py  File-per-doc (config/hoodat/characters/<id>.json)
+      prompts.py         Registers IDEATE/ASSEMBLE/field.*/avatar prompts
+      generator.py       run_create() / run_field() — direct execute_chain_job
+      avatars.py         generate (ComfyUI image) / upload / serve
+      exports.py         Targeted Exports (Prompt Pal entries, run over the doc)
+      router.py          /v1/apps/hoodat — characters, fields, avatar, exports
   omnivoice/
     config.py            OmniVoiceConfig + persistence
     manager.py           Tracks active TTS jobs / runner availability
@@ -66,8 +83,12 @@ static/
   js/toast.js            Toast stack
   js/poll.js             pollJob()
   js/voice-segments.js   Multi-segment text widget
+  js/field-controls.js   FieldControls.attach() — reusable hover-control affordance
   js/marked.min.js       Markdown renderer for docs page
+  css/field-controls.css Hover-cluster styles for FieldControls
   <page>/                index.html, styles.css, <page>.js per nav page
+  prompt-pal/            Prompt Pal management UI (list/filter/edit/deep-link)
+  apps/<name>/           Per-app frontend (blaboratory, hoodat)
 
 docs/                    Markdown rendered by the in-site viewer
 config/                  Runtime data (gitignored)
