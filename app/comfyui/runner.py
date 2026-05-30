@@ -20,6 +20,10 @@ from .workflows import (
     load_workflow,
 )
 
+# Max value ComfyUI's PrimitiveInt accepts (signed 64-bit). Seeds above this
+# make /prompt return 400, so randomized + explicit seeds are capped here.
+_SEED_MAX = 2**63 - 1
+
 
 def _write_status(job_dir: Path, status: str, *, error: str | None = None) -> None:
     from ..jobs import _write_status as _jobs_write_status
@@ -90,12 +94,14 @@ async def execute_image_job(
             _append_log(job_dir, f"[denoise] {denoise}\n")
 
         # SEED — randomize, explicit, or leave the workflow default in place.
+        # ComfyUI's PrimitiveInt is a signed 64-bit int; a value above 2^63-1
+        # gets rejected by /prompt with a 400, so we cap both paths there.
         if find_seed_node(workflow):
             seed: int | None = None
             if getattr(request, "randomize_seed", False):
-                seed = random.randint(0, 2**64 - 1)
+                seed = random.randint(0, _SEED_MAX)
             elif getattr(request, "seed", None):
-                seed = int(request.seed)
+                seed = min(int(request.seed), _SEED_MAX)
             if seed is not None:
                 workflow = inject_seed(workflow, seed)
                 _append_log(job_dir, f"[seed] {seed}\n")

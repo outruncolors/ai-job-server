@@ -444,11 +444,27 @@ def _resolved_workflow_after_run(tmp_path, monkeypatch, request_obj):
 
 def test_runner_randomize_seed_in_range(tmp_path, monkeypatch):
     import app.comfyui.runner as runner_mod
-    monkeypatch.setattr(runner_mod.random, "randint", lambda lo, hi: hi)  # max seed
+    captured = {}
+
+    def _fake_randint(lo, hi):
+        captured["lo"], captured["hi"] = lo, hi
+        return hi
+
+    monkeypatch.setattr(runner_mod.random, "randint", _fake_randint)
     from app.models import ImageJobRequest
     req = ImageJobRequest(workflow="i2i", prompt="p", randomize_seed=True)
     wf = _resolved_workflow_after_run(tmp_path, monkeypatch, req)
-    assert wf["133"]["inputs"]["value"] == 2**64 - 1
+    # Drawn from [0, 2^63-1] — ComfyUI's signed-64-bit PrimitiveInt ceiling.
+    assert captured == {"lo": 0, "hi": 2**63 - 1}
+    assert wf["133"]["inputs"]["value"] == 2**63 - 1
+
+
+def test_runner_explicit_seed_capped(tmp_path, monkeypatch):
+    from app.models import ImageJobRequest
+    # A pasted seed above the PrimitiveInt ceiling is clamped, not rejected.
+    req = ImageJobRequest(workflow="i2i", prompt="p", seed=str(2**64 - 1))
+    wf = _resolved_workflow_after_run(tmp_path, monkeypatch, req)
+    assert wf["133"]["inputs"]["value"] == 2**63 - 1
 
 
 def test_runner_explicit_seed(tmp_path, monkeypatch):
