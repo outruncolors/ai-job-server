@@ -140,6 +140,10 @@ lost and the UI never sees the old shape.
   `{{var.detail}}` + `{{var.dialogue_examples}}` + `{{var.experiences_positive}}` +
   `{{var.experiences_negative}}`; running one is a single LLM chain over the
   rendered document at the chosen detail level (`brief` / `standard` / `detailed`).
+  The Exports tab also has plain **⬇ Export JSON** / **📋 Copy JSON** buttons that
+  download or copy the full character document verbatim (the canonical server doc,
+  re-fetched first) — no LLM, purely client-side. Copy falls back to a hidden
+  textarea + `execCommand` when `navigator.clipboard` is unavailable (LAN HTTP).
 
 ## Capability gating
 

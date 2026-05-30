@@ -922,6 +922,74 @@
     }
   }
 
+  // Re-fetch the canonical character doc and pretty-print it, so JSON export /
+  // copy always match the persisted server state (not just local edits).
+  async function fetchCharacterJson() {
+    const doc = await api(`${APP}/characters/${charId}`);
+    return { doc, json: JSON.stringify(doc, null, 2) };
+  }
+
+  // Flash a transient label on a button, then restore it.
+  function flashButton(btn, label, ms = 1400) {
+    if (!btn) return;
+    const original = btn.textContent;
+    btn.textContent = label;
+    setTimeout(() => { btn.textContent = original; }, ms);
+  }
+
+  // Download the full character document as a JSON file.
+  async function exportJson() {
+    const btn = $('hd-export-json');
+    if (btn) { btn.disabled = true; }
+    try {
+      const { doc, json } = await fetchCharacterJson();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${slugify(doc.name || 'character')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('json export failed', err);
+    } finally {
+      if (btn) { btn.disabled = false; }
+    }
+  }
+
+  // Copy the full character JSON to the clipboard. Falls back to a hidden
+  // textarea + execCommand for non-secure-context LAN access (where
+  // navigator.clipboard is unavailable over plain HTTP).
+  async function copyJson() {
+    const btn = $('hd-export-copy');
+    if (btn) { btn.disabled = true; }
+    try {
+      const { json } = await fetchCharacterJson();
+      let ok = false;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try { await navigator.clipboard.writeText(json); ok = true; } catch (e) { ok = false; }
+      }
+      if (!ok) {
+        const ta = document.createElement('textarea');
+        ta.value = json;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        ta.remove();
+      }
+      flashButton(btn, ok ? '✓ Copied' : '✗ Copy failed');
+    } catch (err) {
+      console.error('json copy failed', err);
+      flashButton(btn, '✗ Copy failed');
+    } finally {
+      if (btn) { btn.disabled = false; }
+    }
+  }
+
   // ---- tabs ----
   function switchTab(tab) {
     document.querySelectorAll('#hd-tabs .tab-btn').forEach((b) =>
@@ -964,6 +1032,8 @@
       if (e.target.files[0]) uploadAvatar(e.target.files[0]);
     });
     $('hd-voice-synth').addEventListener('click', synthSample);
+    $('hd-export-json').addEventListener('click', exportJson);
+    $('hd-export-copy').addEventListener('click', copyJson);
     $('hd-export-new').addEventListener('click', () => {
       $('hd-export-name').value = ''; $('hd-export-prompt').value = '';
       $('hd-export-msg').textContent = ''; $('hd-export-dialog').showModal();
