@@ -107,11 +107,13 @@ button:disabled { opacity: 0.5; cursor: default; }
 /* ===== radio groups (sex, experience valence, outfit primary) ===== */
 .hd-radio-row { display: flex; flex-wrap: wrap; gap: var(--gap-md); align-items: center; }
 .hd-radio { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: var(--font-size-sm); color: var(--color-text); }
-.hd-radio input { width: auto; margin: 0; }
+/* small composite controls don't need room for the hover cluster (it sits over
+   the whole .hd-field slot, not these inputs) — undo the full-width padding */
+.hd-radio input { width: auto; margin: 0; padding: 0; }
 
 /* ===== height (feet + inches) ===== */
 .hd-height { display: flex; align-items: center; gap: 6px; }
-.hd-height input { width: 72px; }
+.hd-height input { width: 72px; padding-right: 9px; }
 .hd-height span { color: var(--color-text-muted); font-size: var(--font-size-sm); }
 
 /* ===== dialogue examples ===== */
