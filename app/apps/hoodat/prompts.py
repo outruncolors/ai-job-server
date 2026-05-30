@@ -112,6 +112,26 @@ def _register_field_prompts() -> None:
 _register_field_prompts()
 
 
+# ---- dialogue examples (list-aware, not a scalar field) --------------------
+
+# Deliberately NOT registered via FIELD_SPECS: a dialogue example is one item of
+# a growing list, generated from the character + the prior examples (few-shot),
+# so it needs its own list-aware prompt rather than the per-scalar-field shape.
+DIALOGUE_EXAMPLE = (
+    "Here is a character:\n<character>\n{{var.character}}\n</character>\n\n"
+    "Dialogue examples already written for them (may be empty):\n"
+    "<examples>\n{{var.examples}}\n</examples>\n\n"
+    "Write ONE new, distinct line or short exchange of dialogue spoken by this "
+    "character. Match their voice and personality, stay consistent with "
+    "everything above, and do not duplicate an existing example. Output only the "
+    "dialogue text itself — no preamble, no label, no quotes, no code fences."
+)
+
+register("hoodat", "dialogue.example", title="Dialogue example",
+         prompt=DIALOGUE_EXAMPLE, tags=("dialogue", "speaking_style"),
+         description="Generate a new dialogue example from the character + prior examples.")
+
+
 # ---- avatar image prompt ---------------------------------------------------
 
 # Written as flowing natural-language prose per FLUX.2 [klein] guidance (its
@@ -160,9 +180,15 @@ def render_character_context(doc: dict) -> str:
     for section in ("appearance", "personality", "background", "speaking_style"):
         block = doc.get(section) or {}
         for field, value in block.items():
-            if field == "voice_preset_id":
+            # voice_preset_id is plumbing; dialogue_examples gets its own block.
+            if field in ("voice_preset_id", "dialogue_examples"):
                 continue
             emit(f"{section}.{field}", value)
+    examples = ((doc.get("speaking_style") or {}).get("dialogue_examples")) or []
+    if examples:
+        lines.append("Dialogue examples:")
+        for i, ex in enumerate(examples, 1):
+            lines.append(f"  {i}. {ex}")
     return "\n".join(lines) if lines else "(no details yet)"
 
 

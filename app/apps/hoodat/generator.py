@@ -8,6 +8,9 @@ starves real jobs), scaffolding an on-disk job for debuggability.
   merge the user's name, persist a `Character`.
 - `run_field(character_id, section, field)` — single-step generate one field
   from the rest of the character, normalize per the field's kind, persist.
+- `run_dialogue_example(character_id, examples)` — single-step generate one new
+  dialogue example from the character + prior examples (no persistence; the
+  frontend owns the list).
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from .prompts import render_character_context
 
 CREATE_JOB_TYPE = "hoodat_character"
 FIELD_JOB_TYPE = "hoodat_field"
+DIALOGUE_JOB_TYPE = "hoodat_dialogue"
 MAX_PARSE_RETRIES = 2
 
 
@@ -235,4 +239,57 @@ async def run_field(
     if updated is None:  # pragma: no cover — checked above
         raise GenerationError(f"character disappeared: {character_id}")
 
+    return value, id_for("hoodat", key), job_id
+
+
+# ---- dialogue examples -----------------------------------------------------
+
+def _normalize_dialogue(raw: str) -> str:
+    """Clean a generated dialogue example. Unlike `_normalize_value(scalar)`,
+    keep internal newlines (a short exchange may span lines)."""
+    t = _strip_fences(raw).strip()
+    # strip a single wrapping quote pair if the whole thing is quoted
+    if len(t) >= 2 and t[0] in "\"'" and t[-1] == t[0]:
+        t = t[1:-1].strip()
+    return t
+
+
+async def run_dialogue_example(
+    character_id: str,
+    examples: Optional[list[str]] = None,
+    llm: Optional[ChainLLMConfig] = None,
+) -> tuple[str, Optional[str], str]:
+    """Generate one new dialogue example from the character + prior `examples`.
+
+    Returns `(value, prompt_id, job_id)`. Does **not** persist — the frontend
+    owns the list and writes the full edited list back via `PUT /characters/{id}`
+    (the list is replaced wholesale by the nested-section merge).
+    """
+    character = characters_store.get_character(character_id)
+    if character is None:
+        raise GenerationError(f"character not found: {character_id}")
+
+    llm = _resolve_llm(llm)
+    key = "dialogue.example"
+    rendered_context = render_character_context(character)
+    examples_text = "\n".join(f"- {e}" for e in (examples or [])) or "(none yet)"
+    prompt = get_text("hoodat", key, variables={
+        "character": rendered_context, "examples": examples_text,
+    })
+
+    request = ChainJobRequest(
+        title="Hoodat dialogue example",
+        input=rendered_context,
+        llm=llm,
+        steps=[_llm_step(1, "dialogue", "Dialogue example", prompt)],
+    )
+    status = create_job(DIALOGUE_JOB_TYPE, request.model_dump(), request.input)
+    job_id = status["job_id"]
+    job_dir = find_job_dir(job_id)
+    if job_dir is None:  # pragma: no cover
+        raise GenerationError("job directory disappeared after creation")
+
+    await execute_chain_job(job_id, job_dir, request)
+
+    value = _normalize_dialogue(_read_final_output(job_dir))
     return value, id_for("hoodat", key), job_id

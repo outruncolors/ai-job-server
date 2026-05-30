@@ -37,21 +37,24 @@
     <section class="tab-pane" id="tab-personality" hidden></section>
     <section class="tab-pane" id="tab-background" hidden></section>
 
-    <!-- Speaking Style: description field + voice integration -->
+    <!-- Speaking Style: description + dialogue examples + voice integration -->
     <section class="tab-pane" id="tab-speaking_style" hidden>
       <div id="speaking-fields"></div>
-      <div class="hd-voice">
-        <h3>Voice</h3>
-        <label>Voice preset
-          <select id="hd-voice-select"></select>
-        </label>
-        <div class="hd-voice-sample">
-          <input type="text" id="hd-voice-text" placeholder="A line to hear in their voice…">
-          <button type="button" id="hd-voice-synth">Synthesize sample</button>
-          <span id="hd-voice-msg" role="status"></span>
+      <div id="hd-dialogue"></div>
+      <section class="hd-section">
+        <div class="hd-section-head"><h3 class="hd-section-title">Voice</h3></div>
+        <div class="hd-section-body">
+          <label class="hd-voice-preset">Voice preset
+            <select id="hd-voice-select"></select>
+          </label>
+          <div class="hd-voice-sample">
+            <input type="text" id="hd-voice-text" placeholder="A line to hear in their voice…">
+            <button type="button" id="hd-voice-synth">Synthesize sample</button>
+            <span id="hd-voice-msg" role="status"></span>
+          </div>
+          <audio id="hd-voice-audio" controls hidden></audio>
         </div>
-        <audio id="hd-voice-audio" controls hidden></audio>
-      </div>
+      </section>
     </section>
 
     <!-- Targeted Exports -->
@@ -88,7 +91,7 @@
       <label>Name<input type="text" id="hd-export-name" placeholder="e.g. RPG stat block"></label>
       <label>Prompt
         <textarea id="hd-export-prompt" rows="6"
-          placeholder="Use {{var.character}} for the full character and {{var.detail}} for the chosen level."></textarea>
+          placeholder="Use {{var.character}} for the full character, {{var.dialogue_examples}} for their sample lines, and {{var.detail}} for the chosen level."></textarea>
       </label>
       <div id="hd-export-msg" class="msg"></div>
       <div class="dlg-actions">

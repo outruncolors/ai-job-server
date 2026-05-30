@@ -75,6 +75,19 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 #hd-panes { padding: var(--gap-lg) var(--panel-pad-h) var(--gap-xl); }
 
+/* ===== section cards (shared visual wrapper inside every tab) ===== */
+.hd-section {
+  background: var(--color-bg-panel); border: 1px solid var(--color-border-mid);
+  border-radius: 8px; padding: var(--gap-lg);
+  display: flex; flex-direction: column; gap: var(--gap-lg);
+}
+.hd-section-head { display: flex; align-items: center; gap: var(--gap-sm); }
+.hd-section-title {
+  margin: 0; flex: 1; font-size: var(--font-size-sm);
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-sub);
+}
+.hd-section-body { display: flex; flex-direction: column; gap: var(--gap-lg); }
+
 /* fields stack full-width, one per row — only for the visible pane; `hidden`
    must stay authoritative (an unguarded `display` would override the
    attribute's UA display:none). */
@@ -91,13 +104,18 @@ button:disabled { opacity: 0.5; cursor: default; }
   width: 100%; box-sizing: border-box; padding-right: 56px;
 }
 
+/* ===== dialogue examples ===== */
+.hd-dlg-rows { display: flex; flex-direction: column; gap: var(--gap-md); }
+.hd-dlg-row { position: relative; }
+/* leave room at the top-right for the three-button hover cluster */
+.hd-dlg-row textarea { width: 100%; box-sizing: border-box; padding-right: 92px; }
+.hd-dlg-empty { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
 /* ===== voice block ===== */
-.hd-voice { margin-top: var(--gap-xl); border-top: 1px solid var(--color-border-mid); padding-top: var(--gap-lg); }
-.hd-voice h3 { margin: 0 0 var(--gap-sm); }
-.hd-voice label { display: flex; flex-direction: column; gap: 4px; max-width: 360px; font-size: var(--font-size-label); color: var(--color-text-sub); }
-.hd-voice-sample { display: flex; gap: var(--gap-sm); margin-top: var(--gap-md); flex-wrap: wrap; }
+.hd-voice-preset { display: flex; flex-direction: column; gap: 4px; max-width: 360px; font-size: var(--font-size-label); color: var(--color-text-sub); }
+.hd-voice-sample { display: flex; gap: var(--gap-sm); flex-wrap: wrap; }
 .hd-voice-sample input { flex: 1; min-width: 200px; }
-#hd-voice-audio { margin-top: var(--gap-md); width: 100%; max-width: 480px; }
+#hd-voice-audio { width: 100%; max-width: 480px; }
 #hd-voice-msg { color: var(--color-text-muted); font-size: var(--font-size-xs); }
 
 /* ===== exports ===== */

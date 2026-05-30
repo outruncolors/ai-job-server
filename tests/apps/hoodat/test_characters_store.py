@@ -52,3 +52,19 @@ def test_update_top_level_and_nested():
 
 def test_update_missing_returns_none():
     assert cs.update_character_fields("nope", {"tagline": "x"}) is None
+
+
+def test_create_defaults_dialogue_examples_empty():
+    doc = cs.create_character(_fields())
+    assert doc["speaking_style"]["dialogue_examples"] == []
+
+
+def test_dialogue_examples_replaced_wholesale():
+    doc = cs.create_character(_fields(speaking_style={"description": "gruff"}))
+    a = cs.update_character_fields(doc["id"], {"speaking_style": {"dialogue_examples": ["one", "two"]}})
+    assert a["speaking_style"]["dialogue_examples"] == ["one", "two"]
+    # a sibling field set earlier survives the list patch (deep-merge)
+    assert a["speaking_style"]["description"] == "gruff"
+    # a second patch replaces the list rather than appending/merging it
+    b = cs.update_character_fields(doc["id"], {"speaking_style": {"dialogue_examples": ["three"]}})
+    assert b["speaking_style"]["dialogue_examples"] == ["three"]

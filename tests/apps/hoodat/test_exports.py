@@ -49,6 +49,28 @@ async def test_run_export_composes_character_and_detail(monkeypatch):
     assert "Ada" in captured["prompt"]  # character rendered in
 
 
+async def test_run_export_exposes_dialogue_examples(monkeypatch):
+    pp_store.create_entry({
+        "app": "hoodat", "key": "export.lines", "title": "Lines",
+        "prompt": "Examples:\n{{var.dialogue_examples}}", "variables": {},
+    })
+    char = cs.create_character({
+        "name": "Ada",
+        "speaking_style": {"dialogue_examples": ["Eureka!", "To the lab."]},
+    })
+
+    captured = {}
+
+    async def fake(job_id, job_dir, request, event_bus=None):
+        captured["prompt"] = request.steps[0].alternatives[0].prompt
+        (job_dir / "final_output.txt").write_text("OK", encoding="utf-8")
+
+    monkeypatch.setattr(exports, "execute_chain_job", fake)
+    await exports.run_export(char["id"], "export.lines", "standard")
+    assert "- Eureka!" in captured["prompt"]
+    assert "- To the lab." in captured["prompt"]
+
+
 async def test_run_export_bad_detail(monkeypatch):
     _make_export()
     char = cs.create_character({"name": "Ada"})

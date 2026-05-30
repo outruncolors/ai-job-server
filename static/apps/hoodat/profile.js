@@ -59,6 +59,18 @@
     else { character[section] = character[section] || {}; character[section][field] = value; }
   }
 
+  // ---- section cards (shared visual wrapper for every tab) ----
+  const SECTION_TITLES = {
+    identity: 'Identity', appearance: 'Appearance', personality: 'Personality',
+    background: 'Background', speaking_style: 'Speaking Style',
+  };
+  function sectionCard(title, bodyHtml) {
+    return `<section class="hd-section">
+      <div class="hd-section-head"><h3 class="hd-section-title">${_escHtml(title)}</h3></div>
+      <div class="hd-section-body">${bodyHtml}</div>
+    </section>`;
+  }
+
   // ---- field rendering ----
   const _ROWS = { scalar: 3, list: 5, long: 8 };
   function fieldInputHtml(kind, id) {
@@ -68,7 +80,7 @@
   }
 
   function renderSection(section, container) {
-    container.innerHTML = FIELDS[section].map(([field, label, kind]) => {
+    const fieldsHtml = FIELDS[section].map(([field, label, kind]) => {
       const inId = `f-${section}-${field}`;
       const hint = kind === 'list' ? '<span class="hd-field-hint">one per line</span>' : '';
       return `<div class="hd-field" data-section="${section}" data-field="${field}" data-kind="${kind}">
@@ -76,6 +88,7 @@
         ${fieldInputHtml(kind, inId)}
       </div>`;
     }).join('');
+    container.innerHTML = sectionCard(SECTION_TITLES[section] || section, fieldsHtml);
 
     container.querySelectorAll('.hd-field').forEach((slot) => {
       const { section: sec, field, kind } = slot.dataset;
@@ -128,6 +141,120 @@
       ? `/prompt-pal/?app=hoodat&highlight=${encodeURIComponent(id)}`
       : `/prompt-pal/?app=hoodat`;
     window.open(url, '_blank');
+  }
+
+  // ---- dialogue examples ----
+  // A growing list of sample lines. The frontend owns the list: generation
+  // returns a candidate string and we PUT the full edited list back (the
+  // nested-section merge replaces `dialogue_examples` wholesale).
+  function dialogueList() { return ((character.speaking_style || {}).dialogue_examples) || []; }
+  function dlgTextareas() { return document.querySelectorAll('#hd-dialogue .hd-dlg-row textarea'); }
+  function collectDialogueRaw() { return Array.from(dlgTextareas()).map((t) => t.value); }
+  function collectDialogue() { return collectDialogueRaw().map((s) => s.trim()).filter(Boolean); }
+
+  function persistDialogue(list) {
+    setLocal('speaking_style', 'dialogue_examples', list);
+    return api(`${APP}/characters/${charId}`, 'PUT', { speaking_style: { dialogue_examples: list } });
+  }
+
+  function focusLastDialogue() {
+    const tas = dlgTextareas();
+    if (tas.length) tas[tas.length - 1].focus();
+  }
+
+  function openDialoguePrompt() {
+    const id = promptMap['dialogue.example'];
+    const url = id
+      ? `/prompt-pal/?app=hoodat&highlight=${encodeURIComponent(id)}`
+      : `/prompt-pal/?app=hoodat`;
+    window.open(url, '_blank');
+  }
+
+  async function generateDialogue(examples) {
+    const res = await api(`${APP}/characters/${charId}/dialogue-examples/generate`, 'POST', { examples });
+    if (res.prompt_id) promptMap['dialogue.example'] = res.prompt_id;
+    return res.value;
+  }
+
+  async function addDialogue() {
+    const list = collectDialogue();
+    if (list.length === 0) {
+      // Nothing to learn from yet — just give the user an empty row to type in.
+      renderDialogue(collectDialogueRaw().concat(['']));
+      focusLastDialogue();
+      return;
+    }
+    const btn = $('hd-dlg-add');
+    if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+    try {
+      const value = await generateDialogue(list);
+      const next = list.concat([value]);
+      await persistDialogue(next);
+      renderDialogue(next);
+      focusLastDialogue();
+    } catch (err) {
+      console.error('dialogue add failed', err);
+      if (btn) { btn.disabled = false; btn.textContent = '+ Add dialogue example'; }
+    }
+  }
+
+  async function regenDialogue(ctx, meta) {
+    const btn = meta && meta.button;
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    const rows = collectDialogueRaw();
+    const others = rows.filter((_, i) => i !== ctx.index).map((s) => s.trim()).filter(Boolean);
+    try {
+      const value = await generateDialogue(others);
+      rows[ctx.index] = value;
+      const cleaned = rows.map((s) => s.trim()).filter(Boolean);
+      await persistDialogue(cleaned);
+      renderDialogue(cleaned);
+    } catch (err) {
+      console.error('dialogue regenerate failed', err);
+      if (btn) { btn.disabled = false; btn.textContent = '✨'; }
+    }
+  }
+
+  async function removeDialogue(index) {
+    const rows = collectDialogueRaw();
+    rows.splice(index, 1);
+    const cleaned = rows.map((s) => s.trim()).filter(Boolean);
+    try {
+      await persistDialogue(cleaned);
+      renderDialogue(cleaned);
+    } catch (err) {
+      console.error('dialogue remove failed', err);
+    }
+  }
+
+  function renderDialogue(list) {
+    if (list === undefined) list = dialogueList();
+    const container = $('hd-dialogue');
+    const rowsHtml = list.map((text, i) =>
+      `<div class="hd-dlg-row" data-index="${i}">
+        <textarea rows="3" placeholder="A line this character might say…">${_escHtml(text)}</textarea>
+      </div>`).join('');
+    const empty = list.length ? '' : '<div class="hd-dlg-empty">No dialogue examples yet.</div>';
+    const body = `${empty}<div class="hd-dlg-rows">${rowsHtml}</div>
+      <div class="hd-dlg-actions">
+        <button type="button" id="hd-dlg-add">+ Add dialogue example</button>
+      </div>`;
+    container.innerHTML = sectionCard('Dialogue examples', body);
+
+    $('hd-dlg-add').addEventListener('click', addDialogue);
+    container.querySelectorAll('.hd-dlg-row').forEach((rowEl) => {
+      const textarea = rowEl.querySelector('textarea');
+      textarea.addEventListener('change', () => persistDialogue(collectDialogue()));
+      FieldControls.attach(rowEl, {
+        kind: 'field',
+        context: () => ({ index: Number(rowEl.dataset.index), input: textarea }),
+        controls: [
+          { id: 'gen', label: '✨', title: 'Regenerate this example', onClick: regenDialogue },
+          { id: 'prompt', label: '✏️', title: 'Edit the dialogue prompt', onClick: openDialoguePrompt },
+          { id: 'rm', label: '✗', title: 'Remove', onClick: (ctx) => removeDialogue(ctx.index) },
+        ],
+      });
+    });
   }
 
   // ---- header + avatar ----
@@ -389,6 +516,7 @@
     renderSection('personality', $('tab-personality'));
     renderSection('background', $('tab-background'));
     renderSection('speaking_style', $('speaking-fields'));
+    renderDialogue();
     await loadVoice();
     switchTab(qs.get('tab') || 'identity');
   }

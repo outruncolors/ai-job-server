@@ -9,8 +9,9 @@ template is organized into five sections that map onto the profile-page tabs:
   prompts cleanly, plus a `primary_outfit`.
 - **Personality** — `Personality` block (traits / quirks / values / fears).
 - **Background & Relationships** — `Background` block.
-- **Speaking Style** — `SpeakingStyle` block: how they speak + an optional
-  `voice_preset_id` referencing the project's voice-preset system.
+- **Speaking Style** — `SpeakingStyle` block: how they speak, an optional
+  `voice_preset_id` referencing the project's voice-preset system, and a list of
+  `dialogue_examples` (sample lines for few-shot voice priming).
 
 `id` / `schema_version` / timestamps / `avatar_path` are server-assigned — never
 produced by the LLM.
@@ -61,6 +62,9 @@ class Background(BaseModel):
 class SpeakingStyle(BaseModel):
     description: str = ""
     voice_preset_id: Optional[str] = None
+    # Free-text sample lines that capture how the character talks; the more
+    # present, the better subsequent generations match the voice (few-shot).
+    dialogue_examples: list[str] = Field(default_factory=list)
 
 
 class Character(BaseModel):

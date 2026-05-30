@@ -88,6 +88,35 @@ def test_generate_field(client, monkeypatch):
     assert "prompt_id" in body and "job_id" in body
 
 
+def test_generate_dialogue_example(client, monkeypatch):
+    char = cs.create_character({"name": "Ada"})
+
+    async def fake_dlg(job_id, job_dir, request, event_bus=None):
+        (job_dir / "final_output.txt").write_text("A wry little quip.", encoding="utf-8")
+
+    monkeypatch.setattr(generator, "execute_chain_job", fake_dlg)
+    r = client.post(
+        f"/v1/apps/hoodat/characters/{char['id']}/dialogue-examples/generate",
+        json={"examples": ["a prior line"]},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["value"] == "A wry little quip."
+    assert "prompt_id" in body and "job_id" in body
+    # generation does not persist; the list is unchanged server-side
+    assert cs.get_character(char["id"])["speaking_style"]["dialogue_examples"] == []
+
+
+def test_update_persists_dialogue_examples(client):
+    char = cs.create_character({"name": "Ada"})
+    r = client.put(
+        f"/v1/apps/hoodat/characters/{char['id']}",
+        json={"speaking_style": {"dialogue_examples": ["Howdy."]}},
+    )
+    assert r.status_code == 200
+    assert r.json()["speaking_style"]["dialogue_examples"] == ["Howdy."]
+
+
 def test_avatar_generate_503_without_image_capability(client, tmp_path, monkeypatch):
     char = cs.create_character({"name": "Ada"})
     # Write a server.json that excludes the image capability, reset cache.

@@ -17,7 +17,7 @@ from pydantic import BaseModel, ValidationError
 
 from ...server import get_local_capabilities
 from . import avatars, characters_store, exports
-from .generator import GenerationError, run_create, run_field
+from .generator import GenerationError, run_create, run_dialogue_example, run_field
 from .models import Character
 
 router = APIRouter(prefix="/v1/apps/hoodat", tags=["hoodat"])
@@ -30,6 +30,11 @@ class CreateCharacterRequest(BaseModel):
 
 class RunExportRequest(BaseModel):
     detail: str = "standard"
+
+
+class DialogueGenerateRequest(BaseModel):
+    # The caller's current (possibly unsaved) list, used as few-shot context.
+    examples: list[str] = []
 
 
 def _summary(doc: dict) -> dict:
@@ -96,6 +101,15 @@ def delete_character(character_id: str):
 async def generate_field(character_id: str, section: str, field: str):
     try:
         value, prompt_id, job_id = await run_field(character_id, section, field)
+    except GenerationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"value": value, "prompt_id": prompt_id, "job_id": job_id}
+
+
+@router.post("/characters/{character_id}/dialogue-examples/generate")
+async def generate_dialogue_example(character_id: str, body: DialogueGenerateRequest):
+    try:
+        value, prompt_id, job_id = await run_dialogue_example(character_id, body.examples)
     except GenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return {"value": value, "prompt_id": prompt_id, "job_id": job_id}

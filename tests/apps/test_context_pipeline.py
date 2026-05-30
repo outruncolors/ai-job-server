@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app.apps.blaboratory import chat_store, context_pipeline, cursor_store, db, event_store
+from app.apps.blaboratory import chat_store, context_pipeline, cursor_store, db, event_store, settings_store
 from app.apps.blaboratory.context_pipeline import Caps, build_context, gather_memories, write_phase
 
 
@@ -153,7 +153,9 @@ def _seed_events_and_index():
 
 async def test_hybrid_surfaces_relevant_older_item(monkeypatch):
     db.get_connection()
-    monkeypatch.setattr(context_pipeline, "RECENCY_FLOOR_ITEMS", 2)
+    # RECENCY_FLOOR_ITEMS moved into settings_store (hot-applied knob); patch the
+    # getter context_pipeline now reads instead of the long-gone module constant.
+    monkeypatch.setattr(settings_store, "recency_floor_items", lambda: 2)
     _seed_events_and_index()
 
     async def fake_embed(texts, *, is_query=False):

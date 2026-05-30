@@ -53,7 +53,11 @@ async def run_export(
 
     llm = _resolve_llm(llm)
     rendered = render_character_context(character)
-    prompt = get_text("hoodat", export_key, variables={"character": rendered, "detail": detail})
+    examples = ((character.get("speaking_style") or {}).get("dialogue_examples")) or []
+    examples_text = "\n".join(f"- {e}" for e in examples)
+    prompt = get_text("hoodat", export_key, variables={
+        "character": rendered, "detail": detail, "dialogue_examples": examples_text,
+    })
 
     request = ChainJobRequest(
         title=f"Hoodat export {export_key}",

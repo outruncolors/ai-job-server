@@ -114,3 +114,41 @@ async def test_run_field_unknown_field():
     base = cs.create_character({"name": "Ada"})
     with pytest.raises(generator.GenerationError):
         await generator.run_field(base["id"], "nope", "nope")
+
+
+def test_normalize_dialogue_strips_fences_and_quotes_keeps_newlines():
+    assert generator._normalize_dialogue('```\n"Line one\nLine two"\n```') == "Line one\nLine two"
+    assert generator._normalize_dialogue("  plain line  ") == "plain line"
+
+
+async def test_run_dialogue_example_returns_value_without_persisting(monkeypatch):
+    base = cs.create_character({"name": "Ada"})
+    fake, _ = _fake_chain(['"Why, hello there!"'])
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    value, prompt_id, job_id = await generator.run_dialogue_example(base["id"], ["a prior line"])
+    assert value == "Why, hello there!"  # wrapping quotes stripped
+    assert job_id
+    # generation does NOT persist — the frontend owns the list
+    assert cs.get_character(base["id"])["speaking_style"]["dialogue_examples"] == []
+
+
+async def test_run_dialogue_example_missing_character(monkeypatch):
+    fake, _ = _fake_chain(["x"])
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+    with pytest.raises(generator.GenerationError):
+        await generator.run_dialogue_example("nope", [])
+
+
+def test_render_character_context_includes_dialogue_examples():
+    from app.apps.hoodat.prompts import render_character_context
+    doc = cs.create_character({
+        "name": "Ada",
+        "speaking_style": {"description": "wry", "dialogue_examples": ["Howdy, partner."]},
+    })
+    rendered = render_character_context(doc)
+    assert "Dialogue examples:" in rendered
+    assert "Howdy, partner." in rendered
+
+    plain = render_character_context(cs.create_character({"name": "Bo"}))
+    assert "Dialogue examples:" not in plain
