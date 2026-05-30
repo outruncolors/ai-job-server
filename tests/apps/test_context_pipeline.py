@@ -99,6 +99,23 @@ def test_write_phase_posts_chat_then_consumes():
     assert any("I posted this" in m for m in gather_memories(r["id"]))
 
 
+def test_write_phase_stores_chat_id_in_event_payload():
+    r = _resident()
+    write_phase(
+        r,
+        tick=2,
+        action_result={
+            "action": "use_computer",
+            "chat_post": "deep link me",
+            "consume": ["chat"],
+            "payload": {"summary": "posted", "post": "deep link me"},
+        },
+    )
+    chat_id = chat_store.latest_chat_id()
+    evs = event_store.events_for_resident(r["id"])
+    assert evs[0]["payload"]["chat_id"] == chat_id
+
+
 # ---- D1.4 hybrid retrieval ------------------------------------------------
 
 from app.apps.blaboratory import embeddings, vector_index

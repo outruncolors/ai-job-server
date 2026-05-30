@@ -98,6 +98,32 @@ def test_utterances_empty_and_clock_default(client):
     assert client.get("/v1/apps/blaboratory/clock").json()["running"] is False
 
 
+def test_chat_feed_enriches_author_name(client):
+    from app.apps.blaboratory import chat_store
+
+    a = _seed("Ada", 1)
+    mid = chat_store.append_chat(tick=1, body="hello", author_resident_id=a)
+    chat_store.append_chat(tick=1, body="system note", author_resident_id=None)
+
+    data = client.get("/v1/apps/blaboratory/chat").json()
+    assert [m["body"] for m in data["messages"]] == ["hello", "system note"]
+    assert data["messages"][0]["author_name"] == "Ada"
+    assert data["messages"][1]["author_name"] is None  # system post
+
+    around = client.get(f"/v1/apps/blaboratory/chat?around={mid}").json()
+    assert around["target_id"] == mid
+
+
+def test_chat_feed_respects_until_tick(client):
+    from app.apps.blaboratory import chat_store
+
+    _seed("Ada", 1)
+    chat_store.append_chat(tick=1, body="early", author_resident_id=None)
+    chat_store.append_chat(tick=5, body="late", author_resident_id=None)
+    data = client.get("/v1/apps/blaboratory/chat?until_tick=2").json()
+    assert [m["body"] for m in data["messages"]] == ["early"]
+
+
 def test_fire_route_delegates(client, monkeypatch):
     a = _seed("Ada", 1)
     event_store.append_event(tick=4, kind="action", resident_id=a, action="idle")

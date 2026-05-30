@@ -128,6 +128,7 @@
       renderTimeline();
       if (following) await loadGrid();
     }
+    if (currentTab === 'messages' && following) await pollMessages();
   }
 
   grid.addEventListener('click', (e) => {
@@ -227,21 +228,33 @@
     return `<section class="d-sec"><h4>${_escHtml(title)}</h4>${body}</section>`;
   }
 
+  function switchModalTab(name) {
+    document.querySelectorAll('.modal-tab-btn').forEach((b) =>
+      b.classList.toggle('active', b.dataset.mtab === name));
+    ['profile', 'events', 'context'].forEach((p) => {
+      const el = $(`dm-${p}`);
+      if (el) el.hidden = p !== name;
+    });
+  }
+
   async function openDetail(rid) {
     const dlg = $('detail-dialog');
+    switchModalTab('profile');
     $('detail-name').textContent = 'Resident';
-    $('detail-body').innerHTML = '<p class="hint">Loading…</p>';
+    $('dm-profile').innerHTML = '<p class="hint">Loading…</p>';
+    $('dm-events').innerHTML = '<p class="hint">Loading…</p>';
+    $('dm-context').innerHTML = '<pre class="d-context">Loading…</pre>';
     dlg.showModal();
     let r;
     try {
       r = await api(`${APP}/residents/${rid}`);
     } catch (e) {
-      $('detail-body').innerHTML = `<p class="error">${_escHtml(e.message)}</p>`;
+      $('dm-profile').innerHTML = `<p class="error">${_escHtml(e.message)}</p>`;
       return;
     }
     $('detail-name').textContent = r.name;
     const p = r.personality || {};
-    $('detail-body').innerHTML = [
+    $('dm-profile').innerHTML = [
       section('Identity', [['Age', r.age], ['Sex', r.sex], ['Occupation', r.occupation]]),
       section('Appearance', [
         ['Height', r.height], ['Build', r.build],
@@ -254,10 +267,6 @@
       ]),
       r.backstory ? `<section class="d-sec"><h4>Backstory</h4>
         <p class="d-prose">${_escHtml(r.backstory)}</p></section>` : '',
-      `<section class="d-sec" id="d-events"><h4>Event log <span class="d-sub">(through tick ${playhead})</span></h4>
-        <div class="d-log">Loading…</div></section>`,
-      `<details class="d-sec"><summary>Active context / knowledge</summary>
-        <pre class="d-context" id="d-context">Loading…</pre></details>`,
     ].join('');
 
     loadActivity(rid, r.room_id);
@@ -275,31 +284,57 @@
       if (roomId != null) {
         utter = await api(`${APP}/rooms/${roomId}/utterances?until_tick=${playhead}`);
       }
-      renderLog($('d-events').querySelector('.d-log'), ev.events, utter.utterances);
-      const ctxEl = $('d-context');
-      if (ctxEl) ctxEl.textContent = ctx.context || '(empty)';
+      renderEventLog($('dm-events'), ev.events, utter.utterances);
+      $('dm-context').innerHTML =
+        `<pre class="d-context">${_escHtml(ctx.context || '(empty)')}</pre>`;
     } catch (e) {
-      const log = $('d-events') && $('d-events').querySelector('.d-log');
-      if (log) log.innerHTML = `<p class="error">${_escHtml(e.message)}</p>`;
+      $('dm-events').innerHTML = `<p class="error">${_escHtml(e.message)}</p>`;
     }
   }
 
-  function renderLog(el, events, utterances) {
-    // Merge events + utterances into one newest-first list keyed by tick.
+  const _ACTION_ICON = {
+    use_computer: '💻', use_televisor: '📺', use_speakerphone: '📞',
+    sleep: '😴', idle: '💤',
+  };
+
+  // Merge events + phone utterances newest-first; chat-post rows (payload.chat_id)
+  // render their quote as a deep-link into the Messages tab.
+  function renderEventLog(el, events, utterances) {
     const rows = [];
-    (events || []).forEach((e) => rows.push({
-      tick: e.tick, id: `e${e.id}`,
-      text: `${_actionVerb(e.action || e.kind)}${_summaryOf(e)}`,
-    }));
-    (utterances || []).forEach((u) => rows.push({
-      tick: u.tick, id: `u${u.id}`, speaker: u.speaker_resident_id,
-      text: `📞 “${u.body}”`,
-    }));
-    rows.sort((a, b) => (b.tick - a.tick) || b.id.localeCompare(a.id));
+    (events || []).forEach((e) =>
+      rows.push({ tick: e.tick, key: `e${String(e.id).padStart(10, '0')}`, ev: e }));
+    (utterances || []).forEach((u) =>
+      rows.push({ tick: u.tick, key: `u${String(u.id).padStart(10, '0')}`, utter: u }));
+    rows.sort((a, b) => (b.tick - a.tick) || b.key.localeCompare(a.key));
     if (!rows.length) { el.innerHTML = '<p class="hint">No activity yet.</p>'; return; }
-    el.innerHTML = rows.map((r) =>
-      `<div class="log-row"><span class="log-tick">#${r.tick}</span>
-        <span class="log-text">${_escHtml(r.text)}</span></div>`).join('');
+
+    el.innerHTML = rows.map((r) => {
+      if (r.utter) {
+        const u = r.utter;
+        return `<div class="ev-row"><span class="ev-icon" aria-hidden="true">📞</span>
+          <div class="ev-main"><div class="ev-line">Phone call</div>
+            <div class="ev-quote-plain">“${_escHtml(u.body)}”</div></div>
+          <span class="ev-tick">#${u.tick}</span></div>`;
+      }
+      const e = r.ev;
+      const action = e.action || e.kind;
+      const icon = _ACTION_ICON[action] || '•';
+      const pl = e.payload || {};
+      const summary = pl.summary ? ` — ${pl.summary}` : '';
+      const time = e.created_at
+        ? `<span class="ev-time" title="${_escHtml(_fmtFull(e.created_at))}">${_escHtml(_fmtTime(e.created_at))}</span>`
+        : '';
+      let quote = '';
+      if (pl.post && pl.chat_id != null) {
+        quote = `<a href="?tab=messages&message_id=${pl.chat_id}" class="ev-quote"
+          data-mid="${pl.chat_id}">“${_escHtml(pl.post)}”</a>`;
+      } else if (pl.post) {
+        quote = `<div class="ev-quote-plain">“${_escHtml(pl.post)}”</div>`;
+      }
+      return `<div class="ev-row"><span class="ev-icon" aria-hidden="true">${icon}</span>
+        <div class="ev-main"><div class="ev-line">${_escHtml(_actionVerb(action) + summary)}</div>${quote}</div>
+        <span class="ev-meta"><span class="ev-tick">#${e.tick}</span>${time}</span></div>`;
+    }).join('');
   }
 
   function _actionVerb(a) {
@@ -310,22 +345,184 @@
     return map[a] || (a || 'Acted');
   }
 
-  function _summaryOf(e) {
-    const s = e.payload && e.payload.summary;
-    return s ? ` — ${s}` : '';
+  function _fmtTime(iso) {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  // ── Tabs (hash-routed) ─────────────────────────────────────────────────
-  const TABS = ['rooms', 'config'];
+  function _fmtFull(iso) {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? String(iso || '') : d.toLocaleString();
+  }
+
+  // ── Messages tab (Discord-style chat-feed view) ───────────────────────
+  let msgItems = [];           // ascending by id; the loaded window
+  let msgHasMoreBefore = false;
+  let msgHasMoreAfter = false;
+  let loadedPlayhead = -1;     // playhead the current window was loaded for
+  let msgLoading = false;
+  let pendingMessageId = null; // deep-link target awaiting the messages tab
+
+  function _avatarColor(id) {
+    const s = String(id || '');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+    return `hsl(${h} 42% 36%)`;
+  }
+
+  function _initials(name) {
+    const parts = String(name || '?').trim().split(/\s+/);
+    return (((parts[0] || '')[0] || '') + ((parts[1] || '')[0] || '')).toUpperCase() || '?';
+  }
+
+  function _groupMessages(items) {
+    const groups = [];
+    items.forEach((m) => {
+      const last = groups[groups.length - 1];
+      if (last && last.author_resident_id === m.author_resident_id) last.messages.push(m);
+      else groups.push({
+        author_resident_id: m.author_resident_id,
+        author_name: m.author_name,
+        messages: [m],
+      });
+    });
+    return groups;
+  }
+
+  function renderMsgList() {
+    const el = $('msg-list');
+    if (!msgItems.length) { el.innerHTML = '<p class="msg-empty">No messages yet.</p>'; return; }
+    el.innerHTML = _groupMessages(msgItems).map((g) => {
+      const head = g.messages[0];
+      const name = g.author_name || (g.author_resident_id ? 'Unknown' : 'System');
+      const bubbles = g.messages.map((m) =>
+        `<div class="msg-bubble" data-mid="${m.id}">
+          <span class="msg-text">${_escHtml(m.body)}</span>
+          <span class="msg-mtick">#${m.tick}</span>
+        </div>`).join('');
+      return `<div class="msg-group">
+        <div class="msg-avatar" style="background:${_avatarColor(g.author_resident_id)}"
+          aria-hidden="true">${_escHtml(_initials(name))}</div>
+        <div class="msg-col">
+          <div class="msg-head"><span class="msg-name">${_escHtml(name)}</span>
+            <span class="msg-time" title="${_escHtml(_fmtFull(head.created_at))}">${_escHtml(_fmtTime(head.created_at))}</span></div>
+          ${bubbles}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function scrollMsgToBottom() {
+    const sc = $('msg-scroll');
+    sc.scrollTop = sc.scrollHeight;
+    $('msg-jump').hidden = true;
+  }
+
+  // Initial / playhead-changed load: replace the window with the latest page.
+  async function loadMessages() {
+    if (loadedPlayhead === playhead && msgItems.length) return;  // already current
+    let data;
+    try { data = await api(`${APP}/chat?until_tick=${playhead}&limit=50`); }
+    catch (e) { $('msg-list').innerHTML = `<p class="error">${_escHtml(e.message)}</p>`; return; }
+    msgItems = data.messages.slice();
+    msgHasMoreBefore = data.has_more_before;
+    msgHasMoreAfter = false;
+    loadedPlayhead = playhead;
+    renderMsgList();
+    scrollMsgToBottom();
+  }
+
+  async function loadOlder() {
+    if (msgLoading || !msgHasMoreBefore || !msgItems.length) return;
+    msgLoading = true;
+    const sc = $('msg-scroll');
+    const prevH = sc.scrollHeight;
+    const prevTop = sc.scrollTop;
+    try {
+      const data = await api(`${APP}/chat?before=${msgItems[0].id}&until_tick=${playhead}&limit=50`);
+      if (data.messages.length) { msgItems = data.messages.concat(msgItems); renderMsgList(); }
+      msgHasMoreBefore = data.has_more_before;
+      sc.scrollTop = sc.scrollHeight - prevH + prevTop;  // preserve viewport
+    } catch (e) { /* leave as-is on a transient error */ }
+    finally { msgLoading = false; }
+  }
+
+  async function loadNewer() {
+    if (msgLoading || !msgHasMoreAfter || !msgItems.length) return;
+    msgLoading = true;
+    try {
+      const data = await api(`${APP}/chat?after=${msgItems[msgItems.length - 1].id}&until_tick=${playhead}&limit=50`);
+      if (data.messages.length) { msgItems = msgItems.concat(data.messages); renderMsgList(); }
+      msgHasMoreAfter = data.has_more_after;
+    } catch (e) { /* leave as-is */ }
+    finally { msgLoading = false; }
+  }
+
+  // Live append while following the latest; pill if the user has scrolled up.
+  async function pollMessages() {
+    if (!msgItems.length) { await loadMessages(); return; }
+    const sc = $('msg-scroll');
+    const atBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 40;
+    let data;
+    try { data = await api(`${APP}/chat?after=${msgItems[msgItems.length - 1].id}&until_tick=${playhead}&limit=50`); }
+    catch (e) { return; }
+    loadedPlayhead = playhead;
+    if (!data.messages.length) return;
+    msgItems = msgItems.concat(data.messages);
+    renderMsgList();
+    if (atBottom) scrollMsgToBottom();
+    else $('msg-jump').hidden = false;
+  }
+
+  // Deep-link: load a window around `id`, scroll it into view, flash-highlight.
+  async function scrollToMessage(id) {
+    following = true;
+    playhead = latestTick;       // jump to latest so the target is in scope
+    renderTimeline();
+    let data;
+    try { data = await api(`${APP}/chat?around=${id}&until_tick=${playhead}&limit=50`); }
+    catch (e) { $('msg-list').innerHTML = `<p class="error">${_escHtml(e.message)}</p>`; return; }
+    msgItems = data.messages.slice();
+    msgHasMoreBefore = data.has_more_before;
+    msgHasMoreAfter = data.has_more_after;
+    loadedPlayhead = playhead;
+    renderMsgList();
+    const el = $('msg-list').querySelector(`[data-mid="${id}"]`);
+    if (el && data.target_id != null) {
+      el.scrollIntoView({ block: 'center' });
+      el.classList.add('msg-highlight');
+      setTimeout(() => el.classList.remove('msg-highlight'), 2200);
+    } else {
+      scrollMsgToBottom();  // target gone — just show the feed
+    }
+  }
+
+  // Switch to the Messages tab and deep-link to a specific chat message.
+  function goToMessage(chatId) {
+    $('detail-dialog').close();
+    pendingMessageId = chatId;
+    history.replaceState(null, '', `?tab=messages&message_id=${chatId}`);
+    if (currentTab === 'messages') switchTab('messages');
+    else location.hash = 'messages';
+  }
+
+  // ── Tabs (hash-routed; ?tab=/?message_id= honored on load) ─────────────
+  const TABS = ['rooms', 'messages', 'config'];
+  let currentTab = 'rooms';
 
   function switchTab(name) {
     const tab = TABS.includes(name) ? name : 'rooms';
+    currentTab = tab;
     document.querySelectorAll('.tab-btn').forEach((b) =>
       b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.tab-pane').forEach((p) => {
       p.hidden = p.id !== `tab-${tab}`;
     });
     if (tab === 'config') loadSettings();
+    else if (tab === 'messages') {
+      if (pendingMessageId != null) { const id = pendingMessageId; pendingMessageId = null; scrollToMessage(id); }
+      else loadMessages();
+    }
   }
 
   function syncTab() {
@@ -389,6 +586,27 @@
   $('fill-close').addEventListener('click', () => $('fill-dialog').close());
   $('detail-close').addEventListener('click', () => $('detail-dialog').close());
 
+  // Resident-modal sub-tabs + clickable chat-post deep-links in the event log.
+  document.querySelectorAll('.modal-tab-btn').forEach((b) =>
+    b.addEventListener('click', () => switchModalTab(b.dataset.mtab)));
+  $('dm-events').addEventListener('click', (e) => {
+    const a = e.target.closest('a.ev-quote');
+    if (!a) return;
+    e.preventDefault();
+    goToMessage(Number(a.dataset.mid));
+  });
+
+  // Messages tab: infinite scroll (up = older, bottom = newer/hide pill) + pill.
+  $('msg-scroll').addEventListener('scroll', () => {
+    const sc = $('msg-scroll');
+    if (sc.scrollTop < 80) loadOlder();
+    if (sc.scrollHeight - sc.scrollTop - sc.clientHeight < 40) {
+      $('msg-jump').hidden = true;
+      loadNewer();
+    }
+  });
+  $('msg-jump').addEventListener('click', scrollMsgToBottom);
+
   // Timeline + sim controls.
   $('tl-prev').addEventListener('click', () => setPlayhead(playhead - 1));
   $('tl-next').addEventListener('click', () => setPlayhead(playhead + 1));
@@ -405,11 +623,20 @@
     form.addEventListener('submit', (e) => { e.preventDefault(); saveSection(form); }));
 
   (async function init() {
-    syncTab();
     await refreshLatest();
     renderTimeline();
     await loadGrid();
     try { reflectClock((await api(`${APP}/clock`)).running); } catch (e) { /* ignore */ }
+    // Query-param deep-link (?tab=…&message_id=…) wins over the hash on first load.
+    const qs = new URLSearchParams(location.search);
+    const qTab = qs.get('tab');
+    const qMid = qs.get('message_id');
+    if (qTab) {
+      if (qMid) pendingMessageId = Number(qMid);
+      switchTab(qTab);
+    } else {
+      syncTab();
+    }
     setInterval(poll, 5000);
   })();
 })();

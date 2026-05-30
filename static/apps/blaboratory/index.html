@@ -16,9 +16,10 @@
     <p class="subtitle">Sixteen rooms. Fill them with residents.</p>
   </header>
 
-  <!-- Tabs (hash-routed: #rooms / #config) -->
+  <!-- Tabs (hash-routed: #rooms / #messages / #config) -->
   <div class="tab-strip" id="lab-tabs">
     <button type="button" class="tab-btn" data-tab="rooms">Rooms</button>
+    <button type="button" class="tab-btn" data-tab="messages">Messages</button>
     <button type="button" class="tab-btn" data-tab="config">Config</button>
   </div>
 
@@ -34,6 +35,15 @@
     </div>
 
     <main id="grid" aria-busy="false"></main>
+  </section>
+
+  <!-- Messages tab: Discord-style speech-bubble view of the chat feed -->
+  <section class="tab-pane" id="tab-messages" hidden>
+    <div id="msg-scroll">
+      <div id="msg-top-sentinel"></div>
+      <div id="msg-list" aria-live="polite"></div>
+    </div>
+    <button type="button" id="msg-jump" hidden>↓ New messages</button>
   </section>
 
   <!-- Config tab: sim controls + hot-applied numeric knobs -->
@@ -140,13 +150,20 @@
     </form>
   </dialog>
 
-  <!-- Resident detail dialog -->
+  <!-- Resident detail dialog (tabbed: Profile / Event log / Context) -->
   <dialog id="detail-dialog">
     <div class="dlg-head">
       <h3 id="detail-name">Resident</h3>
       <button type="button" class="x" id="detail-close" aria-label="Close">×</button>
     </div>
-    <div id="detail-body"></div>
+    <div class="modal-tabs" id="detail-tabs">
+      <button type="button" class="modal-tab-btn active" data-mtab="profile">Profile</button>
+      <button type="button" class="modal-tab-btn" data-mtab="events">Event log</button>
+      <button type="button" class="modal-tab-btn" data-mtab="context">Context</button>
+    </div>
+    <div class="modal-pane" id="dm-profile"></div>
+    <div class="modal-pane" id="dm-events" hidden></div>
+    <div class="modal-pane" id="dm-context" hidden></div>
   </dialog>
 
   <script src="/js/api.js"></script>

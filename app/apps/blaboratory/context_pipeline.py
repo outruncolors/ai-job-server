@@ -231,8 +231,9 @@ def write_phase(resident: dict, tick: int, action_result: dict[str, Any]) -> int
     rid = resident["id"]
 
     post = action_result.get("chat_post")
+    chat_id = None
     if post:
-        chat_store.append_chat(tick=tick, body=post, author_resident_id=rid)
+        chat_id = chat_store.append_chat(tick=tick, body=post, author_resident_id=rid)
 
     for channel in action_result.get("consume", []) or []:
         if channel == "chat":
@@ -243,11 +244,18 @@ def write_phase(resident: dict, tick: int, action_result: dict[str, Any]) -> int
             if news_id is not None:
                 cursor_store.set_cursor(rid, "news", news_id)
 
+    # Carry the chat row id into the event payload so the event log can deep-link
+    # to the exact message in the Messages tab.
+    payload = action_result.get("payload")
+    if chat_id is not None:
+        payload = dict(payload or {})
+        payload["chat_id"] = chat_id
+
     return event_store.append_event(
         tick=tick,
         kind=action_result.get("kind", "action"),
         resident_id=rid,
         room_id=action_result.get("room_id"),
         action=action_result.get("action"),
-        payload=action_result.get("payload"),
+        payload=payload,
     )

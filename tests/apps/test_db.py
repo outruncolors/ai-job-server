@@ -77,6 +77,25 @@ def test_chat_append_and_cursor_ranges():
     assert [c["id"] for c in consumed] == [c2, c1]  # newest-first
 
 
+def test_chat_paging_helpers():
+    ids = [chat_store.append_chat(tick=i, body=f"m{i}", author_resident_id="r1")
+           for i in range(1, 6)]  # ids 1..5, ticks 1..5
+
+    # latest page is oldest-first and bounded
+    assert [m["body"] for m in chat_store.chat_latest(limit=3)] == ["m3", "m4", "m5"]
+
+    # older / newer pages around the middle (oldest-first)
+    assert [m["id"] for m in chat_store.chat_before(ids[2], limit=10)] == [ids[0], ids[1]]
+    assert [m["id"] for m in chat_store.chat_newer(ids[2], limit=10)] == [ids[3], ids[4]]
+
+    # until_tick scopes every helper to the playhead
+    assert [m["body"] for m in chat_store.chat_latest(until_tick=2)] == ["m1", "m2"]
+    assert chat_store.chat_newer(0, until_tick=3, limit=10)[-1]["tick"] == 3
+
+    assert chat_store.get_chat(ids[1])["body"] == "m2"
+    assert chat_store.get_chat(9999) is None
+
+
 # ---- cursors ----
 
 def test_cursor_get_set_roundtrip():

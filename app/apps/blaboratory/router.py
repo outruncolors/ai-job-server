@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from . import (
+    chat_store,
     context_pipeline,
     event_store,
     residents_store,
@@ -180,6 +181,74 @@ async def get_room_utterances(room_id: int, until_tick: Optional[int] = None) ->
     return {
         "room_id": room_id,
         "utterances": utterance_store.utterances_for_room(room_id, until_tick=until_tick),
+    }
+
+
+_CHAT_LIMIT_MAX = 200
+
+
+def _enrich_messages(rows: list[dict]) -> list[dict]:
+    """Attach ``author_name`` to each chat row from a one-shot resident name map."""
+    names = {r["id"]: r["name"] for r in residents_store.list_residents()}
+    out = []
+    for r in rows:
+        aid = r.get("author_resident_id")
+        out.append({
+            "id": r["id"],
+            "tick": r["tick"],
+            "author_resident_id": aid,
+            "author_name": names.get(aid) if aid else None,
+            "body": r["body"],
+            "created_at": r["created_at"],
+        })
+    return out
+
+
+@router.get("/chat")
+async def get_chat(
+    until_tick: Optional[int] = None,
+    before: Optional[int] = None,
+    after: Optional[int] = None,
+    around: Optional[int] = None,
+    limit: int = 50,
+) -> dict:
+    """The shared computer-channel feed for the Messages tab (oldest-first).
+
+    Paging is mutually exclusive: ``around`` (window centred on a message),
+    ``before`` (older page), ``after`` (newer page), or none (latest page). All
+    are scoped to ``until_tick`` (the timeline playhead) when given.
+    """
+    limit = max(1, min(limit, _CHAT_LIMIT_MAX))
+    target_id = None
+    has_more_before = False
+    has_more_after = False
+
+    if around is not None:
+        half = max(1, limit // 2)
+        older = chat_store.chat_before(around, until_tick=until_tick, limit=half)
+        newer = chat_store.chat_newer(around, until_tick=until_tick, limit=half)
+        target = chat_store.get_chat(around)
+        messages = older + ([target] if target else []) + newer
+        if target is not None:
+            target_id = target["id"]
+        has_more_before = len(older) == half
+        has_more_after = len(newer) == half
+    elif before is not None:
+        messages = chat_store.chat_before(before, until_tick=until_tick, limit=limit)
+        has_more_before = len(messages) == limit
+        has_more_after = True  # paging backwards: newer side always has the rest
+    elif after is not None:
+        messages = chat_store.chat_newer(after, until_tick=until_tick, limit=limit)
+        has_more_after = len(messages) == limit
+    else:
+        messages = chat_store.chat_latest(until_tick=until_tick, limit=limit)
+        has_more_before = len(messages) == limit
+
+    return {
+        "messages": _enrich_messages(messages),
+        "has_more_before": has_more_before,
+        "has_more_after": has_more_after,
+        "target_id": target_id,
     }
 
 

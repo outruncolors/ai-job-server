@@ -55,3 +55,58 @@ def latest_chat_id() -> int:
     conn = get_connection()
     row = conn.execute("SELECT MAX(id) AS m FROM chat").fetchone()
     return int(row["m"]) if row and row["m"] is not None else 0
+
+
+# ---- UI feed paging ------------------------------------------------------
+# Playhead-scoped helpers for the Messages tab. All return rows *oldest-first*
+# (ascending id) so the frontend can prepend/append uniformly. Separate from the
+# consumption-cursor helpers above (which the context pipeline depends on).
+
+
+def _scope(sql: str, params: list[Any], until_tick: Optional[int]) -> str:
+    """Append a playhead bound (``tick <= until_tick``) when set."""
+    if until_tick is not None:
+        sql += " AND tick <= ?"
+        params.append(until_tick)
+    return sql
+
+
+def chat_latest(*, until_tick: Optional[int] = None, limit: int = 50) -> list[dict]:
+    """The newest ``limit`` messages (tick-scoped), returned oldest-first."""
+    conn = get_connection()
+    params: list[Any] = []
+    sql = _scope("SELECT * FROM chat WHERE 1=1", params, until_tick)
+    sql += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    rows.reverse()
+    return rows
+
+
+def chat_before(before_id: int, *, until_tick: Optional[int] = None, limit: int = 50) -> list[dict]:
+    """The ``limit`` messages with id < ``before_id`` (older page), oldest-first."""
+    conn = get_connection()
+    params: list[Any] = [before_id]
+    sql = _scope("SELECT * FROM chat WHERE id < ?", params, until_tick)
+    sql += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    rows.reverse()
+    return rows
+
+
+def chat_newer(after_id: int, *, until_tick: Optional[int] = None, limit: int = 50) -> list[dict]:
+    """The ``limit`` messages with id > ``after_id`` (newer page), oldest-first."""
+    conn = get_connection()
+    params: list[Any] = [after_id]
+    sql = _scope("SELECT * FROM chat WHERE id > ?", params, until_tick)
+    sql += " ORDER BY id ASC LIMIT ?"
+    params.append(limit)
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def get_chat(message_id: int) -> Optional[dict]:
+    """A single chat message by id, or None."""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM chat WHERE id = ?", (message_id,)).fetchone()
+    return dict(row) if row else None
