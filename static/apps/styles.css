@@ -1,6 +1,8 @@
-/* /apps landing — its own chrome (no systems nav). */
+/* /apps landing — uses the shared systems navbar. */
 body {
   margin: 0;
+  /* 44px topnav clearance — matches other pages that load nav.js. */
+  padding-top: 44px;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-family);
@@ -10,17 +12,10 @@ body {
 #apps-header {
   max-width: 960px;
   margin: 0 auto;
-  padding: 48px 24px 24px;
+  padding: 36px 24px 24px;
 }
-#apps-header .back-link {
-  color: var(--color-text-muted);
-  text-decoration: none;
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.06em;
-}
-#apps-header .back-link:hover { color: var(--color-text-sub); }
 #apps-header h1 {
-  margin: 14px 0 4px;
+  margin: 0 0 4px;
   font-size: 1.6rem;
   letter-spacing: 0.04em;
   color: #fff;

@@ -202,17 +202,18 @@ async def lifespan(app: FastAPI):
             await queue.enqueue(entry["job_id"], runner)
     await start_scheduler()
     await start_peer_poller()
-    from .apps.blaboratory.config import SIM_AUTOSTART
-    from .apps.blaboratory.sim_clock import start_sim_clock, stop_sim_clock
-    if SIM_AUTOSTART:
-        await start_sim_clock()
+    from .apps.blaboratory.sim_clock import (
+        start_sim_clock_if_desired,
+        stop_sim_clock,
+    )
+    await start_sim_clock_if_desired()
     yield
     if "llm" in get_local_capabilities():
         try:
             await get_embed_manager().stop()
         except Exception as exc:
             print(f"embed server stop skipped: {exc}")
-    await stop_sim_clock()
+    await stop_sim_clock(persist=False)
     await stop_peer_poller()
     await stop_scheduler()
     await queue.stop()

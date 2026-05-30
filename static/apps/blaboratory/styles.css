@@ -1,6 +1,8 @@
-/* Blaboratory page — own chrome (no systems nav). */
+/* Blaboratory page — uses the shared systems navbar. */
 body {
   margin: 0;
+  /* 44px topnav clearance — matches other pages that load nav.js. */
+  padding-top: 44px;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-family);
@@ -10,7 +12,7 @@ body {
 #lab-header {
   max-width: 880px;
   margin: 0 auto;
-  padding: 40px 24px 16px;
+  padding: 28px 24px 16px;
 }
 #lab-header .back-link {
   color: var(--color-text-muted); text-decoration: none;

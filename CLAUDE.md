@@ -57,7 +57,7 @@
 | `app/profiles/store.py` | Named-profile store: `save_profile`, `list_profiles`, `get_profile`, `delete_profile`, `set_active`, `get_active`, plus `export_to_zip`/`import_as_new`/`apply_from_zip` for bundle I/O; profiles live under `config/profiles/<id>/{master.json,assets/}` with `index.json` + `active.json` markers |
 | `app/server.py` | `get_server_stats()`, `schedule_restart()`, 5s job-count cache (`_get_job_counts()`); multi-machine config (`ServerConfig`, `Peer`, `get_local_capabilities()`, `get_peers()`, `find_peer_for_capability()`, `get_git_sha()`) and the `requires_capability(cap)` FastAPI dependency that 503s out-of-capability routes |
 | `app/peer_health.py` | Background asyncio poller — every 30s GETs each peer's `/v1/server/health` (5s timeout) and stores `{status: green/amber/red, git_sha, last_seen, error, host, port}` in an in-memory snapshot. `green` = peer reachable + SHA matches local; `amber` = reachable + SHA mismatch (or either side has no SHA); `red` = unreachable or 5xx. `last_seen` and `git_sha` are sticky across failed polls. `/v1/server/peers` reads from `get_peer_health_snapshot()`; lifespan calls `start_peer_poller()`/`stop_peer_poller()` |
-| `static/js/nav.js` | Builds top nav from `NAV_ITEMS` array; auto-marks active page by pathname |
+| `static/js/nav.js` | Builds top nav from `NAV_ITEMS` (nested: top-level links + dropdown groups for Generate/Tools/Manage); auto-marks active link by pathname; exposes `window.NAV_ITEMS` for `nav-mobile.js` to rebuild the hamburger menu (groups become section headers) |
 | `static/js/voice-segments.js` | Reusable segment list widget (`vsAddSegment`, `vsCollectSegments`) |
 | `static/js/resolved-prompt.js` | `renderResolvedPrompt(container, items)` — shows the resolved prompt + per-token wildcard substitutions above voice/image output panels; pairs with `resolveWildcardsTracked()` in `wildcards.js` |
 | `static/js/profiles-widget.js` | Profile widget pinned to right of `#topnav` on every page: `[select ▾] [💾] [⬇] [⬆]`; select-change activates, save overwrites or expands to `[name ✓ ✗]` for `(new profile)`; self-contained (works without api/toast/escape) |
@@ -73,9 +73,9 @@ Each page under `static/<page>/` has three files (minimum):
 
 Pages can split into multiple JS modules. Script load order: `nav.js` → (page deps / tab modules) → `<page>.js` → `nav-mobile.js`. The voice page loads `voice-segments.js` before `voice.js`. The image page loads `generate-tab.js`, `prompts-tab.js` before `image.js`. The server page loads `comfyui-tab.js`, `llm-tab.js`, `llm-models-tab.js` before `server.js` (LLM tab has two sub-tabs: Models + Endpoints).
 
-### Apps (consumer experiences, walled off from the systems nav)
+### Apps (consumer experiences)
 
-`app/apps/<name>/` (backend) + `static/apps/<name>/` (frontend), bridged by a single `Apps` entry in `static/js/nav.js`. The `/apps` landing and app pages do **not** load the systems nav (`nav.js`); they style off `responsive.css` tokens and reuse `api.js`/`escape.js`. Design lives under `docs/apps/<name>/`.
+`app/apps/<name>/` (backend) + `static/apps/<name>/` (frontend), bridged by a single `Apps` entry in `static/js/nav.js`. App pages load the shared systems nav (`<nav id="topnav">` + `nav.js` + `nav-mobile.js`) just like the rest of the site, with `padding-top: 44px` on `body` to clear the fixed 44px bar. They style off `responsive.css` tokens and reuse `api.js`/`escape.js`. Design lives under `docs/apps/<name>/`.
 
 | File | Purpose |
 |------|---------|
@@ -95,7 +95,7 @@ Pages can split into multiple JS modules. Script load order: `nav.js` → (page 
 | `app/apps/blaboratory/actions/` | Action plugins (mirror MCP tools): `use_computer`/`use_televisor`/`use_speakerphone`/`sleep`/`idle` + `registry`; `Action` carries `breakpoints`+`multi_tick`; each `run()` returns the `write_phase` result dict |
 | `app/apps/blaboratory/activity_store.py` | Current multi-tick activity per resident (`{action, count}`) for sleep/Continue |
 | `app/apps/blaboratory/tick_runner.py` | `run_tick()` — calls `memory_index.index_pending()` once up front (D1 backfill, best-effort), then every occupant takes one action; per-tick LLM free-choice (`_choose` runs one decision chain job each via `execute_chain_job` direct), Continue option + breakpoint clause |
-| `app/apps/blaboratory/sim_clock.py` | `SimClock` (clones `TickScheduler`) fires one LOW-lane job per tick; `fire_tick()`; lifespan-wired, auto-start gated by `BLAB_SIM_AUTOSTART` (default off) |
+| `app/apps/blaboratory/sim_clock.py` | `SimClock` (clones `TickScheduler`) fires one LOW-lane job per tick; `fire_tick()`; lifespan-wired via `start_sim_clock_if_desired()` which resumes the **persisted desired state** at `config/blaboratory/clock_state.json` (operator-set `start`/`stop` writes the file; shutdown calls `stop_sim_clock(persist=False)` so an unexpected restart doesn't get logged as "stopped"). `BLAB_SIM_AUTOSTART` is now only the first-boot fallback (used when the state file is absent) |
 | `app/apps/blaboratory/call_sequence.py` | `run_call()` — phone call inside the caller's tick (callee accepts/declines, topic→lines→continue/segue/end), reuses `execute_chain_job` per turn; lines written to both rooms; callee marked busy |
 | `app/apps/blaboratory/config.py` | Sim tunables: `TICK_INTERVAL_SECONDS`, `MAX_MEMORY_ITEMS/CHARS`, `SIM_AUTOSTART` (env-overridable) |
 | `app/job_queue.py` | `JobQueue` now has two FIFO lanes (`Priority.HIGH`/`LOW`, HIGH default) sharing the one worker via a counting semaphore — HIGH drained first, running job never interrupted |

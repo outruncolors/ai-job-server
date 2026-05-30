@@ -74,6 +74,74 @@
   margin: 0 4px; align-self: center; flex-shrink: 0;
 }
 
+/* ── Top-nav dropdowns (Generate / Tools / Manage) ──────────────────────── */
+/* The trigger looks like a nav link; the panel sits absolutely below it,
+   hidden until `.nav-dropdown.open` is toggled by nav.js. */
+.nav-dropdown { position: relative; display: inline-flex; align-items: center; }
+.nav-dropdown-trigger {
+  background: none;
+  border: 1px solid transparent;
+  color: #444;
+  font-family: var(--font-family);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  /* Real hit area + a box that the active/open highlight can paint. */
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.nav-dropdown-trigger:hover { color: #888; background: var(--color-bg-input); }
+.nav-dropdown.open .nav-dropdown-trigger {
+  color: #ccc;
+  background: var(--color-bg-input);
+  border-color: var(--color-border-mid);
+}
+.nav-dropdown-trigger.active {
+  color: #ccc;
+  background: var(--color-bg-input);
+  border-color: var(--color-border-mid);
+}
+.nav-dropdown-trigger .nav-chev {
+  font-size: 0.6rem;
+  opacity: 0.7;
+  transition: transform 0.15s;
+}
+.nav-dropdown.open .nav-dropdown-trigger .nav-chev { transform: rotate(180deg); }
+
+.nav-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 140px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-mid);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  padding: 4px 0;
+  display: none;
+  flex-direction: column;
+  z-index: var(--z-mobile-menu);
+}
+.nav-dropdown.open .nav-dropdown-panel { display: flex; }
+.nav-dropdown-panel a {
+  padding: 7px 14px;
+  color: var(--color-text-sub) !important;
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.nav-dropdown-panel a:hover {
+  background: var(--color-border);
+  color: var(--color-text) !important;
+}
+.nav-dropdown-panel a.active { color: var(--color-text) !important; }
+
 /* ── Mobile hamburger nav ────────────────────────────────────────────────── */
 
 .nav-hamburger {
@@ -105,6 +173,25 @@
   padding: 6px 0;
 }
 .nav-links-mobile.open { display: flex; }
+
+/* Section header inside the mobile menu — one per dropdown group. */
+.nav-links-mobile .nav-mobile-section {
+  padding: 10px 20px 4px;
+  font-size: var(--font-size-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+  margin-top: 4px;
+}
+.nav-links-mobile .nav-mobile-section:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+/* Child links under a section get a small left indent so the hierarchy reads. */
+.nav-links-mobile .nav-mobile-section + a {
+  /* indentation handled by item-level padding below; nothing needed here */
+}
 
 .nav-links-mobile a,
 .nav-links-mobile button {
@@ -381,10 +468,11 @@
 /* ── Responsive overrides (@media max-width: 768px) ─────────────────────── */
 @media (max-width: 768px) {
 
-  /* Show hamburger; hide inline nav links and page-specific nav buttons */
+  /* Show hamburger; hide inline nav links, dropdowns, and page-specific nav buttons */
   .nav-hamburger { display: block; }
   #topnav > a:not(.nav-home),
-  #topnav > button:not(.nav-hamburger) { display: none !important; }
+  #topnav > button:not(.nav-hamburger),
+  #topnav > .nav-dropdown { display: none !important; }
 
   /* Safe area padding for Dynamic Island / notch */
   #topnav {
