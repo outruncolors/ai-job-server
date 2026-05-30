@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Prompt Pal</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav id="topnav"></nav>
+
+  <header id="pp-header">
+    <h1>✦ Prompt Pal</h1>
+    <p class="subtitle">The prompts your apps use for creative input — edit them in one place.</p>
+  </header>
+
+  <main id="pp-main">
+    <!-- Left: list + toolbar -->
+    <section id="pp-list-col">
+      <div id="pp-toolbar">
+        <input type="search" id="pp-search" placeholder="Search title / key / tags…" autocomplete="off">
+        <select id="pp-filter-app" aria-label="Filter by app"></select>
+        <select id="pp-filter-tag" aria-label="Filter by tag"></select>
+        <select id="pp-sort" aria-label="Sort">
+          <option value="app">Sort: app</option>
+          <option value="title">Sort: title</option>
+          <option value="updated">Sort: updated</option>
+        </select>
+      </div>
+      <div id="pp-list" aria-live="polite"></div>
+    </section>
+
+    <!-- Right: editor -->
+    <section id="pp-editor-col">
+      <div id="pp-editor-empty" class="pp-empty">Select a prompt to edit.</div>
+      <form id="pp-editor" hidden>
+        <div class="pp-ed-head">
+          <span class="pp-badge" id="pp-ed-app"></span>
+          <code class="pp-key" id="pp-ed-key"></code>
+        </div>
+        <label>Title<input type="text" id="pp-ed-title"></label>
+        <label>Description<textarea id="pp-ed-desc" rows="2"></textarea></label>
+        <label>Tags (comma-separated)<input type="text" id="pp-ed-tags"></label>
+        <label>Prompt
+          <textarea id="pp-ed-prompt" rows="16" spellcheck="false"></textarea>
+        </label>
+        <label>Variables (JSON)
+          <textarea id="pp-ed-vars" rows="4" spellcheck="false"></textarea>
+        </label>
+        <div class="pp-ed-actions">
+          <button type="submit" id="pp-save">Save</button>
+          <button type="button" class="secondary" id="pp-preview-btn">Preview</button>
+          <span id="pp-ed-msg" role="status"></span>
+        </div>
+        <pre id="pp-preview" hidden></pre>
+      </form>
+    </section>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/nav.js"></script>
+  <script src="prompt-pal.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

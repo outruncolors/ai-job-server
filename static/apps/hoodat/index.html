@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Hoodat · Apps</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav id="topnav"></nav>
+
+  <header id="hd-header">
+    <a href="/apps/" class="back-link">&larr; Apps</a>
+    <h1>🧑 Hoodat</h1>
+    <p class="subtitle">Create and manage characters.</p>
+  </header>
+
+  <div id="hd-toolbar">
+    <input type="search" id="hd-search" placeholder="Search characters…" autocomplete="off">
+    <button type="button" id="hd-new">+ New character</button>
+  </div>
+
+  <main id="hd-grid" aria-busy="false"></main>
+
+  <!-- Create dialog -->
+  <dialog id="hd-create-dialog">
+    <form id="hd-create-form" method="dialog">
+      <div class="dlg-head">
+        <h3>New character</h3>
+        <button type="button" class="x" id="hd-create-close" aria-label="Close">×</button>
+      </div>
+      <label>Name<input type="text" id="hd-create-name" placeholder="e.g. Dr. Mira Vale"></label>
+      <label>Prompt
+        <textarea id="hd-create-prompt" rows="5"
+          placeholder="A few words about who they are. The rest is invented."></textarea>
+      </label>
+      <div id="hd-create-msg" class="msg"></div>
+      <div class="dlg-actions">
+        <button type="button" class="secondary" id="hd-create-cancel">Cancel</button>
+        <button type="button" id="hd-create-submit">Create character</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/nav.js"></script>
+  <script src="hoodat.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

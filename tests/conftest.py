@@ -60,6 +60,26 @@ def patch_context_base(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def patch_prompt_pal_dir(tmp_path, monkeypatch):
+    """Redirect Prompt Pal storage to a temp directory for each test.
+
+    With an empty store, `service.get_text` falls back to the in-code registered
+    defaults — which keeps Blaboratory's `get_prompt` back-compat tests green.
+    """
+    import app.prompt_pal.store as pp
+    monkeypatch.setattr(pp, "PROMPT_PAL_DIR", tmp_path / "prompt_pal")
+
+
+@pytest.fixture(autouse=True)
+def patch_hoodat_dirs(tmp_path, monkeypatch):
+    """Redirect Hoodat character + avatar storage to a temp directory."""
+    import app.apps.hoodat.characters_store as cs
+    import app.apps.hoodat.avatars as av
+    monkeypatch.setattr(cs, "CHARACTERS_DIR", tmp_path / "hoodat" / "characters")
+    monkeypatch.setattr(av, "AVATARS_DIR", tmp_path / "hoodat" / "avatars")
+
+
+@pytest.fixture(autouse=True)
 def patch_server_config(tmp_path, monkeypatch):
     """Redirect server config to tmp dir and reset cache.
 

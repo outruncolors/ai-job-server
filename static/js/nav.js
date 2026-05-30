@@ -16,6 +16,7 @@
       { href: '/ticks',      label: 'Ticks',     page: 'ticks'     },
       { href: '/mcp',        label: 'MCP',       page: 'mcp'       },
       { href: '/embed-lab/', label: 'Embed Lab', page: 'embed-lab' },
+      { href: '/prompt-pal/', label: 'Prompt Pal', page: 'prompt-pal' },
     ]},
     { label: 'Manage', dropdown: [
       { href: '/tickets/', label: 'Tickets', page: 'tickets' },

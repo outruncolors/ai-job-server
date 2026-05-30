@@ -9,6 +9,13 @@
       blurb: 'Fill rooms with LLM-generated characters, each a living document.',
       glyph: '⚗', // alembic
     },
+    {
+      href: '/apps/hoodat/',
+      name: 'Hoodat',
+      tagline: 'Create & manage characters.',
+      blurb: 'Build characters from a prompt, regenerate any field, and export them at any detail.',
+      glyph: '🧑',
+    },
   ];
 
   const esc = (s) => String(s)

@@ -14,6 +14,8 @@ prose from `{{previous}}`.
 
 from __future__ import annotations
 
+from ...prompt_pal.registry import register
+
 IDEATE_FREE_TEXT = """\
 You are inventing an inhabitant of Blaboratory, a quirky virtual laboratory full \
 of eccentric residents.
@@ -74,30 +76,27 @@ strings), and "speech_style" (string)
 Respond with JSON only — no markdown, no code fences, no commentary."""
 
 
-# Composable prompt nodes (design.md Part 2 → Prompt system). These have no
-# `{{var.NAME}}` variables yet — only chain tokens ({{input}}/{{previous}}),
-# which `compose` deliberately leaves intact for the chain executor — so each
-# composes back to its literal text. Expressing them as nodes lets later
-# action/call prompts reuse fragments by reference.
-NODES: dict[str, dict] = {
-    "IDEATE_FREE_TEXT": {"prompt": IDEATE_FREE_TEXT},
-    "IDEATE_GUIDED": {"prompt": IDEATE_GUIDED},
-    "ASSEMBLE": {"prompt": ASSEMBLE},
-}
-
-_REGISTRY: dict[str, str] = {
-    "IDEATE_FREE_TEXT": IDEATE_FREE_TEXT,
-    "IDEATE_GUIDED": IDEATE_GUIDED,
-    "ASSEMBLE": ASSEMBLE,
-}
+# Register these with Prompt Pal (the project-wide prompt registry) so they are
+# editable in the Prompt Pal UI and resolve through the shared store. The literal
+# constants above remain the in-code defaults Prompt Pal seeds and falls back to.
+register("blaboratory", "IDEATE_FREE_TEXT", title="Ideate — free text",
+         prompt=IDEATE_FREE_TEXT, tags=("ideate",),
+         description="Invent a resident from a free-text description.")
+register("blaboratory", "IDEATE_GUIDED", title="Ideate — guided",
+         prompt=IDEATE_GUIDED, tags=("ideate",),
+         description="Invent a resident honoring user-supplied fields.")
+register("blaboratory", "ASSEMBLE", title="Assemble to JSON",
+         prompt=ASSEMBLE, tags=("assemble",),
+         description="Convert resident prose notes into strict v1-schema JSON.")
 
 
 def get_prompt(prompt_id: str) -> str:
-    """Look up a prompt template by id (raises KeyError if unknown).
+    """Resolve a Blaboratory prompt by id through Prompt Pal.
 
-    Resolves through the composable-prompt resolver, so any `{{var.NAME}}`
-    fragments added later are expanded while chain tokens pass through untouched.
+    The store copy (possibly user-edited in the Prompt Pal UI) wins; otherwise
+    the in-code default registered above is composed. `{{var.NAME}}` fragments
+    are expanded while chain tokens ({{input}}/{{previous}}) pass through.
     """
-    from .prompt_compose import compose
+    from ...prompt_pal.service import get_text
 
-    return compose(NODES[prompt_id])
+    return get_text("blaboratory", prompt_id)

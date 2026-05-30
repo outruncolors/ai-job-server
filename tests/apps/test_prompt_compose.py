@@ -61,6 +61,17 @@ def test_unresolved_var_left_intact():
 def test_get_prompt_back_compat():
     assert prompts.get_prompt("ASSEMBLE") == prompts.ASSEMBLE
     assert "{{previous}}" in prompts.get_prompt("ASSEMBLE")
+
+
+def test_get_prompt_reflects_prompt_pal_edit():
+    """After seeding + editing the stored copy, get_prompt returns the edit."""
+    from app.prompt_pal import registry, store as pp_store
+
+    registry.seed_registered()
+    entry = pp_store.get_by_app_key("blaboratory", "ASSEMBLE")
+    assert entry is not None
+    pp_store.update_entry(entry["id"], prompt="EDITED ASSEMBLE PROMPT")
+    assert prompts.get_prompt("ASSEMBLE") == "EDITED ASSEMBLE PROMPT"
     assert prompts.get_prompt("IDEATE_FREE_TEXT") == prompts.IDEATE_FREE_TEXT
 
 

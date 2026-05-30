@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Character · Hoodat</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/field-controls.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav id="topnav"></nav>
+
+  <header id="hd-profile-head">
+    <a href="/apps/hoodat/" class="back-link">&larr; All characters</a>
+    <div id="hd-id-row">
+      <div id="hd-avatar" class="hd-avatar" tabindex="0" aria-label="Avatar"></div>
+      <div id="hd-id-text">
+        <h1 id="hd-name">…</h1>
+        <p id="hd-tagline" class="subtitle"></p>
+      </div>
+    </div>
+  </header>
+
+  <div class="tab-strip" id="hd-tabs">
+    <button type="button" class="tab-btn" data-tab="identity">Identity</button>
+    <button type="button" class="tab-btn" data-tab="appearance">Appearance</button>
+    <button type="button" class="tab-btn" data-tab="personality">Personality</button>
+    <button type="button" class="tab-btn" data-tab="background">Background</button>
+    <button type="button" class="tab-btn" data-tab="speaking_style">Speaking Style</button>
+    <button type="button" class="tab-btn" data-tab="exports">Exports</button>
+  </div>
+
+  <main id="hd-panes">
+    <section class="tab-pane" id="tab-identity"></section>
+    <section class="tab-pane" id="tab-appearance" hidden></section>
+    <section class="tab-pane" id="tab-personality" hidden></section>
+    <section class="tab-pane" id="tab-background" hidden></section>
+
+    <!-- Speaking Style: description field + voice integration -->
+    <section class="tab-pane" id="tab-speaking_style" hidden>
+      <div id="speaking-fields"></div>
+      <div class="hd-voice">
+        <h3>Voice</h3>
+        <label>Voice preset
+          <select id="hd-voice-select"></select>
+        </label>
+        <div class="hd-voice-sample">
+          <input type="text" id="hd-voice-text" placeholder="A line to hear in their voice…">
+          <button type="button" id="hd-voice-synth">Synthesize sample</button>
+          <span id="hd-voice-msg" role="status"></span>
+        </div>
+        <audio id="hd-voice-audio" controls hidden></audio>
+      </div>
+    </section>
+
+    <!-- Targeted Exports -->
+    <section class="tab-pane" id="tab-exports" hidden>
+      <div class="hd-exports-bar">
+        <button type="button" id="hd-export-new">+ New export prompt</button>
+      </div>
+      <div id="hd-exports-list"></div>
+    </section>
+  </main>
+
+  <!-- Avatar replace dialog -->
+  <dialog id="hd-avatar-dialog">
+    <div class="dlg-head">
+      <h3>Replace avatar</h3>
+      <button type="button" class="x" id="hd-avatar-close" aria-label="Close">×</button>
+    </div>
+    <div class="hd-avatar-opts">
+      <button type="button" id="hd-avatar-generate">✨ Generate from description</button>
+      <label class="hd-upload-label">⬆ Upload an image
+        <input type="file" id="hd-avatar-file" accept="image/*" hidden>
+      </label>
+    </div>
+    <div id="hd-avatar-msg" class="msg"></div>
+  </dialog>
+
+  <!-- New export dialog -->
+  <dialog id="hd-export-dialog">
+    <form method="dialog">
+      <div class="dlg-head">
+        <h3>New export prompt</h3>
+        <button type="button" class="x" id="hd-export-close" aria-label="Close">×</button>
+      </div>
+      <label>Name<input type="text" id="hd-export-name" placeholder="e.g. RPG stat block"></label>
+      <label>Prompt
+        <textarea id="hd-export-prompt" rows="6"
+          placeholder="Use {{var.character}} for the full character and {{var.detail}} for the chosen level."></textarea>
+      </label>
+      <div id="hd-export-msg" class="msg"></div>
+      <div class="dlg-actions">
+        <button type="button" class="secondary" id="hd-export-cancel">Cancel</button>
+        <button type="button" id="hd-export-save">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/nav.js"></script>
+  <script src="/js/field-controls.js"></script>
+  <script src="profile.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

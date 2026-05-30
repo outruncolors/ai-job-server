@@ -63,6 +63,7 @@ from .llamacpp.router import router as llamacpp_router
 from .llamacpp.embed_manager import get_embed_manager
 from .llamacpp.embed_router import router as llamacpp_embed_router
 from .apps.blaboratory.router import router as blaboratory_router
+from .apps.hoodat.router import router as hoodat_router
 from . import jobs as _jobs_module
 from .jobs import (
     build_jobs_zip,
@@ -106,6 +107,7 @@ from .omnivoice.router import router as omnivoice_router
 from .voice_presets_router import router as presets_router
 from .mcp.router import router as mcp_router
 from .embed_lab.router import router as embed_lab_router
+from .prompt_pal.router import router as prompt_pal_router
 from .profiles import (
     apply_from_zip,
     delete_profile,
@@ -194,6 +196,14 @@ async def lifespan(app: FastAPI):
                 await embed_mgr.start()
         except Exception as exc:
             print(f"embed server start skipped: {exc}")
+    # Seed any registered app prompts (Blaboratory, Hoodat, …) into the Prompt
+    # Pal store so they are editable in the UI. Seed-if-absent — never clobbers
+    # a user's edits. Best-effort: a bad prompt file must not block startup.
+    try:
+        from .prompt_pal.registry import seed_registered
+        seed_registered()
+    except Exception as exc:
+        print(f"prompt-pal seeding skipped: {exc}")
     queue = get_job_queue()
     await queue.start()
     for entry in recover_interrupted_jobs(_jobs_module.JOBS_BASE):
@@ -232,6 +242,8 @@ app.include_router(presets_router)
 app.include_router(mcp_router)
 app.include_router(embed_lab_router)
 app.include_router(blaboratory_router)
+app.include_router(hoodat_router)
+app.include_router(prompt_pal_router)
 
 
 @app.get("/health", response_model=HealthResponse)

@@ -1,0 +1,55 @@
+/* FieldControls — hover-control overlay. Uses the shared responsive.css tokens.
+   Link this after responsive.css on any page that uses window.FieldControls. */
+
+.fc-slot { /* slot is the positioned container; JS sets position:relative if static */ }
+
+.fc-cluster {
+  position: absolute;
+  display: flex;
+  gap: var(--gap-xs, 4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: var(--z-overlay, 150);
+}
+
+/* Reveal on hover / keyboard focus within the slot, or when tapped open. */
+.fc-slot:hover > .fc-cluster,
+.fc-slot:focus-within > .fc-cluster,
+.fc-slot.fc-open > .fc-cluster {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fc-btn {
+  background: var(--color-bg-raised, #1a1a1a);
+  color: var(--color-text, #ccc);
+  border: 1px solid var(--color-border-hi, #383838);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: var(--font-size-xs, 0.72rem);
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fc-btn:hover {
+  border-color: var(--color-accent, #2a6);
+  color: var(--color-accent, #2a6);
+}
+
+/* ---- field placement: cluster floats at the top-right of the field ---- */
+.fc-field > .fc-cluster {
+  top: 2px;
+  right: 2px;
+}
+
+/* ---- avatar placement: cluster centered over the circle ---- */
+.fc-avatar > .fc-cluster {
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: inherit;
+}
