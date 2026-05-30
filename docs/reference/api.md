@@ -237,9 +237,9 @@ Not capability-gated.
 | GET | `/v1/prompt-pal/entries` | List; optional `?app=` / `?tag=` filters |
 | GET | `/v1/prompt-pal/entries/{id}` | Fetch one |
 | POST | `/v1/prompt-pal/entries` | Create ad-hoc (`409` if `(app,key)` exists) |
-| PUT | `/v1/prompt-pal/entries/{id}` | Patch `title`/`description`/`tags`/`prompt`/`variables` (`app`/`key` immutable) |
+| PUT | `/v1/prompt-pal/entries/{id}` | Patch `title`/`description`/`tags`/`prompt`/`variables`/`guard` (`app`/`key` immutable) |
 | DELETE | `/v1/prompt-pal/entries/{id}` | Remove |
-| POST | `/v1/prompt-pal/entries/{id}/preview` | `{ "variables": {...} }` → composed `{ "text": ... }` |
+| POST | `/v1/prompt-pal/entries/{id}/preview` | `{ "variables": {...}, "target": "prompt"\|"guard" }` → composed `{ "text": ... }` |
 
 ## Apps — Hoodat
 
@@ -259,6 +259,8 @@ Text generation is not route-gated; avatar **generation** returns `503` on nodes
 | POST | `/v1/apps/hoodat/characters/{id}/experiences/generate` | `{ experiences }` → `{ value: {description, valence}, prompt_id, job_id }` (no persist) |
 | POST | `/v1/apps/hoodat/characters/{id}/outfits/generate` | `{ outfits, outfit }` → `{ value: outfit, prompt_id, job_id }` (no persist) |
 | POST | `/v1/apps/hoodat/characters/{id}/outfits/slot/{slot}/generate` | `{ outfit, outfits }` → `{ value, prompt_id, job_id }` (no persist) |
+| POST | `/v1/apps/hoodat/characters/{id}/qa/generate` | `{ question, pairs }` → `{ value, prompt_id, job_id }` (spoken-only guarded; no persist) |
+| POST | `/v1/apps/hoodat/characters/{id}/qa/question/generate` | `{ pairs }` → `{ value, prompt_id, job_id }` (suggest a question; no persist) |
 | GET | `/v1/apps/hoodat/characters/{id}/avatar` | Serve avatar PNG (`404` if none) |
 | POST | `/v1/apps/hoodat/characters/{id}/avatar/generate` | ComfyUI `image` workflow → `{ avatar_url, job_id }` (`503` no `image` cap) |
 | POST | `/v1/apps/hoodat/characters/{id}/avatar/upload` | Multipart `file` → `{ avatar_url }` |

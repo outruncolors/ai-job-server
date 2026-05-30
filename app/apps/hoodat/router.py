@@ -25,6 +25,8 @@ from .generator import (
     run_field,
     run_outfit,
     run_outfit_slot,
+    run_qa_answer,
+    run_qa_question,
 )
 from .models import Character
 
@@ -54,6 +56,17 @@ class OutfitGenerateRequest(BaseModel):
     # The character's other outfits (for distinctness) + the outfit being built.
     outfits: list[dict] = []
     outfit: dict = {}
+
+
+class QAAnswerGenerateRequest(BaseModel):
+    # The question to answer + the caller's current (possibly unsaved) pairs.
+    question: str
+    pairs: list[dict] = []
+
+
+class QAQuestionGenerateRequest(BaseModel):
+    # The caller's current (possibly unsaved) pairs, for distinctness.
+    pairs: list[dict] = []
 
 
 def _summary(doc: dict) -> dict:
@@ -156,6 +169,24 @@ async def generate_outfit(character_id: str, body: OutfitGenerateRequest):
 async def generate_outfit_slot(character_id: str, slot: str, body: OutfitGenerateRequest):
     try:
         value, prompt_id, job_id = await run_outfit_slot(character_id, slot, body.outfit, body.outfits)
+    except GenerationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"value": value, "prompt_id": prompt_id, "job_id": job_id}
+
+
+@router.post("/characters/{character_id}/qa/generate")
+async def generate_qa_answer(character_id: str, body: QAAnswerGenerateRequest):
+    try:
+        value, prompt_id, job_id = await run_qa_answer(character_id, body.question, body.pairs)
+    except GenerationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"value": value, "prompt_id": prompt_id, "job_id": job_id}
+
+
+@router.post("/characters/{character_id}/qa/question/generate")
+async def generate_qa_question(character_id: str, body: QAQuestionGenerateRequest):
+    try:
+        value, prompt_id, job_id = await run_qa_question(character_id, body.pairs)
     except GenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return {"value": value, "prompt_id": prompt_id, "job_id": job_id}

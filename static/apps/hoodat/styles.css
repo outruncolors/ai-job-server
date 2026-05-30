@@ -128,6 +128,21 @@ button:disabled { opacity: 0.5; cursor: default; }
 .hd-exp-row { position: relative; display: flex; flex-direction: column; gap: var(--gap-sm); }
 .hd-exp-row textarea { width: 100%; box-sizing: border-box; padding-right: 92px; }
 
+/* ===== Q&A ===== */
+.hd-qa-compose { display: flex; gap: var(--gap-sm); flex-wrap: wrap; margin-bottom: var(--gap-md); }
+.hd-qa-compose input { flex: 1; min-width: 220px; }
+.hd-qa-rows { display: flex; flex-direction: column; gap: var(--gap-md); }
+.hd-qa-row {
+  position: relative; display: flex; flex-direction: column; gap: var(--gap-sm);
+  background: var(--color-bg-input); border: 1px solid var(--color-border-mid);
+  border-radius: 6px; padding: var(--gap-md);
+}
+/* leave room at the top-right for the hover cluster */
+.hd-qa-row textarea { width: 100%; box-sizing: border-box; padding-right: 120px; }
+.hd-qa-q { font-weight: bold; }
+.hd-qa-audio { width: 100%; max-width: 480px; }
+.hd-qa-msg { color: var(--color-text-muted); font-size: var(--font-size-xs); }
+
 /* ===== outfits ===== */
 .hd-outfit-cards { display: flex; flex-direction: column; gap: var(--gap-md); }
 .hd-outfit-card { background: var(--color-bg-input); border: 1px solid var(--color-border-mid); border-radius: 6px; padding: var(--gap-md); display: flex; flex-direction: column; gap: var(--gap-md); }

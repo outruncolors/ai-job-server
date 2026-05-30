@@ -27,7 +27,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROMPT_PAL_DIR: Path = PROJECT_ROOT / "config" / "prompt_pal"
 
 # Fields a PUT may change. `app`/`key` are immutable code contracts.
-_PATCHABLE = {"title", "description", "tags", "prompt", "variables"}
+_PATCHABLE = {"title", "description", "tags", "prompt", "variables", "guard"}
 
 
 def _now_iso() -> str:

@@ -21,7 +21,7 @@ avatar Replace control).
    land on the character's **profile page**.
 3. The profile has a circular **avatar** (top-left), the name, and tabs for each
    section: **Identity**, **Appearance**, **Personality**, **Background**,
-   **Experiences**, **Speaking Style**, **Exports**.
+   **Experiences**, **Speaking Style**, **Q&A**, **Exports**.
 4. **Edit any field** inline (changes save on blur). Fields render the control
    that fits them — text areas, a number input for age, **Male/Female radios** for
    sex, and a **feet + inches** pair for height (stored as a canonical `5'10"`
@@ -49,6 +49,15 @@ avatar Replace control).
    whether it was **Positive** or **Negative** (you can flip the toggle). Each row
    has ✨/✏️/✗ like dialogue. Experiences are reachable in export prompts split by
    valence as `{{var.experiences_positive}}` / `{{var.experiences_negative}}`.
+9. The **Q&A** tab is an [AliChat](https://rentry.co/alichat)-style interview: type
+   a question and **✨ Generate answer**, or **💡 Suggest question** to have the LLM
+   propose one first. Each answer is generated *in the character's voice* and is
+   **spoken-only** — a [guarded prompt](../../tools/prompt-pal.md#guarded-prompts)
+   strips stage directions, actions, and symbols so it reads well aloud. Edit either
+   field freely; each pair has ✨ (regenerate the answer), ✏️ (edit the `qa.answer`
+   prompt), ✗ (remove), and — when the character has a **voice preset** set on the
+   Speaking Style tab — a **🔊** button to hear the answer over TTS. Q&A pairs feed
+   the shared character context (and exports), weighted last per AliChat.
 
 Each tab's content is grouped into uniform section cards (header + body) for a
 consistent look.
@@ -74,13 +83,14 @@ missing/failed model, create/generate calls return `502`.
 | **Background & Relationships** | `backstory`, `origin`, `relationships[]`, `affiliations[]`, `skills[]` |
 | **Speaking Style** | `description`, `voice_preset_id` (references the [voice preset](../../generation/audio/use-voice.md) system), `dialogue_examples[]` |
 | **Experiences** (top-level) | `experiences[]` — each `Experience` = `description`, `valence` (`positive`/`negative`) |
+| **Q&A** (top-level) | `qa[]` — each `QAPair` = `question`, `answer` (AliChat interview exemplars; spoken-only answers) |
 
 `FIELD_SPECS` in `models.py` is the single source of truth for which scalar/list
 fields are generatable, their label, and their kind (`scalar` / `int` / `list`) —
 it drives per-field prompt registration, patch-building, and value normalization.
 The Nude fields are kept **flat** on the `Appearance` block (not nested) so they
 reuse the standard `field.appearance.<x>` generate path unchanged; the UI gates
-which ones it shows. `dialogue_examples`, `outfits`, and `experiences` are
+which ones it shows. `dialogue_examples`, `outfits`, `experiences`, and `qa` are
 intentionally **not** in `FIELD_SPECS`: they are list-of-objects/few-shot fields
 the frontend owns and generates one item at a time (see below).
 
@@ -101,19 +111,25 @@ lost and the UI never sees the old shape.
   `run_field()` is a single-step chain over the rendered document, normalized per
   the field's kind. `run_dialogue_example(id, examples)`,
   `run_experience_example(id, experiences)`, `run_outfit(id, outfits, outfit)`,
-  and `run_outfit_slot(id, slot, outfit, outfits)` are single-step chains that
-  generate one list item from the character + prior items and **do not persist**
-  (the frontend owns those lists and saves them via the CRUD `PUT`). The
-  experience generator returns a `{description, valence}` object — the LLM picks
-  the valence. Jobs appear in the **Jobs** page as `hoodat_character` /
+  `run_outfit_slot(id, slot, outfit, outfits)`, `run_qa_answer(id, question, pairs)`,
+  and `run_qa_question(id, pairs)` are single-step chains that generate one list
+  item from the character + prior items and **do not persist** (the frontend owns
+  those lists and saves them via the CRUD `PUT`). The experience generator returns
+  a `{description, valence}` object — the LLM picks the valence. The
+  [guarded](../../tools/prompt-pal.md#guarded-prompts) generators (`run_dialogue_example`,
+  `run_qa_answer`) append the prompt's guard as a second `llm` step via
+  `_run_single_step(..., guard_prompt=…)`, so the spoken-only editor runs before
+  the value comes back. Jobs appear in the **Jobs** page as `hoodat_character` /
   `hoodat_field` / `hoodat_dialogue` / `hoodat_experience` / `hoodat_outfit` /
-  `hoodat_export` / `hoodat_avatar`.
+  `hoodat_qa` / `hoodat_export` / `hoodat_avatar`.
 - **Prompts** (`prompts.py`) — registers `IDEATE`/`ASSEMBLE`, one
   `field.<section>.<field>` per generatable field, `dialogue.example`
   (`{{var.character}}` + `{{var.examples}}`), `experience.example`
   (`{{var.character}}` + `{{var.experiences}}` → JSON `{description, valence}`),
-  `outfit.full` / `outfit.slot`, and `avatar.image_prompt` with
-  [Prompt Pal](../../tools/prompt-pal.md). All editable in its UI.
+  `qa.answer` (`{{var.character}}` + `{{var.question}}` + `{{var.qa}}`),
+  `qa.question` (suggest helper), `outfit.full` / `outfit.slot`, and
+  `avatar.image_prompt` with [Prompt Pal](../../tools/prompt-pal.md). `dialogue.example`
+  and `qa.answer` ship a shared **spoken-only guard**. All editable in its UI.
 - **Avatars** (`avatars.py`) — *generate* builds a templated image prompt (tuned
   to **FLUX.2 [klein]** best practices for a realistic photographic portrait) and
   runs the ComfyUI `image` workflow via `execute_image_job`, copying the result to
@@ -139,4 +155,5 @@ capability is absent.
 
 Prefix `/v1/apps/hoodat` — see the [API reference](../../reference/api.md#apps--hoodat)
 for the full table. Briefly: characters CRUD, `POST …/fields/{section}/{field}/generate`,
-avatar generate/upload/serve, and exports list/run.
+`POST …/qa/generate` + `…/qa/question/generate`, avatar generate/upload/serve, and
+exports list/run.

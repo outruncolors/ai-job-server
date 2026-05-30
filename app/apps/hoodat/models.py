@@ -19,6 +19,9 @@ template is organized into sections that map onto the profile-page tabs:
 - **Experiences** — top-level `experiences` list: formative events with a
   positive/negative `valence`, split into `{{var.experiences_positive}}` /
   `{{var.experiences_negative}}` for later formatting.
+- **Q&A** — top-level `qa` list of interview-style `{question, answer}` pairs
+  (AliChat-style roleplay exemplars; answers are spoken-only / TTS-friendly).
+  Frontend-owned (collect → PUT wholesale), like experiences/dialogue examples.
 
 `id` / `schema_version` / timestamps / `avatar_path` are server-assigned — never
 produced by the LLM.
@@ -58,6 +61,15 @@ class Experience(BaseModel):
 
     description: str = ""
     valence: Literal["positive", "negative"] = "positive"
+
+
+class QAPair(BaseModel):
+    """An interview-style question + the character's in-voice answer (AliChat).
+    Q&A pairs are the character's roleplay exemplars: spoken-only answers that
+    sound right over TTS and shape how the character talks elsewhere."""
+
+    question: str = ""
+    answer: str = ""
 
 
 class Outfit(BaseModel):
@@ -166,6 +178,8 @@ class Character(BaseModel):
     background: Background = Field(default_factory=Background)
     speaking_style: SpeakingStyle = Field(default_factory=SpeakingStyle)
     experiences: list[Experience] = Field(default_factory=list)
+    # Interview-style Q&A exemplars (frontend-owned list, like experiences).
+    qa: list[QAPair] = Field(default_factory=list)
 
 
 class CharacterDraft(BaseModel):

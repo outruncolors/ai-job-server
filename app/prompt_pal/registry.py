@@ -33,12 +33,15 @@ class RegisteredPrompt:
     description: str = ""
     tags: tuple[str, ...] = ()
     variables: dict[str, Any] = field(default_factory=dict)
+    # Optional in-code guard default ({enabled, prompt, variables}); seeded
+    # alongside the main prompt so a code-declared guard appears in the UI.
+    guard: Optional[dict] = None
 
     def as_node(self) -> PromptNode:
         return {"prompt": self.prompt, "variables": dict(self.variables)}
 
     def as_fields(self) -> dict:
-        return {
+        fields: dict = {
             "app": self.app,
             "key": self.key,
             "title": self.title,
@@ -47,6 +50,9 @@ class RegisteredPrompt:
             "prompt": self.prompt,
             "variables": dict(self.variables),
         }
+        if self.guard is not None:
+            fields["guard"] = dict(self.guard)
+        return fields
 
 
 _REGISTRY: dict[tuple[str, str], RegisteredPrompt] = {}
@@ -61,8 +67,13 @@ def register(
     description: str = "",
     tags: tuple[str, ...] = (),
     variables: Optional[dict[str, Any]] = None,
+    guard: Optional[dict] = None,
 ) -> RegisteredPrompt:
-    """Declare an app prompt. Idempotent on re-import (last declaration wins)."""
+    """Declare an app prompt. Idempotent on re-import (last declaration wins).
+
+    ``guard`` is an optional editor-pass default ``{enabled, prompt, variables}``
+    seeded with the prompt (see ``GuardSpec``).
+    """
     rp = RegisteredPrompt(
         app=app,
         key=key,
@@ -71,6 +82,7 @@ def register(
         description=description,
         tags=tuple(tags),
         variables=dict(variables or {}),
+        guard=dict(guard) if guard is not None else None,
     )
     _REGISTRY[(app, key)] = rp
     return rp
@@ -97,8 +109,17 @@ def _import_prompt_modules() -> None:
 def seed_registered() -> None:
     """Write any registered prompt missing from the store. Seed-if-absent;
     never overwrites an existing (possibly user-edited) entry. Idempotent.
+
+    One narrow exception: if a registered prompt declares a ``guard`` but the
+    stored entry predates the guard feature (its JSON has no ``guard`` key at
+    all), backfill the code-declared guard. A user who *disabled* a guard keeps a
+    ``guard`` object on disk (``enabled: false``), so this never clobbers an
+    intentional choice — it only upgrades legacy, never-had-a-guard entries.
     """
     _import_prompt_modules()
     for rp in _REGISTRY.values():
-        if store.get_by_app_key(rp.app, rp.key) is None:
+        existing = store.get_by_app_key(rp.app, rp.key)
+        if existing is None:
             store.create_entry(rp.as_fields())
+        elif rp.guard is not None and "guard" not in existing:
+            store.update_entry(existing["id"], guard=dict(rp.guard))

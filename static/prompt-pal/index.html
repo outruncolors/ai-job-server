@@ -48,6 +48,30 @@
         <label>Variables (JSON)
           <textarea id="pp-ed-vars" rows="4" spellcheck="false"></textarea>
         </label>
+
+        <fieldset id="pp-ed-guard" class="pp-guard">
+          <legend>
+            <label class="pp-guard-toggle">
+              <input type="checkbox" id="pp-ed-guard-enabled"> Guard (editor pass)
+            </label>
+          </legend>
+          <p class="pp-guard-hint">
+            Runs after the main prompt as a second LLM step. Reference the original
+            output as <code>{{previous}}</code>; the guard passes it through when it
+            already meets the requirements, or rewrites it to comply.
+          </p>
+          <div class="pp-guard-body">
+            <label>Guard prompt
+              <textarea id="pp-ed-guard-prompt" rows="8" spellcheck="false"></textarea>
+            </label>
+            <label>Guard variables (JSON)
+              <textarea id="pp-ed-guard-vars" rows="3" spellcheck="false"></textarea>
+            </label>
+            <button type="button" class="secondary" id="pp-guard-preview-btn">Preview guard</button>
+            <pre id="pp-guard-preview" hidden></pre>
+          </div>
+        </fieldset>
+
         <div class="pp-ed-actions">
           <button type="submit" id="pp-save">Save</button>
           <button type="button" class="secondary" id="pp-preview-btn">Preview</button>

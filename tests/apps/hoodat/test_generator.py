@@ -156,6 +156,73 @@ async def test_run_dialogue_example_missing_character(monkeypatch):
         await generator.run_dialogue_example("nope", [])
 
 
+def _capturing_chain(output):
+    """A fake execute_chain_job that records the request's steps and writes
+    `output` to final_output.txt."""
+    captured = {}
+
+    async def fake(job_id, job_dir, request, event_bus=None):
+        captured["steps"] = request.steps
+        (job_dir / "final_output.txt").write_text(output, encoding="utf-8")
+
+    return fake, captured
+
+
+async def test_run_qa_answer_appends_guard_step(monkeypatch):
+    base = cs.create_character({"name": "Ada", "speaking_style": {"description": "wry"}})
+    fake, captured = _capturing_chain("Just words, no actions.")
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    value, prompt_id, job_id = await generator.run_qa_answer(base["id"], "Who are you?", [])
+    assert value == "Just words, no actions."
+    assert job_id
+    # qa.answer carries a spoken-only guard, so a SECOND "guard" step is appended.
+    assert len(captured["steps"]) == 2
+    assert captured["steps"][1].id == "guard"
+    # generation does NOT persist — the frontend owns the qa list
+    assert cs.get_character(base["id"])["qa"] == []
+
+
+async def test_run_qa_answer_requires_question(monkeypatch):
+    base = cs.create_character({"name": "Ada"})
+    fake, _ = _capturing_chain("x")
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+    with pytest.raises(generator.GenerationError):
+        await generator.run_qa_answer(base["id"], "   ", [])
+
+
+async def test_run_qa_question_single_step(monkeypatch):
+    base = cs.create_character({"name": "Ada"})
+    fake, captured = _capturing_chain("What drives you?")
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    value, _, _ = await generator.run_qa_question(base["id"], [])
+    assert value == "What drives you?"
+    assert len(captured["steps"]) == 1  # no guard on the suggest-question prompt
+
+
+async def test_run_dialogue_example_appends_guard_step(monkeypatch):
+    base = cs.create_character({"name": "Ada"})
+    fake, captured = _capturing_chain("A spoken line.")
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+    await generator.run_dialogue_example(base["id"], [])
+    assert len(captured["steps"]) == 2  # dialogue.example is also guarded spoken-only
+    assert captured["steps"][1].id == "guard"
+
+
+def test_render_character_context_includes_qa():
+    from app.apps.hoodat.prompts import render_character_context
+    doc = cs.create_character({
+        "name": "Ada",
+        "qa": [{"question": "Who are you?", "answer": "An inventor."},
+               {"question": "", "answer": "incomplete"}],
+    })
+    rendered = render_character_context(doc)
+    assert "Q&A" in rendered
+    assert "Q: Who are you?" in rendered and "A: An inventor." in rendered
+    assert "incomplete" not in rendered  # incomplete pair dropped
+
+
 def test_render_character_context_includes_dialogue_examples():
     from app.apps.hoodat.prompts import render_character_context
     doc = cs.create_character({

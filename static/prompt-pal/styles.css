@@ -93,7 +93,7 @@ body {
 #pp-editor button.secondary { background: var(--color-bg-raised); color: var(--color-text); border: 1px solid var(--color-border-hi); }
 #pp-ed-msg.ok { color: var(--color-accent); }
 #pp-ed-msg.err { color: var(--color-danger); }
-#pp-preview {
+#pp-preview, #pp-guard-preview {
   background: var(--color-bg-panel);
   border: 1px solid var(--color-border-mid);
   border-radius: 4px;
@@ -103,6 +103,29 @@ body {
   max-height: 320px;
   overflow: auto;
 }
+
+/* ---- guard sub-section ---- */
+.pp-guard {
+  border: 1px dashed var(--color-border-hi);
+  border-radius: 4px;
+  padding: var(--gap-md);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+.pp-guard legend { padding: 0 6px; }
+.pp-guard-toggle {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+  color: var(--color-accent) !important;
+  font-weight: bold;
+  cursor: pointer;
+}
+.pp-guard-hint { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.pp-guard-body { display: flex; flex-direction: column; gap: var(--gap-sm); }
+.pp-guard.off .pp-guard-body { opacity: 0.5; }
 
 @media (max-width: 720px) {
   #pp-main { grid-template-columns: 1fr; }

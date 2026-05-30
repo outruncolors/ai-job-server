@@ -573,6 +573,156 @@
     });
   }
 
+  // ---- Q&A (AliChat interview exemplars; frontend owns the list) ----
+  // Each pair is {question, answer}. The answer is generated spoken-only (the
+  // qa.answer prompt's guard strips actions/symbols) so it reads well over TTS.
+  function qaList() { return character.qa || []; }
+  function qaRows() { return document.querySelectorAll('#hd-qa .hd-qa-row'); }
+  function collectQARaw() {
+    return Array.from(qaRows()).map((row) => ({
+      question: row.querySelector('.hd-qa-q').value,
+      answer: row.querySelector('.hd-qa-a').value,
+    }));
+  }
+  function collectQA() {
+    return collectQARaw()
+      .map((p) => ({ question: p.question.trim(), answer: p.answer.trim() }))
+      .filter((p) => p.question || p.answer);
+  }
+
+  function persistQA(list) {
+    character.qa = list;
+    return api(`${APP}/characters/${charId}`, 'PUT', { qa: list });
+  }
+
+  async function generateQAAnswer(question, pairs) {
+    const res = await api(`${APP}/characters/${charId}/qa/generate`, 'POST', { question, pairs });
+    if (res.prompt_id) promptMap['qa.answer'] = res.prompt_id;
+    return res.value;
+  }
+  async function suggestQAQuestion(pairs) {
+    const res = await api(`${APP}/characters/${charId}/qa/question/generate`, 'POST', { pairs });
+    if (res.prompt_id) promptMap['qa.question'] = res.prompt_id;
+    return res.value;
+  }
+
+  async function addQA() {
+    const qInput = $('hd-qa-new-q');
+    const question = qInput.value.trim();
+    if (!question) { qInput.focus(); return; }
+    const btn = $('hd-qa-gen');
+    if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+    const pairs = collectQA();
+    try {
+      const answer = await generateQAAnswer(question, pairs);
+      const next = pairs.concat([{ question, answer }]);
+      await persistQA(next);
+      renderQA(next);  // recreates the (now empty) compose row
+    } catch (err) {
+      console.error('qa add failed', err);
+      if (btn) { btn.disabled = false; btn.textContent = '✨ Generate answer'; }
+    }
+  }
+
+  async function suggestQuestion() {
+    const btn = $('hd-qa-suggest');
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      const q = await suggestQAQuestion(collectQA());
+      const input = $('hd-qa-new-q');
+      input.value = q;
+      input.focus();
+    } catch (err) {
+      console.error('qa suggest failed', err);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '💡 Suggest question'; }
+    }
+  }
+
+  async function regenQA(ctx, meta) {
+    const btn = meta && meta.button;
+    const rows = collectQARaw();
+    const question = (rows[ctx.index].question || '').trim();
+    if (!question) return;  // nothing to answer
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    const others = rows.filter((_, i) => i !== ctx.index)
+      .map((p) => ({ question: p.question.trim(), answer: p.answer.trim() }))
+      .filter((p) => p.question || p.answer);
+    try {
+      const answer = await generateQAAnswer(question, others);
+      rows[ctx.index].answer = answer;
+      const cleaned = rows.map((p) => ({ question: p.question.trim(), answer: p.answer.trim() }))
+        .filter((p) => p.question || p.answer);
+      await persistQA(cleaned);
+      renderQA(cleaned);
+    } catch (err) {
+      console.error('qa regenerate failed', err);
+      if (btn) { btn.disabled = false; btn.textContent = '✨'; }
+    }
+  }
+
+  async function removeQA(index) {
+    const cleaned = collectQARaw().filter((_, i) => i !== index)
+      .map((p) => ({ question: p.question.trim(), answer: p.answer.trim() }))
+      .filter((p) => p.question || p.answer);
+    try { await persistQA(cleaned); renderQA(cleaned); }
+    catch (err) { console.error('qa remove failed', err); }
+  }
+
+  function speakQA(ctx) {
+    const presetId = (character.speaking_style || {}).voice_preset_id;
+    playLine(ctx.answerEl.value, ctx.audioEl, ctx.msgEl, presetId);
+  }
+
+  function qaRowHtml(p, i) {
+    return `<div class="hd-qa-row" data-index="${i}">
+      <textarea class="hd-qa-q" rows="2" placeholder="A question to ask them…">${_escHtml(p.question || '')}</textarea>
+      <textarea class="hd-qa-a" rows="3" placeholder="Their spoken answer…">${_escHtml(p.answer || '')}</textarea>
+      <audio class="hd-qa-audio" controls hidden></audio>
+      <span class="hd-qa-msg" role="status"></span>
+    </div>`;
+  }
+
+  function renderQA(list) {
+    if (list === undefined) list = qaList();
+    const container = $('hd-qa');
+    const hasVoice = !!((character.speaking_style || {}).voice_preset_id);
+    const rowsHtml = list.map((p, i) => qaRowHtml(p, i)).join('');
+    const empty = list.length ? '' : '<div class="hd-dlg-empty">No Q&A yet. Ask a question to start.</div>';
+    const compose = `<div class="hd-qa-compose">
+        <input type="text" id="hd-qa-new-q" placeholder="Ask this character a question…">
+        <button type="button" id="hd-qa-gen">✨ Generate answer</button>
+        <button type="button" id="hd-qa-suggest" class="secondary">💡 Suggest question</button>
+      </div>`;
+    const body = `${compose}${empty}<div class="hd-qa-rows">${rowsHtml}</div>`;
+    container.innerHTML = sectionCard('Q&A', body);
+
+    $('hd-qa-gen').addEventListener('click', addQA);
+    $('hd-qa-suggest').addEventListener('click', suggestQuestion);
+    $('hd-qa-new-q').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addQA(); }
+    });
+    container.querySelectorAll('.hd-qa-row').forEach((row) => {
+      row.addEventListener('change', () => persistQA(collectQA()));
+      const controls = [
+        { id: 'gen', label: '✨', title: 'Regenerate the answer', onClick: regenQA },
+        { id: 'prompt', label: '✏️', title: 'Edit the Q&A answer prompt', onClick: () => openPromptFor('qa.answer') },
+      ];
+      if (hasVoice) controls.push({ id: 'speak', label: '🔊', title: 'Hear this answer', onClick: speakQA });
+      controls.push({ id: 'rm', label: '✗', title: 'Remove', onClick: (ctx) => removeQA(ctx.index) });
+      FieldControls.attach(row, {
+        kind: 'field',
+        context: () => ({
+          index: Number(row.dataset.index),
+          answerEl: row.querySelector('.hd-qa-a'),
+          audioEl: row.querySelector('.hd-qa-audio'),
+          msgEl: row.querySelector('.hd-qa-msg'),
+        }),
+        controls,
+      });
+    });
+  }
+
   // ---- header + avatar ----
   function renderHeader() {
     $('hd-name').textContent = character.name || 'Unnamed';
@@ -660,18 +810,21 @@
     sel.addEventListener('change', async () => {
       await api(`${APP}/characters/${charId}`, 'PUT', { speaking_style: { voice_preset_id: sel.value || null } });
       setLocal('speaking_style', 'voice_preset_id', sel.value || null);
+      renderQA();  // show/hide the per-answer 🔊 button now a preset is (un)set
     });
     const synth = $('hd-voice-synth');
     synth.disabled = !caps.voice;
     synth.title = caps.voice ? '' : 'Voice synthesis not available on this node';
   }
 
-  async function synthSample() {
-    const text = $('hd-voice-text').value.trim();
-    const msg = $('hd-voice-msg');
-    if (!text) { msg.textContent = 'Enter a line first.'; return; }
-    const presetId = $('hd-voice-select').value;
-    msg.textContent = 'Synthesizing…';
+  // Synthesize `text` in the given voice preset and play it through `audio`.
+  // Shared by the Speaking Style sample and the per-answer 🔊 button.
+  async function playLine(text, audio, msg, presetId) {
+    const setMsg = (t) => { if (msg) msg.textContent = t; };
+    text = (text || '').trim();
+    if (!text) { setMsg('Nothing to say.'); return; }
+    if (!caps.voice) { setMsg('Voice synthesis not available on this node.'); return; }
+    setMsg('Synthesizing…');
     try {
       const job = await api('/jobs/voice', 'POST', { text, voice_preset_id: presetId || null });
       const jobId = job.job_id;
@@ -679,19 +832,25 @@
         await new Promise((r) => setTimeout(r, 1000));
         const st = await api(`/jobs/${jobId}`);
         if (st.status === 'done') {
-          const audio = $('hd-voice-audio');
           audio.src = `/v1/jobs/${jobId}/files/output.wav`;
           audio.hidden = false;
           audio.play().catch(() => {});
-          msg.textContent = '';
+          setMsg('');
           return;
         }
-        if (st.status === 'error') { msg.textContent = 'Synthesis failed.'; return; }
+        if (st.status === 'error') { setMsg('Synthesis failed.'); return; }
       }
-      msg.textContent = 'Timed out.';
+      setMsg('Timed out.');
     } catch (err) {
-      msg.textContent = 'Synthesis failed: ' + err.message;
+      setMsg('Synthesis failed: ' + err.message);
     }
+  }
+
+  async function synthSample() {
+    const text = $('hd-voice-text').value.trim();
+    const msg = $('hd-voice-msg');
+    if (!text) { msg.textContent = 'Enter a line first.'; return; }
+    await playLine(text, $('hd-voice-audio'), msg, $('hd-voice-select').value);
   }
 
   // ---- exports ----
@@ -834,6 +993,7 @@
     renderExperiences();
     renderSection('speaking_style', $('speaking-fields'));
     renderDialogue();
+    renderQA();
     await loadVoice();
     switchTab(qs.get('tab') || 'identity');
   }

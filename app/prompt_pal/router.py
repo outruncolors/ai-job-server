@@ -12,14 +12,14 @@ Pure config CRUD — not capability-gated.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from . import store
 from .compose import PromptCompositionError, compose
-from .models import PromptEntryPatch
+from .models import GuardSpec, PromptEntryPatch
 
 router = APIRouter(prefix="/v1/prompt-pal", tags=["prompt-pal"])
 
@@ -32,10 +32,13 @@ class CreateEntryRequest(BaseModel):
     description: str = ""
     tags: list[str] = []
     variables: dict[str, Any] = {}
+    guard: Optional[GuardSpec] = None
 
 
 class PreviewRequest(BaseModel):
     variables: dict[str, Any] = {}
+    # Which prompt to compose: the main "prompt" or the "guard" editor pass.
+    target: Literal["prompt", "guard"] = "prompt"
 
 
 @router.get("/entries")
@@ -86,10 +89,19 @@ def preview_entry(entry_id: str, body: PreviewRequest):
     entry = store.get_entry(entry_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Prompt entry not found")
-    node = {
-        "prompt": entry.get("prompt", ""),
-        "variables": {**(entry.get("variables") or {}), **body.variables},
-    }
+    if body.target == "guard":
+        guard = entry.get("guard")
+        if not guard or not (guard.get("prompt") or "").strip():
+            raise HTTPException(status_code=404, detail="entry has no guard prompt")
+        node = {
+            "prompt": guard.get("prompt", ""),
+            "variables": {**(guard.get("variables") or {}), **body.variables},
+        }
+    else:
+        node = {
+            "prompt": entry.get("prompt", ""),
+            "variables": {**(entry.get("variables") or {}), **body.variables},
+        }
     try:
         text = compose(node, store=store.node_for_id)
     except PromptCompositionError as exc:

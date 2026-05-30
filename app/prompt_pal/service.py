@@ -36,6 +36,22 @@ def _node_for(app: str, key: str) -> Optional[dict]:
     return rp.as_node() if rp is not None else None
 
 
+def _guard_for(app: str, key: str) -> Optional[dict]:
+    """The raw guard dict ``{enabled, prompt, variables}`` for ``(app, key)``:
+    store copy first (user edits win), else the registered in-code default. None
+    if there is no guard. Mirrors ``_node_for``'s store-then-registry order.
+    """
+    entry = store.get_by_app_key(app, key)
+    if entry is not None:
+        return entry.get("guard")
+
+    rp = registry.get_registered(app, key)
+    if rp is None:
+        registry._import_prompt_modules()
+        rp = registry.get_registered(app, key)
+    return rp.guard if rp is not None else None
+
+
 def get_text(app: str, key: str, *, variables: Optional[dict] = None) -> str:
     """Resolve ``(app, key)`` to composed prompt text.
 
@@ -47,6 +63,25 @@ def get_text(app: str, key: str, *, variables: Optional[dict] = None) -> str:
         raise UnknownPromptError(f"no prompt registered or stored for ({app!r}, {key!r})")
     if variables:
         node = {"prompt": node["prompt"], "variables": {**node.get("variables", {}), **variables}}
+    return compose(node, store=store.node_for_id)
+
+
+def get_guard(app: str, key: str, *, variables: Optional[dict] = None) -> Optional[str]:
+    """Resolve the composed guard prompt text for ``(app, key)``, or None when
+    there is no guard / it is disabled / its prompt is empty.
+
+    The guard text typically references ``{{previous}}`` — the original prompt's
+    output — which the chain executor fills when the guard runs as the second
+    LLM step. ``variables`` overlays the guard node's own variables (same as
+    ``get_text``).
+    """
+    guard = _guard_for(app, key)
+    if not guard or not guard.get("enabled", True):
+        return None
+    prompt = guard.get("prompt") or ""
+    if not prompt.strip():
+        return None
+    node = {"prompt": prompt, "variables": {**(guard.get("variables") or {}), **(variables or {})}}
     return compose(node, store=store.node_for_id)
 
 

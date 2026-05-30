@@ -107,6 +107,48 @@ def test_generate_dialogue_example(client, monkeypatch):
     assert cs.get_character(char["id"])["speaking_style"]["dialogue_examples"] == []
 
 
+def test_generate_qa_answer(client, monkeypatch):
+    char = cs.create_character({"name": "Ada"})
+
+    async def fake_qa(job_id, job_dir, request, event_bus=None):
+        (job_dir / "final_output.txt").write_text("I am an inventor.", encoding="utf-8")
+
+    monkeypatch.setattr(generator, "execute_chain_job", fake_qa)
+    r = client.post(
+        f"/v1/apps/hoodat/characters/{char['id']}/qa/generate",
+        json={"question": "Who are you?", "pairs": []},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["value"] == "I am an inventor."
+    assert "prompt_id" in body and "job_id" in body
+    # generation does not persist; the qa list is unchanged server-side
+    assert cs.get_character(char["id"])["qa"] == []
+
+
+def test_generate_qa_question(client, monkeypatch):
+    char = cs.create_character({"name": "Ada"})
+
+    async def fake_q(job_id, job_dir, request, event_bus=None):
+        (job_dir / "final_output.txt").write_text("What do you build?", encoding="utf-8")
+
+    monkeypatch.setattr(generator, "execute_chain_job", fake_q)
+    r = client.post(
+        f"/v1/apps/hoodat/characters/{char['id']}/qa/question/generate",
+        json={"pairs": []},
+    )
+    assert r.status_code == 200
+    assert r.json()["value"] == "What do you build?"
+
+
+def test_update_persists_qa_wholesale(client):
+    char = cs.create_character({"name": "Ada"})
+    pairs = [{"question": "Who are you?", "answer": "An inventor."}]
+    r = client.put(f"/v1/apps/hoodat/characters/{char['id']}", json={"qa": pairs})
+    assert r.status_code == 200
+    assert r.json()["qa"] == pairs
+
+
 def test_update_persists_dialogue_examples(client):
     char = cs.create_character({"name": "Ada"})
     r = client.put(

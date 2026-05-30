@@ -24,7 +24,7 @@ from ...chain.executor import execute_chain_job
 from ...chain.models import Alternative, ChainJobRequest, ChainLLMConfig, ChainStep
 from ...jobs import _write_status, create_job, find_job_dir
 from ...llm_config import get_default_as_chain_llm_config
-from ...prompt_pal.service import get_text, id_for
+from ...prompt_pal.service import get_guard, get_text, id_for
 from . import characters_store
 from .models import OUTFIT_SLOTS, CharacterDraft, field_spec
 from .prompts import render_character_context
@@ -34,6 +34,7 @@ FIELD_JOB_TYPE = "hoodat_field"
 DIALOGUE_JOB_TYPE = "hoodat_dialogue"
 EXPERIENCE_JOB_TYPE = "hoodat_experience"
 OUTFIT_JOB_TYPE = "hoodat_outfit"
+QA_JOB_TYPE = "hoodat_qa"
 MAX_PARSE_RETRIES = 2
 
 
@@ -279,35 +280,105 @@ async def run_dialogue_example(
         "character": rendered_context, "examples": examples_text,
     })
 
-    request = ChainJobRequest(
-        title="Hoodat dialogue example",
-        input=rendered_context,
-        llm=llm,
-        steps=[_llm_step(1, "dialogue", "Dialogue example", prompt)],
+    job_dir = await _run_single_step(
+        DIALOGUE_JOB_TYPE, "Hoodat dialogue example", "dialogue", prompt, rendered_context, llm,
+        guard_prompt=get_guard("hoodat", key),
     )
-    status = create_job(DIALOGUE_JOB_TYPE, request.model_dump(), request.input)
-    job_id = status["job_id"]
-    job_dir = find_job_dir(job_id)
-    if job_dir is None:  # pragma: no cover
-        raise GenerationError("job directory disappeared after creation")
-
-    await execute_chain_job(job_id, job_dir, request)
-
     value = _normalize_dialogue(_read_final_output(job_dir))
-    return value, id_for("hoodat", key), job_id
+    return value, id_for("hoodat", key), _job_id_from_dir(job_dir)
+
+
+# ---- Q&A (AliChat interview exemplars) -------------------------------------
+
+def _qa_text(pairs: Optional[list[dict]]) -> str:
+    """Render prior Q&A pairs as few-shot context for `{{var.qa}}`."""
+    items = [
+        p for p in (pairs or [])
+        if str(p.get("question") or "").strip() and str(p.get("answer") or "").strip()
+    ]
+    if not items:
+        return "(none yet)"
+    return "\n".join(
+        f"Q: {str(p['question']).strip()}\nA: {str(p['answer']).strip()}" for p in items
+    )
+
+
+async def run_qa_answer(
+    character_id: str,
+    question: str,
+    pairs: Optional[list[dict]] = None,
+    llm: Optional[ChainLLMConfig] = None,
+) -> tuple[str, Optional[str], str]:
+    """Answer an interview `question` in the character's voice, using prior
+    `pairs` as few-shot context. The `qa.answer` prompt carries a spoken-only
+    guard, so the returned answer is TTS-safe (no actions/symbols).
+
+    Returns `(answer, prompt_id, job_id)`. Does **not** persist — the frontend
+    owns the Q&A list and PUTs it wholesale.
+    """
+    if not (question or "").strip():
+        raise GenerationError("question is required")
+    character = characters_store.get_character(character_id)
+    if character is None:
+        raise GenerationError(f"character not found: {character_id}")
+
+    llm = _resolve_llm(llm)
+    key = "qa.answer"
+    rendered_context = render_character_context(character)
+    prompt = get_text("hoodat", key, variables={
+        "character": rendered_context, "question": question.strip(), "qa": _qa_text(pairs),
+    })
+    job_dir = await _run_single_step(
+        QA_JOB_TYPE, "Hoodat Q&A answer", "qa_answer", prompt, rendered_context, llm,
+        guard_prompt=get_guard("hoodat", key),
+    )
+    value = _normalize_dialogue(_read_final_output(job_dir))
+    return value, id_for("hoodat", key), _job_id_from_dir(job_dir)
+
+
+async def run_qa_question(
+    character_id: str,
+    pairs: Optional[list[dict]] = None,
+    llm: Optional[ChainLLMConfig] = None,
+) -> tuple[str, Optional[str], str]:
+    """Suggest one fitting interview question for the character (the "suggest
+    question" helper). Returns `(question, prompt_id, job_id)`; no persistence."""
+    character = characters_store.get_character(character_id)
+    if character is None:
+        raise GenerationError(f"character not found: {character_id}")
+
+    llm = _resolve_llm(llm)
+    key = "qa.question"
+    rendered_context = render_character_context(character)
+    prompt = get_text("hoodat", key, variables={
+        "character": rendered_context, "qa": _qa_text(pairs),
+    })
+    job_dir = await _run_single_step(
+        QA_JOB_TYPE, "Hoodat Q&A question", "qa_question", prompt, rendered_context, llm,
+    )
+    value = _normalize_dialogue(_read_final_output(job_dir))
+    return value, id_for("hoodat", key), _job_id_from_dir(job_dir)
 
 
 # ---- shared single-step runner ---------------------------------------------
 
 async def _run_single_step(
     job_type: str, title: str, step_id: str, prompt: str, rendered_context: str,
-    llm: ChainLLMConfig,
+    llm: ChainLLMConfig, guard_prompt: Optional[str] = None,
 ) -> Path:
     """Create + execute a 1-step LLM chain; return its job_dir (caller reads
-    `final_output.txt`). Shared by the experience/outfit generators."""
+    `final_output.txt`). Shared by the dialogue/experience/outfit/Q&A generators.
+
+    When `guard_prompt` is given, a SECOND LLM "guard" step is appended: the
+    chain executor feeds its `{{previous}}` from the first step's output, the
+    guard either passes that through or rewrites it, and the guard's output
+    becomes `final_output.txt` (only `llm` steps mutate text_output; last wins).
+    """
+    steps = [_llm_step(1, step_id, title, prompt)]
+    if guard_prompt:
+        steps.append(_llm_step(2, "guard", "Guard", guard_prompt))
     request = ChainJobRequest(
-        title=title, input=rendered_context, llm=llm,
-        steps=[_llm_step(1, step_id, title, prompt)],
+        title=title, input=rendered_context, llm=llm, steps=steps,
     )
     status = create_job(job_type, request.model_dump(), request.input)
     job_id = status["job_id"]

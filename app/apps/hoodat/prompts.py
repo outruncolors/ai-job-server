@@ -126,6 +126,28 @@ def _register_field_prompts() -> None:
 _register_field_prompts()
 
 
+# ---- spoken-only guard (shared editor pass) --------------------------------
+
+# A guard is a second "editor" LLM pass that runs on the original output (the
+# chain token {{previous}}) and either passes it through unchanged or rewrites
+# it. This one strips anything that isn't spoken words so the result sounds
+# right over TTS. Shared by the Q&A answer and dialogue-example prompts.
+SPOKEN_ONLY_GUARD = (
+    "The following is a line of spoken dialogue:\n<line>\n{{previous}}\n</line>\n\n"
+    "It must contain ONLY spoken words — no stage directions, asterisks, "
+    "parenthetical actions, emotes, narration, sound effects, markdown, or any "
+    "non-spoken symbols. If it already meets this, output it VERBATIM. Otherwise, "
+    "rewrite it to remove all non-spoken content while preserving the meaning, "
+    "voice, and length. Output only the final spoken line — no preamble, no "
+    "quotes, no code fences."
+)
+
+
+def _spoken_only_guard() -> dict:
+    """A fresh GuardSpec-shaped dict for the shared spoken-only editor pass."""
+    return {"enabled": True, "prompt": SPOKEN_ONLY_GUARD, "variables": {}}
+
+
 # ---- dialogue examples (list-aware, not a scalar field) --------------------
 
 # Deliberately NOT registered via FIELD_SPECS: a dialogue example is one item of
@@ -143,7 +165,44 @@ DIALOGUE_EXAMPLE = (
 
 register("hoodat", "dialogue.example", title="Dialogue example",
          prompt=DIALOGUE_EXAMPLE, tags=("dialogue", "speaking_style"),
-         description="Generate a new dialogue example from the character + prior examples.")
+         description="Generate a new dialogue example from the character + prior examples.",
+         guard=_spoken_only_guard())
+
+
+# ---- Q&A (AliChat interview exemplars) -------------------------------------
+
+# The character answers an interview question in their own voice. The answer is
+# guarded to be spoken-only so it reads naturally and is safe to send to TTS.
+QA_ANSWER = (
+    "Here is a character:\n<character>\n{{var.character}}\n</character>\n\n"
+    "Earlier questions they've already answered (may be empty):\n"
+    "<qa>\n{{var.qa}}\n</qa>\n\n"
+    "Someone asks this character:\n<question>\n{{var.question}}\n</question>\n\n"
+    "Answer AS this character, in first person and in their own voice — match "
+    "their personality, speaking style, and background. Speak only what they "
+    "would say aloud: no stage directions, no actions, no narration, no quotes. "
+    "Keep it natural and conversational. Output only the spoken answer."
+)
+
+register("hoodat", "qa.answer", title="Q&A answer",
+         prompt=QA_ANSWER, tags=("qa", "speaking_style"),
+         description="Answer an interview question in the character's voice (spoken-only).",
+         guard=_spoken_only_guard())
+
+# Suggest a fitting interview question the user can keep, edit, or regenerate.
+QA_QUESTION = (
+    "Here is a character:\n<character>\n{{var.character}}\n</character>\n\n"
+    "Questions already asked of them (may be empty):\n"
+    "<qa>\n{{var.qa}}\n</qa>\n\n"
+    "Propose ONE fitting interview question to ask this character — something "
+    "that would draw out their personality, voice, or history and has not been "
+    "asked yet. Output only the question itself — no preamble, no label, no "
+    "quotes, no code fences."
+)
+
+register("hoodat", "qa.question", title="Q&A suggested question",
+         prompt=QA_QUESTION, tags=("qa", "speaking_style"),
+         description="Suggest a fitting interview question for the character.")
 
 
 # ---- experiences (list-of-objects, AI also picks the valence) --------------
@@ -314,6 +373,15 @@ def render_character_context(doc: dict) -> str:
     if neg:
         lines.append("Negative experiences:")
         lines.append(neg)
+    # Q&A pairs last — AliChat weights the bottom of the context strongest, and
+    # these interview answers are the character's best roleplay exemplars.
+    qa = [p for p in (doc.get("qa") or []) if str(p.get("question") or "").strip()
+          and str(p.get("answer") or "").strip()]
+    if qa:
+        lines.append("Q&A (how they answer in their own voice):")
+        for p in qa:
+            lines.append(f"  Q: {str(p.get('question')).strip()}")
+            lines.append(f"  A: {str(p.get('answer')).strip()}")
     return "\n".join(lines) if lines else "(no details yet)"
 
 

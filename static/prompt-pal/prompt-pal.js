@@ -89,6 +89,12 @@
     $('pp-ed-tags').value = (entry.tags || []).join(', ');
     $('pp-ed-prompt').value = entry.prompt || '';
     $('pp-ed-vars').value = JSON.stringify(entry.variables || {}, null, 2);
+    const guard = entry.guard || {};
+    $('pp-ed-guard-enabled').checked = guard.enabled !== false && !!(guard.prompt || '').trim();
+    $('pp-ed-guard-prompt').value = guard.prompt || '';
+    $('pp-ed-guard-vars').value = JSON.stringify(guard.variables || {}, null, 2);
+    applyGuardState();
+    $('pp-guard-preview').hidden = true;
     $('pp-preview').hidden = true;
     $('pp-ed-msg').textContent = '';
     render();
@@ -110,14 +116,35 @@
     return v;
   }
 
+  // Dim the guard body when the toggle is off (still editable, just visually off).
+  function applyGuardState() {
+    $('pp-ed-guard').classList.toggle('off', !$('pp-ed-guard-enabled').checked);
+  }
+
+  // Build the guard object from the editor fields. Throws on bad guard JSON.
+  function collectGuard() {
+    return {
+      enabled: $('pp-ed-guard-enabled').checked,
+      prompt: $('pp-ed-guard-prompt').value,
+      variables: parseVars($('pp-ed-guard-vars').value),
+    };
+  }
+
   async function save(e) {
     e.preventDefault();
     const msg = $('pp-ed-msg');
-    let variables;
+    let variables, guard;
     try {
       variables = parseVars($('pp-ed-vars').value);
     } catch (err) {
       msg.textContent = 'Invalid variables JSON: ' + err.message;
+      msg.className = 'err';
+      return;
+    }
+    try {
+      guard = collectGuard();
+    } catch (err) {
+      msg.textContent = 'Invalid guard variables JSON: ' + err.message;
       msg.className = 'err';
       return;
     }
@@ -127,6 +154,7 @@
       tags: $('pp-ed-tags').value.split(',').map((s) => s.trim()).filter(Boolean),
       prompt: $('pp-ed-prompt').value,
       variables,
+      guard,
     };
     try {
       const updated = await api(`/prompt-pal/entries/${_selectedId}`, 'PUT', body);
@@ -162,6 +190,29 @@
     }
   }
 
+  // Preview the guard prompt. The guard previewed on disk is the SAVED guard, so
+  // remind the user to save edits first; {{previous}} is left intact (runtime).
+  async function previewGuard() {
+    const out = $('pp-guard-preview');
+    let variables;
+    try {
+      variables = parseVars($('pp-ed-guard-vars').value);
+    } catch (err) {
+      out.hidden = false;
+      out.textContent = 'Invalid guard variables JSON: ' + err.message;
+      return;
+    }
+    try {
+      const r = await api(`/prompt-pal/entries/${_selectedId}/preview`, 'POST',
+        { variables, target: 'guard' });
+      out.hidden = false;
+      out.textContent = r.text;
+    } catch (err) {
+      out.hidden = false;
+      out.textContent = 'Guard preview failed (save first?): ' + err.message;
+    }
+  }
+
   // ---- events ----
   function wire() {
     $('pp-list').addEventListener('click', (e) => {
@@ -172,6 +223,8 @@
       $(id).addEventListener('input', render));
     $('pp-editor').addEventListener('submit', save);
     $('pp-preview-btn').addEventListener('click', preview);
+    $('pp-ed-guard-enabled').addEventListener('change', applyGuardState);
+    $('pp-guard-preview-btn').addEventListener('click', previewGuard);
   }
 
   async function init() {
