@@ -255,6 +255,10 @@ Text generation is not route-gated; avatar **generation** returns `503` on nodes
 | PUT | `/v1/apps/hoodat/characters/{id}` | Field patch (top-level + nested sections); `404` |
 | DELETE | `/v1/apps/hoodat/characters/{id}` | Remove (+ avatar file) |
 | POST | `/v1/apps/hoodat/characters/{id}/fields/{section}/{field}/generate` | Regenerate one field → `{ value, prompt_id, job_id }` |
+| POST | `/v1/apps/hoodat/characters/{id}/dialogue-examples/generate` | `{ examples }` → `{ value, prompt_id, job_id }` (no persist) |
+| POST | `/v1/apps/hoodat/characters/{id}/experiences/generate` | `{ experiences }` → `{ value: {description, valence}, prompt_id, job_id }` (no persist) |
+| POST | `/v1/apps/hoodat/characters/{id}/outfits/generate` | `{ outfits, outfit }` → `{ value: outfit, prompt_id, job_id }` (no persist) |
+| POST | `/v1/apps/hoodat/characters/{id}/outfits/slot/{slot}/generate` | `{ outfit, outfits }` → `{ value, prompt_id, job_id }` (no persist) |
 | GET | `/v1/apps/hoodat/characters/{id}/avatar` | Serve avatar PNG (`404` if none) |
 | POST | `/v1/apps/hoodat/characters/{id}/avatar/generate` | ComfyUI `image` workflow → `{ avatar_url, job_id }` (`503` no `image` cap) |
 | POST | `/v1/apps/hoodat/characters/{id}/avatar/upload` | Multipart `file` → `{ avatar_url }` |

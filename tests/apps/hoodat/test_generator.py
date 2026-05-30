@@ -12,8 +12,12 @@ _VALID = {
     "name": "Ignored",  # user name should win
     "summary": "a tinkerer",
     "age": 41,
-    "appearance": {"hair": "silver", "primary_outfit": "lab coat"},
+    "appearance": {
+        "hair_color": "silver",
+        "outfits": [{"name": "Work", "top": "lab coat", "primary": True}],
+    },
     "personality": {"traits": ["curious"]},
+    "experiences": [{"description": "first invention", "valence": "positive"}],
 }
 
 
@@ -51,7 +55,8 @@ async def test_run_create_happy_path(monkeypatch):
     character, job_id = await generator.run_create("Ada", "an inventor")
     assert character["name"] == "Ada"  # user name wins
     assert character["summary"] == "a tinkerer"
-    assert character["appearance"]["primary_outfit"] == "lab coat"
+    assert character["appearance"]["outfits"][0]["top"] == "lab coat"
+    assert character["experiences"] == [{"description": "first invention", "valence": "positive"}]
     assert job_id
     # persisted
     assert cs.get_character(character["id"])["age"] == 41
@@ -81,13 +86,24 @@ async def test_run_create_requires_name():
 
 async def test_run_field_scalar(monkeypatch):
     base = cs.create_character({"name": "Ada"})
-    fake, _ = _fake_chain(["  a battered tweed jacket  \nextra line"])
+    fake, _ = _fake_chain(["  chestnut brown  \nextra line"])
     monkeypatch.setattr(generator, "execute_chain_job", fake)
 
-    value, prompt_id, job_id = await generator.run_field(base["id"], "appearance", "primary_outfit")
-    assert value == "a battered tweed jacket"  # scalar = first trimmed line
-    assert cs.get_character(base["id"])["appearance"]["primary_outfit"] == value
+    value, prompt_id, job_id = await generator.run_field(base["id"], "appearance", "hair_color")
+    assert value == "chestnut brown"  # scalar = first trimmed line
+    assert cs.get_character(base["id"])["appearance"]["hair_color"] == value
     assert job_id
+
+
+async def test_run_field_nude_field_uses_existing_route(monkeypatch):
+    # A flat nude field routes through the same per-field generate path.
+    base = cs.create_character({"name": "Ada"})
+    fake, _ = _fake_chain(["full and round"])
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    value, _, _ = await generator.run_field(base["id"], "appearance", "breasts")
+    assert value == "full and round"
+    assert cs.get_character(base["id"])["appearance"]["breasts"] == value
 
 
 async def test_run_field_list(monkeypatch):
@@ -152,3 +168,85 @@ def test_render_character_context_includes_dialogue_examples():
 
     plain = render_character_context(cs.create_character({"name": "Bo"}))
     assert "Dialogue examples:" not in plain
+
+
+def test_render_character_context_appearance_and_experiences():
+    from app.apps.hoodat.prompts import render_character_context
+    doc = cs.create_character({
+        "name": "Ada",
+        "appearance": {
+            "hair_color": "silver", "hair_details": "in a bun",
+            "breasts": "ample", "outfits": [{"name": "Work", "top": "lab coat", "primary": True}],
+        },
+        "experiences": [
+            {"description": "won a prize", "valence": "positive"},
+            {"description": "lost a friend", "valence": "negative"},
+        ],
+    })
+    rendered = render_character_context(doc)
+    assert "Hair: silver in a bun" in rendered            # combined color + details
+    assert "Nude details:" in rendered and "ample" in rendered
+    assert "Outfits:" in rendered and "lab coat" in rendered
+    assert "Positive experiences:" in rendered and "won a prize" in rendered
+    assert "Negative experiences:" in rendered and "lost a friend" in rendered
+
+
+# ---- experiences -----------------------------------------------------------
+
+def test_normalize_experience_valid_and_defaulting():
+    assert generator._normalize_experience('{"description": "x", "valence": "negative"}') == {
+        "description": "x", "valence": "negative"}
+    # missing/unknown valence -> positive
+    assert generator._normalize_experience('{"description": "y"}')["valence"] == "positive"
+    assert generator._normalize_experience('{"description": "z", "valence": "??"}')["valence"] == "positive"
+    with pytest.raises(generator.GenerationError):
+        generator._normalize_experience("not json")
+    with pytest.raises(generator.GenerationError):
+        generator._normalize_experience('{"description": ""}')
+
+
+async def test_run_experience_example_returns_value_without_persisting(monkeypatch):
+    base = cs.create_character({"name": "Ada"})
+    fake, _ = _fake_chain(['{"description": "Survived a shipwreck", "valence": "negative"}'])
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    value, prompt_id, job_id = await generator.run_experience_example(base["id"], [])
+    assert value == {"description": "Survived a shipwreck", "valence": "negative"}
+    assert job_id
+    # generation does NOT persist — the frontend owns the list
+    assert cs.get_character(base["id"])["experiences"] == []
+
+
+# ---- outfits ---------------------------------------------------------------
+
+def test_normalize_outfit_drops_primary_and_fills_slots():
+    out = generator._normalize_outfit('{"name": "Casual", "top": "tee", "primary": true}')
+    assert out["name"] == "Casual" and out["top"] == "tee"
+    assert "primary" not in out  # frontend owns the flag
+    assert out["bottoms"] == "" and out["accessories"] == ""
+
+
+async def test_run_outfit_returns_outfit_without_persisting(monkeypatch):
+    base = cs.create_character({"name": "Ada"})
+    fake, _ = _fake_chain(['{"name": "Beach", "top": "bikini", "bottoms": "shorts"}'])
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    value, _, job_id = await generator.run_outfit(base["id"], [], {})
+    assert value["name"] == "Beach" and value["top"] == "bikini"
+    assert job_id
+    assert cs.get_character(base["id"])["appearance"]["outfits"] == []
+
+
+async def test_run_outfit_slot_scalar(monkeypatch):
+    base = cs.create_character({"name": "Ada"})
+    fake, _ = _fake_chain(["  worn leather boots  "])
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    value, _, _ = await generator.run_outfit_slot(base["id"], "socks_shoes", {"top": "tee"}, [])
+    assert value == "worn leather boots"
+
+
+async def test_run_outfit_slot_unknown_slot():
+    base = cs.create_character({"name": "Ada"})
+    with pytest.raises(generator.GenerationError):
+        await generator.run_outfit_slot(base["id"], "hat", {}, [])

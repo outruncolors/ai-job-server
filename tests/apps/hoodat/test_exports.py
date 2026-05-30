@@ -71,6 +71,32 @@ async def test_run_export_exposes_dialogue_examples(monkeypatch):
     assert "- To the lab." in captured["prompt"]
 
 
+async def test_run_export_exposes_experiences(monkeypatch):
+    pp_store.create_entry({
+        "app": "hoodat", "key": "export.exp", "title": "Exp",
+        "prompt": "Good:\n{{var.experiences_positive}}\nBad:\n{{var.experiences_negative}}",
+        "variables": {},
+    })
+    char = cs.create_character({
+        "name": "Ada",
+        "experiences": [
+            {"description": "won a prize", "valence": "positive"},
+            {"description": "lost a friend", "valence": "negative"},
+        ],
+    })
+
+    captured = {}
+
+    async def fake(job_id, job_dir, request, event_bus=None):
+        captured["prompt"] = request.steps[0].alternatives[0].prompt
+        (job_dir / "final_output.txt").write_text("OK", encoding="utf-8")
+
+    monkeypatch.setattr(exports, "execute_chain_job", fake)
+    await exports.run_export(char["id"], "export.exp", "standard")
+    assert "- won a prize" in captured["prompt"]
+    assert "- lost a friend" in captured["prompt"]
+
+
 async def test_run_export_bad_detail(monkeypatch):
     _make_export()
     char = cs.create_character({"name": "Ada"})

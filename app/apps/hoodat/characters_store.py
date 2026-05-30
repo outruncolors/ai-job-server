@@ -39,13 +39,33 @@ def _atomic_write(path: Path, data: dict) -> None:
     os.replace(tmp, path)
 
 
+def _normalize_doc(doc: dict) -> dict:
+    """Return `doc` in the current (v2) shape, migrating legacy v1 docs on read.
+
+    Old docs carry `schema_version < 2` and the flat `Appearance` fields
+    (`hair`/`eyes`/`primary_outfit`). Round-tripping through `Character` runs the
+    `Appearance` before-validator and fills new defaults, so the UI never sees the
+    legacy shape. We drop the old `schema_version` first (its `Literal[2]` would
+    reject `1`). This does NOT rewrite the file — persistence happens on the next
+    save. Falls back to the raw doc if validation fails, so a malformed legacy doc
+    degrades rather than 500ing.
+    """
+    if doc.get("schema_version", 1) >= 2:
+        return doc
+    try:
+        legacy = {k: v for k, v in doc.items() if k != "schema_version"}
+        return Character(**legacy).model_dump()
+    except Exception:  # noqa: BLE001 — best-effort read migration
+        return doc
+
+
 def list_characters() -> list[dict]:
     """All persisted characters (unordered)."""
     if not CHARACTERS_DIR.exists():
         return []
     out: list[dict] = []
     for p in CHARACTERS_DIR.glob("*.json"):
-        out.append(json.loads(p.read_text(encoding="utf-8")))
+        out.append(_normalize_doc(json.loads(p.read_text(encoding="utf-8"))))
     return out
 
 
@@ -53,18 +73,18 @@ def get_character(character_id: str) -> Optional[dict]:
     p = _path_for(character_id)
     if not p.exists():
         return None
-    return json.loads(p.read_text(encoding="utf-8"))
+    return _normalize_doc(json.loads(p.read_text(encoding="utf-8")))
 
 
 def create_character(fields: dict) -> dict:
     """Build a new character from `fields`, assigning server-controlled fields
-    (`id`, `schema_version=1`, timestamps), validating against `Character`, and
+    (`id`, `schema_version=2`, timestamps), validating against `Character`, and
     persisting it.
     """
     now = _now_iso()
     doc = dict(fields)
     doc["id"] = str(uuid.uuid4())
-    doc["schema_version"] = 1
+    doc["schema_version"] = 2
     doc["created_at"] = now
     doc["updated_at"] = now
     character = Character(**doc)

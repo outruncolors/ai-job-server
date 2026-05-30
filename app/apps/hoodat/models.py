@@ -1,17 +1,24 @@
-"""Pydantic schemas for Hoodat characters (schema v1).
+"""Pydantic schemas for Hoodat characters (schema v2).
 
 A **character** is a single living JSON document with a `schema_version`. The
-template is organized into five sections that map onto the profile-page tabs:
+template is organized into sections that map onto the profile-page tabs:
 
 - **Identity & Basics** — top-level fields (name, summary, tagline, age, sex,
   occupation).
-- **Appearance** — `Appearance` block; "driver-license" style so it feeds image
-  prompts cleanly, plus a `primary_outfit`.
+- **Appearance** — `Appearance` block, surfaced as three sub-sections: *Basics*
+  (always-visible traits incl. hair color/details, eye color/details), *Nude*
+  (private-area fields — shared, plus male-only and female-only, gated on `sex`
+  in the UI; kept FLAT on the block so per-field generation works unchanged), and
+  *Clothed* (a list of `outfits`, each a line-item with garment slots; one is
+  marked `primary` and feeds the avatar image prompt).
 - **Personality** — `Personality` block (traits / quirks / values / fears).
 - **Background & Relationships** — `Background` block.
 - **Speaking Style** — `SpeakingStyle` block: how they speak, an optional
   `voice_preset_id` referencing the project's voice-preset system, and a list of
   `dialogue_examples` (sample lines for few-shot voice priming).
+- **Experiences** — top-level `experiences` list: formative events with a
+  positive/negative `valence`, split into `{{var.experiences_positive}}` /
+  `{{var.experiences_negative}}` for later formatting.
 
 `id` / `schema_version` / timestamps / `avatar_path` are server-assigned — never
 produced by the LLM.
@@ -22,26 +29,96 @@ Three shapes per the project convention:
 - `CharacterDraft` — every field Optional and no server-assigned fields; the
   validation target for raw LLM output before merge + promotion to `Character`.
 
-`FIELD_SPECS` is the single source of truth for which fields are generatable,
-their human label, kind (scalar / int / list), and which section they live in.
-It drives per-field prompt registration, patch-building, and value normalization.
+`FIELD_SPECS` is the single source of truth for which scalar/list fields are
+generatable, their human label, kind (scalar / int / list), and which section
+they live in. It drives per-field prompt registration, patch-building, and value
+normalization. (Outfits and experiences are lists-of-objects, handled specially
+like dialogue examples — NOT in `FIELD_SPECS`.)
+
+**Migration (v1 → v2):** old `Appearance` docs carry flat `hair` / `eyes` /
+`primary_outfit`. A `model_validator(mode="before")` on `Appearance` hoists those
+into the new shape (mirrors `ChainStep`'s v1-shorthand hoist in
+`app/chain/models.py`). It only fires when `Appearance(**data)` is constructed
+(i.e. on write); the store additionally normalizes on read so the UI never sees
+the legacy shape.
 """
 
 from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+# Garment slots on an outfit (order = avatar/render assembly order).
+OUTFIT_SLOTS = ("top", "bottoms", "underwear", "socks_shoes", "accessories")
+
+
+class Experience(BaseModel):
+    """A formative event in the character's history, tagged by emotional valence."""
+
+    description: str = ""
+    valence: Literal["positive", "negative"] = "positive"
+
+
+class Outfit(BaseModel):
+    """A single named outfit, broken into garment slots. Exactly one outfit on a
+    character should be `primary` (the one that feeds the avatar image prompt)."""
+
+    name: str = ""
+    top: str = ""
+    bottoms: str = ""
+    underwear: str = ""
+    socks_shoes: str = ""
+    accessories: str = ""
+    primary: bool = False
 
 
 class Appearance(BaseModel):
+    # --- Basics (always visible) ---
     height: str = ""
     build: str = ""
-    hair: str = ""
-    eyes: str = ""
     skin: str = ""
+    hair_color: str = ""
+    hair_details: str = ""
+    eye_color: str = ""
+    eye_details: str = ""
     distinguishing_features: list[str] = Field(default_factory=list)
-    primary_outfit: str = ""
+    # --- Nude: shared (all sexes) ---
+    body_hair: str = ""
+    pubic_hair: str = ""
+    buttocks: str = ""
+    lips: str = ""
+    hands: str = ""
+    feet: str = ""
+    # --- Nude: male-only (UI-gated on sex) ---
+    penis: str = ""
+    testicles: str = ""
+    # --- Nude: female-only (UI-gated on sex) ---
+    breasts: str = ""
+    vulva: str = ""
+    # --- Clothed ---
+    outfits: list[Outfit] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy(cls, data):
+        """Hoist v1 flat fields (`hair`/`eyes`/`primary_outfit`) into the v2 shape.
+
+        Guarded so it never clobbers an already-set v2 value, and pops the legacy
+        keys either way so they don't linger on the persisted doc.
+        """
+        if not isinstance(data, dict):
+            return data
+        legacy_hair = data.pop("hair", None)
+        if legacy_hair and not data.get("hair_color") and not data.get("hair_details"):
+            data["hair_color"] = legacy_hair
+        legacy_eyes = data.pop("eyes", None)
+        if legacy_eyes and not data.get("eye_color"):
+            data["eye_color"] = legacy_eyes
+        legacy_outfit = data.pop("primary_outfit", None)
+        if legacy_outfit and not data.get("outfits"):
+            data["outfits"] = [{"name": "Primary", "top": legacy_outfit, "primary": True}]
+        return data
 
 
 class Personality(BaseModel):
@@ -68,10 +145,10 @@ class SpeakingStyle(BaseModel):
 
 
 class Character(BaseModel):
-    """A fully-realized, persisted Hoodat character (schema v1)."""
+    """A fully-realized, persisted Hoodat character (schema v2)."""
 
     id: str
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     created_at: str
     updated_at: str
     avatar_path: Optional[str] = None
@@ -88,6 +165,7 @@ class Character(BaseModel):
     personality: Personality = Field(default_factory=Personality)
     background: Background = Field(default_factory=Background)
     speaking_style: SpeakingStyle = Field(default_factory=SpeakingStyle)
+    experiences: list[Experience] = Field(default_factory=list)
 
 
 class CharacterDraft(BaseModel):
@@ -104,6 +182,7 @@ class CharacterDraft(BaseModel):
     personality: Optional[Personality] = None
     background: Optional[Background] = None
     speaking_style: Optional[SpeakingStyle] = None
+    experiences: Optional[list[Experience]] = None
 
 
 # ---- generatable-field registry -------------------------------------------
@@ -118,14 +197,33 @@ FIELD_SPECS: dict[str, dict[str, dict]] = {
         "sex": {"label": "sex", "kind": "scalar"},
         "occupation": {"label": "occupation", "kind": "scalar"},
     },
+    # NOTE: nude fields are FLAT here (not nested under `appearance.nude`) so the
+    # two-level per-field generate path (`{section: {field: value}}`) works
+    # unchanged. The UI gates them on `sex`. `outfits` is a list-of-objects and is
+    # intentionally NOT here (handled like dialogue examples).
     "appearance": {
+        # Basics
         "height": {"label": "height", "kind": "scalar"},
         "build": {"label": "body build", "kind": "scalar"},
-        "hair": {"label": "hair (color and style)", "kind": "scalar"},
-        "eyes": {"label": "eye color", "kind": "scalar"},
         "skin": {"label": "skin tone", "kind": "scalar"},
+        "hair_color": {"label": "hair color", "kind": "scalar"},
+        "hair_details": {"label": "hair style / details", "kind": "scalar"},
+        "eye_color": {"label": "eye color", "kind": "scalar"},
+        "eye_details": {"label": "eye details", "kind": "scalar"},
         "distinguishing_features": {"label": "distinguishing features", "kind": "list"},
-        "primary_outfit": {"label": "commonly worn outfit", "kind": "scalar"},
+        # Nude — shared
+        "body_hair": {"label": "body hair", "kind": "scalar"},
+        "pubic_hair": {"label": "pubic hair", "kind": "scalar"},
+        "buttocks": {"label": "buttocks", "kind": "scalar"},
+        "lips": {"label": "lips", "kind": "scalar"},
+        "hands": {"label": "hands", "kind": "scalar"},
+        "feet": {"label": "feet", "kind": "scalar"},
+        # Nude — male-only
+        "penis": {"label": "penis", "kind": "scalar"},
+        "testicles": {"label": "testicles", "kind": "scalar"},
+        # Nude — female-only
+        "breasts": {"label": "breasts", "kind": "scalar"},
+        "vulva": {"label": "vulva", "kind": "scalar"},
     },
     "personality": {
         "traits": {"label": "personality traits", "kind": "list"},

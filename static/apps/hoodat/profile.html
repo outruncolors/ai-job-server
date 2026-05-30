@@ -27,6 +27,7 @@
     <button type="button" class="tab-btn" data-tab="appearance">Appearance</button>
     <button type="button" class="tab-btn" data-tab="personality">Personality</button>
     <button type="button" class="tab-btn" data-tab="background">Background</button>
+    <button type="button" class="tab-btn" data-tab="experiences">Experiences</button>
     <button type="button" class="tab-btn" data-tab="speaking_style">Speaking Style</button>
     <button type="button" class="tab-btn" data-tab="exports">Exports</button>
   </div>
@@ -36,6 +37,7 @@
     <section class="tab-pane" id="tab-appearance" hidden></section>
     <section class="tab-pane" id="tab-personality" hidden></section>
     <section class="tab-pane" id="tab-background" hidden></section>
+    <section class="tab-pane" id="tab-experiences" hidden></section>
 
     <!-- Speaking Style: description + dialogue examples + voice integration -->
     <section class="tab-pane" id="tab-speaking_style" hidden>
@@ -91,7 +93,7 @@
       <label>Name<input type="text" id="hd-export-name" placeholder="e.g. RPG stat block"></label>
       <label>Prompt
         <textarea id="hd-export-prompt" rows="6"
-          placeholder="Use {{var.character}} for the full character, {{var.dialogue_examples}} for their sample lines, and {{var.detail}} for the chosen level."></textarea>
+          placeholder="Use {{var.character}} for the full character, {{var.dialogue_examples}} for sample lines, {{var.experiences_positive}} / {{var.experiences_negative}} for their experiences, and {{var.detail}} for the chosen level."></textarea>
       </label>
       <div id="hd-export-msg" class="msg"></div>
       <div class="dlg-actions">

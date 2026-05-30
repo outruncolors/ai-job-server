@@ -17,7 +17,15 @@ from pydantic import BaseModel, ValidationError
 
 from ...server import get_local_capabilities
 from . import avatars, characters_store, exports
-from .generator import GenerationError, run_create, run_dialogue_example, run_field
+from .generator import (
+    GenerationError,
+    run_create,
+    run_dialogue_example,
+    run_experience_example,
+    run_field,
+    run_outfit,
+    run_outfit_slot,
+)
 from .models import Character
 
 router = APIRouter(prefix="/v1/apps/hoodat", tags=["hoodat"])
@@ -35,6 +43,17 @@ class RunExportRequest(BaseModel):
 class DialogueGenerateRequest(BaseModel):
     # The caller's current (possibly unsaved) list, used as few-shot context.
     examples: list[str] = []
+
+
+class ExperienceGenerateRequest(BaseModel):
+    # The caller's current (possibly unsaved) list, used as few-shot context.
+    experiences: list[dict] = []
+
+
+class OutfitGenerateRequest(BaseModel):
+    # The character's other outfits (for distinctness) + the outfit being built.
+    outfits: list[dict] = []
+    outfit: dict = {}
 
 
 def _summary(doc: dict) -> dict:
@@ -110,6 +129,33 @@ async def generate_field(character_id: str, section: str, field: str):
 async def generate_dialogue_example(character_id: str, body: DialogueGenerateRequest):
     try:
         value, prompt_id, job_id = await run_dialogue_example(character_id, body.examples)
+    except GenerationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"value": value, "prompt_id": prompt_id, "job_id": job_id}
+
+
+@router.post("/characters/{character_id}/experiences/generate")
+async def generate_experience(character_id: str, body: ExperienceGenerateRequest):
+    try:
+        value, prompt_id, job_id = await run_experience_example(character_id, body.experiences)
+    except GenerationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"value": value, "prompt_id": prompt_id, "job_id": job_id}
+
+
+@router.post("/characters/{character_id}/outfits/generate")
+async def generate_outfit(character_id: str, body: OutfitGenerateRequest):
+    try:
+        value, prompt_id, job_id = await run_outfit(character_id, body.outfits, body.outfit)
+    except GenerationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"value": value, "prompt_id": prompt_id, "job_id": job_id}
+
+
+@router.post("/characters/{character_id}/outfits/slot/{slot}/generate")
+async def generate_outfit_slot(character_id: str, slot: str, body: OutfitGenerateRequest):
+    try:
+        value, prompt_id, job_id = await run_outfit_slot(character_id, slot, body.outfit, body.outfits)
     except GenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return {"value": value, "prompt_id": prompt_id, "job_id": job_id}

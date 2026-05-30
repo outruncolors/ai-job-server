@@ -26,12 +26,14 @@ from ...jobs import _write_status, create_job, find_job_dir
 from ...llm_config import get_default_as_chain_llm_config
 from ...prompt_pal.service import get_text, id_for
 from . import characters_store
-from .models import CharacterDraft, field_spec
+from .models import OUTFIT_SLOTS, CharacterDraft, field_spec
 from .prompts import render_character_context
 
 CREATE_JOB_TYPE = "hoodat_character"
 FIELD_JOB_TYPE = "hoodat_field"
 DIALOGUE_JOB_TYPE = "hoodat_dialogue"
+EXPERIENCE_JOB_TYPE = "hoodat_experience"
+OUTFIT_JOB_TYPE = "hoodat_outfit"
 MAX_PARSE_RETRIES = 2
 
 
@@ -293,3 +295,163 @@ async def run_dialogue_example(
 
     value = _normalize_dialogue(_read_final_output(job_dir))
     return value, id_for("hoodat", key), job_id
+
+
+# ---- shared single-step runner ---------------------------------------------
+
+async def _run_single_step(
+    job_type: str, title: str, step_id: str, prompt: str, rendered_context: str,
+    llm: ChainLLMConfig,
+) -> Path:
+    """Create + execute a 1-step LLM chain; return its job_dir (caller reads
+    `final_output.txt`). Shared by the experience/outfit generators."""
+    request = ChainJobRequest(
+        title=title, input=rendered_context, llm=llm,
+        steps=[_llm_step(1, step_id, title, prompt)],
+    )
+    status = create_job(job_type, request.model_dump(), request.input)
+    job_id = status["job_id"]
+    job_dir = find_job_dir(job_id)
+    if job_dir is None:  # pragma: no cover
+        raise GenerationError("job directory disappeared after creation")
+    await execute_chain_job(job_id, job_dir, request)
+    return job_dir
+
+
+def _job_id_from_dir(job_dir: Path) -> str:
+    return job_dir.name
+
+
+# ---- experiences -----------------------------------------------------------
+
+def _loads_object(raw: str) -> dict:
+    try:
+        data = json.loads(_strip_fences(raw))
+    except json.JSONDecodeError as exc:
+        raise GenerationError(f"expected JSON, got: {raw!r}") from exc
+    if not isinstance(data, dict):
+        raise GenerationError(f"expected a JSON object, got: {raw!r}")
+    return data
+
+
+def _normalize_experience(raw: str) -> dict:
+    """Parse a generated experience into `{description, valence}`. Tolerant:
+    coerce an unknown/missing valence to "positive" rather than erroring."""
+    data = _loads_object(raw)
+    description = str(data.get("description") or "").strip()
+    if not description:
+        raise GenerationError("experience description was empty")
+    valence = "negative" if str(data.get("valence", "")).strip().lower() == "negative" else "positive"
+    return {"description": description, "valence": valence}
+
+
+async def run_experience_example(
+    character_id: str,
+    experiences: Optional[list[dict]] = None,
+    llm: Optional[ChainLLMConfig] = None,
+) -> tuple[dict, Optional[str], str]:
+    """Generate one new experience from the character + prior `experiences`.
+
+    Returns `({description, valence}, prompt_id, job_id)`. Does **not** persist —
+    the frontend owns the list and PUTs it wholesale.
+    """
+    character = characters_store.get_character(character_id)
+    if character is None:
+        raise GenerationError(f"character not found: {character_id}")
+
+    llm = _resolve_llm(llm)
+    key = "experience.example"
+    rendered_context = render_character_context(character)
+    prior = experiences or []
+    exp_text = "\n".join(
+        f"- ({e.get('valence', 'positive')}) {e.get('description', '')}" for e in prior
+    ) or "(none yet)"
+    prompt = get_text("hoodat", key, variables={
+        "character": rendered_context, "experiences": exp_text,
+    })
+
+    job_dir = await _run_single_step(
+        EXPERIENCE_JOB_TYPE, "Hoodat experience", "experience", prompt, rendered_context, llm,
+    )
+    value = _normalize_experience(_read_final_output(job_dir))
+    return value, id_for("hoodat", key), _job_id_from_dir(job_dir)
+
+
+# ---- outfits ---------------------------------------------------------------
+
+def _outfit_text(outfit: Optional[dict]) -> str:
+    """Render a partial outfit dict into readable text for prompt context."""
+    outfit = outfit or {}
+    parts = [f"{slot}: {outfit.get(slot)}" for slot in OUTFIT_SLOTS if str(outfit.get(slot) or "").strip()]
+    name = str(outfit.get("name") or "").strip()
+    head = f"name: {name}\n" if name else ""
+    return head + ("\n".join(parts) if parts else "(empty so far)")
+
+
+def _outfits_text(outfits: Optional[list[dict]]) -> str:
+    items = outfits or []
+    if not items:
+        return "(none yet)"
+    return "\n".join(f"{i}. {(o.get('name') or 'Outfit')}" for i, o in enumerate(items, 1))
+
+
+def _normalize_outfit(raw: str) -> dict:
+    """Parse a generated full outfit into `{name, <slots...>}` (no `primary`;
+    the frontend owns that flag). Missing keys become empty strings."""
+    data = _loads_object(raw)
+    out = {"name": str(data.get("name") or "").strip()}
+    for slot in OUTFIT_SLOTS:
+        out[slot] = str(data.get(slot) or "").strip()
+    return out
+
+
+async def run_outfit(
+    character_id: str,
+    outfits: Optional[list[dict]] = None,
+    outfit: Optional[dict] = None,
+    llm: Optional[ChainLLMConfig] = None,
+) -> tuple[dict, Optional[str], str]:
+    """Generate a complete outfit (all garment slots). Returns
+    `(outfit_dict, prompt_id, job_id)`; no persistence (frontend owns the list)."""
+    character = characters_store.get_character(character_id)
+    if character is None:
+        raise GenerationError(f"character not found: {character_id}")
+
+    llm = _resolve_llm(llm)
+    key = "outfit.full"
+    rendered_context = render_character_context(character)
+    prompt = get_text("hoodat", key, variables={
+        "character": rendered_context, "outfits": _outfits_text(outfits),
+    })
+    job_dir = await _run_single_step(
+        OUTFIT_JOB_TYPE, "Hoodat outfit", "outfit", prompt, rendered_context, llm,
+    )
+    value = _normalize_outfit(_read_final_output(job_dir))
+    return value, id_for("hoodat", key), _job_id_from_dir(job_dir)
+
+
+async def run_outfit_slot(
+    character_id: str,
+    slot: str,
+    outfit: Optional[dict] = None,
+    outfits: Optional[list[dict]] = None,
+    llm: Optional[ChainLLMConfig] = None,
+) -> tuple[str, Optional[str], str]:
+    """Generate one garment slot value. Returns `(value, prompt_id, job_id)`."""
+    if slot not in OUTFIT_SLOTS:
+        raise GenerationError(f"unknown outfit slot: {slot!r}")
+    character = characters_store.get_character(character_id)
+    if character is None:
+        raise GenerationError(f"character not found: {character_id}")
+
+    llm = _resolve_llm(llm)
+    key = "outfit.slot"
+    rendered_context = render_character_context(character)
+    prompt = get_text("hoodat", key, variables={
+        "character": rendered_context, "outfit": _outfit_text(outfit), "slot": slot,
+    })
+    job_dir = await _run_single_step(
+        OUTFIT_JOB_TYPE, f"Hoodat outfit slot {slot}", "outfit_slot", prompt, rendered_context, llm,
+    )
+    value = _normalize_value(_read_final_output(job_dir), "scalar")
+    return value, id_for("hoodat", key), _job_id_from_dir(job_dir)

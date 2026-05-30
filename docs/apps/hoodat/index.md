@@ -21,18 +21,34 @@ avatar Replace control).
    land on the character's **profile page**.
 3. The profile has a circular **avatar** (top-left), the name, and tabs for each
    section: **Identity**, **Appearance**, **Personality**, **Background**,
-   **Speaking Style**, **Exports**.
-4. **Edit any field** inline (changes save on blur). **Hover a field** to reveal:
+   **Experiences**, **Speaking Style**, **Exports**.
+4. **Edit any field** inline (changes save on blur). Fields render the control
+   that fits them — text areas, a number input for age, **Male/Female radios** for
+   sex, and a **feet + inches** pair for height (stored as a canonical `5'10"`
+   string). **Hover a field** to reveal:
    - **✨ Generate** — regenerate just that field from the rest of the character.
    - **✏️ Edit prompt** — jump to that field's prompt in [Prompt Pal](../../tools/prompt-pal.md).
 5. **Hover the avatar** → **Replace** → **Generate from description** (ComfyUI
    `image` workflow) or **Upload an image**.
-6. On the **Speaking Style** tab, build a **Dialogue examples** list: the first
+6. The **Appearance** tab is split into three cards: **Basics** (always visible —
+   height, build, skin, hair color/details, eye color/details, distinguishing
+   features), **Nude** (private-area fields; the male-only vs female-only fields
+   are shown based on the character's **sex**, shared fields always), and
+   **Clothed** — a list of **outfits**, each a card with garment slots (top,
+   bottoms, underwear, socks & shoes, accessories). Generate a whole outfit at once
+   (**✨ Outfit**) or one slot at a time (per-slot ✨), and mark exactly one outfit
+   **primary** (the one that feeds the avatar image prompt).
+7. On the **Speaking Style** tab, build a **Dialogue examples** list: the first
    row is typed by hand, then **+ Add dialogue example** *generates* the next
    line from the list-so-far + the character (few-shot — more examples ⇒ closer
    matches). Each row has ✨ (regenerate just that line), ✏️ (edit the prompt),
    and ✗ (remove). The list is reachable in export prompts as
    `{{var.dialogue_examples}}`.
+8. The **Experiences** tab is a list of formative events. **+ Add experience**
+   *generates* one from the character + the list-so-far, and the LLM also decides
+   whether it was **Positive** or **Negative** (you can flip the toggle). Each row
+   has ✨/✏️/✗ like dialogue. Experiences are reachable in export prompts split by
+   valence as `{{var.experiences_positive}}` / `{{var.experiences_negative}}`.
 
 Each tab's content is grouped into uniform section cards (header + body) for a
 consistent look.
@@ -42,7 +58,7 @@ must be reachable (a local `llama-server` or the `llm` peer). Avatar *generation
 additionally needs the **`image`** capability on this node (see below). With a
 missing/failed model, create/generate calls return `502`.
 
-## Sections (the v1 template)
+## Sections (the v2 template)
 
 `app/apps/hoodat/models.py` defines `Character` (full, persisted) and
 `CharacterDraft` (all-Optional, the LLM-output validation target). `id` /
@@ -51,16 +67,28 @@ missing/failed model, create/generate calls return `502`.
 | Section | Fields |
 |---------|--------|
 | **Identity & Basics** (top-level) | `name`, `summary`, `tagline`, `age`, `sex`, `occupation` |
-| **Appearance** | `height`, `build`, `hair`, `eyes`, `skin`, `distinguishing_features[]`, `primary_outfit` |
+| **Appearance → Basics** | `height`, `build`, `skin`, `hair_color`, `hair_details`, `eye_color`, `eye_details`, `distinguishing_features[]` |
+| **Appearance → Nude** (flat fields, UI-gated on `sex`) | shared: `body_hair`, `pubic_hair`, `buttocks`, `lips`, `hands`, `feet`; male-only: `penis`, `testicles`; female-only: `breasts`, `vulva` |
+| **Appearance → Clothed** | `outfits[]` — each `Outfit` = `name`, `top`, `bottoms`, `underwear`, `socks_shoes`, `accessories`, `primary` |
 | **Personality** | `traits[]`, `quirks[]`, `values[]`, `fears[]` |
 | **Background & Relationships** | `backstory`, `origin`, `relationships[]`, `affiliations[]`, `skills[]` |
 | **Speaking Style** | `description`, `voice_preset_id` (references the [voice preset](../../generation/audio/use-voice.md) system), `dialogue_examples[]` |
+| **Experiences** (top-level) | `experiences[]` — each `Experience` = `description`, `valence` (`positive`/`negative`) |
 
-`FIELD_SPECS` in `models.py` is the single source of truth for which fields are
-generatable, their label, and their kind (`scalar` / `int` / `list`) — it drives
-per-field prompt registration, patch-building, and value normalization.
-`dialogue_examples` is intentionally **not** in `FIELD_SPECS`: it is a list-aware
-few-shot field generated one item at a time (see below).
+`FIELD_SPECS` in `models.py` is the single source of truth for which scalar/list
+fields are generatable, their label, and their kind (`scalar` / `int` / `list`) —
+it drives per-field prompt registration, patch-building, and value normalization.
+The Nude fields are kept **flat** on the `Appearance` block (not nested) so they
+reuse the standard `field.appearance.<x>` generate path unchanged; the UI gates
+which ones it shows. `dialogue_examples`, `outfits`, and `experiences` are
+intentionally **not** in `FIELD_SPECS`: they are list-of-objects/few-shot fields
+the frontend owns and generates one item at a time (see below).
+
+**Migration (v1 → v2):** older characters carried flat `hair` / `eyes` /
+`primary_outfit`. A `model_validator(mode="before")` on `Appearance` hoists them
+into `hair_color` / `eye_color` / a single primary `outfits` entry, and the store
+normalizes legacy docs on read (`schema_version` bumped to `2`), so no data is
+lost and the UI never sees the old shape.
 
 ## How it works
 
@@ -71,14 +99,20 @@ few-shot field generated one item at a time (see below).
   shared `JobQueue`), mirroring Blaboratory. `run_create()` does ideate → assemble,
   parses strict JSON with ≤2 retries, merges the user's name, and persists.
   `run_field()` is a single-step chain over the rendered document, normalized per
-  the field's kind. `run_dialogue_example(id, examples)` is a single-step chain
-  that generates one new dialogue line from the character + the prior examples
-  and **does not persist** (the frontend owns the list and saves it via the CRUD
-  `PUT`). Jobs appear in the **Jobs** page as `hoodat_character` / `hoodat_field`
-  / `hoodat_dialogue` / `hoodat_export` / `hoodat_avatar`.
+  the field's kind. `run_dialogue_example(id, examples)`,
+  `run_experience_example(id, experiences)`, `run_outfit(id, outfits, outfit)`,
+  and `run_outfit_slot(id, slot, outfit, outfits)` are single-step chains that
+  generate one list item from the character + prior items and **do not persist**
+  (the frontend owns those lists and saves them via the CRUD `PUT`). The
+  experience generator returns a `{description, valence}` object — the LLM picks
+  the valence. Jobs appear in the **Jobs** page as `hoodat_character` /
+  `hoodat_field` / `hoodat_dialogue` / `hoodat_experience` / `hoodat_outfit` /
+  `hoodat_export` / `hoodat_avatar`.
 - **Prompts** (`prompts.py`) — registers `IDEATE`/`ASSEMBLE`, one
   `field.<section>.<field>` per generatable field, `dialogue.example`
-  (`{{var.character}}` + `{{var.examples}}`), and `avatar.image_prompt` with
+  (`{{var.character}}` + `{{var.examples}}`), `experience.example`
+  (`{{var.character}}` + `{{var.experiences}}` → JSON `{description, valence}`),
+  `outfit.full` / `outfit.slot`, and `avatar.image_prompt` with
   [Prompt Pal](../../tools/prompt-pal.md). All editable in its UI.
 - **Avatars** (`avatars.py`) — *generate* builds a templated image prompt (tuned
   to **FLUX.2 [klein]** best practices for a realistic photographic portrait) and
@@ -87,9 +121,9 @@ few-shot field generated one item at a time (see below).
   `avatar_path` to the serve endpoint.
 - **Targeted Exports** (`exports.py`) — export definitions **are** Prompt Pal
   entries (`app="hoodat"`, `key="export.<slug>"`) with `{{var.character}}` +
-  `{{var.detail}}` + `{{var.dialogue_examples}}`; running one is a single LLM chain
-  over the rendered document at the chosen detail level (`brief` / `standard` /
-  `detailed`).
+  `{{var.detail}}` + `{{var.dialogue_examples}}` + `{{var.experiences_positive}}` +
+  `{{var.experiences_negative}}`; running one is a single LLM chain over the
+  rendered document at the chosen detail level (`brief` / `standard` / `detailed`).
 
 ## Capability gating
 

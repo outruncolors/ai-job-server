@@ -7,19 +7,21 @@ from app.apps.hoodat import characters_store as cs
 
 
 def _fields(**over):
-    base = {"name": "Ada", "occupation": "engineer", "appearance": {"hair": "red"}}
+    base = {"name": "Ada", "occupation": "engineer", "appearance": {"hair_color": "red"}}
     base.update(over)
     return base
 
 
 def test_create_assigns_server_fields_and_defaults():
     doc = cs.create_character(_fields())
-    assert doc["id"] and doc["schema_version"] == 1
+    assert doc["id"] and doc["schema_version"] == 2
     assert doc["created_at"] and doc["updated_at"]
     assert doc["name"] == "Ada"
     assert doc["avatar_path"] is None
     # nested blocks default-filled
-    assert doc["appearance"]["hair"] == "red"
+    assert doc["appearance"]["hair_color"] == "red"
+    assert doc["appearance"]["outfits"] == []
+    assert doc["experiences"] == []
     assert doc["personality"]["traits"] == []
 
 
@@ -41,13 +43,33 @@ def test_update_top_level_and_nested():
     doc = cs.create_character(_fields())
     updated = cs.update_character_fields(doc["id"], {
         "tagline": "the analyst",
-        "appearance": {"primary_outfit": "tweed jacket"},
+        "appearance": {"skin": "tan"},
     })
     assert updated["tagline"] == "the analyst"
-    assert updated["appearance"]["primary_outfit"] == "tweed jacket"
+    assert updated["appearance"]["skin"] == "tan"
     # existing nested field preserved (deep-merge, not replace)
-    assert updated["appearance"]["hair"] == "red"
+    assert updated["appearance"]["hair_color"] == "red"
     assert updated["updated_at"] >= doc["updated_at"]
+
+
+def test_experiences_replaced_wholesale():
+    doc = cs.create_character(_fields())
+    a = cs.update_character_fields(doc["id"], {
+        "experiences": [{"description": "won a prize", "valence": "positive"}],
+    })
+    assert a["experiences"] == [{"description": "won a prize", "valence": "positive"}]
+    b = cs.update_character_fields(doc["id"], {"experiences": []})
+    assert b["experiences"] == []
+
+
+def test_outfits_replaced_wholesale_preserving_siblings():
+    doc = cs.create_character(_fields())
+    a = cs.update_character_fields(doc["id"], {
+        "appearance": {"outfits": [{"name": "Casual", "top": "tee", "primary": True}]},
+    })
+    assert a["appearance"]["outfits"][0]["name"] == "Casual"
+    # sibling appearance field survives the list patch (deep-merge)
+    assert a["appearance"]["hair_color"] == "red"
 
 
 def test_update_missing_returns_none():

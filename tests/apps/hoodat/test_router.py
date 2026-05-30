@@ -55,12 +55,12 @@ def test_update_and_protected_keys(client):
     char = cs.create_character({"name": "Ada"})
     r = client.put(
         f"/v1/apps/hoodat/characters/{char['id']}",
-        json={"tagline": "the analyst", "appearance": {"hair": "red"}, "id": "evil"},
+        json={"tagline": "the analyst", "appearance": {"hair_color": "red"}, "id": "evil"},
     )
     assert r.status_code == 200
     updated = r.json()
     assert updated["tagline"] == "the analyst"
-    assert updated["appearance"]["hair"] == "red"
+    assert updated["appearance"]["hair_color"] == "red"
     assert updated["id"] == char["id"]  # id not overwritten
 
 
@@ -81,7 +81,7 @@ def test_generate_field(client, monkeypatch):
         (job_dir / "final_output.txt").write_text("a tweed jacket", encoding="utf-8")
 
     monkeypatch.setattr(generator, "execute_chain_job", fake_field)
-    r = client.post(f"/v1/apps/hoodat/characters/{char['id']}/fields/appearance/primary_outfit/generate")
+    r = client.post(f"/v1/apps/hoodat/characters/{char['id']}/fields/appearance/hair_color/generate")
     assert r.status_code == 200
     body = r.json()
     assert body["value"] == "a tweed jacket"
@@ -115,6 +115,72 @@ def test_update_persists_dialogue_examples(client):
     )
     assert r.status_code == 200
     assert r.json()["speaking_style"]["dialogue_examples"] == ["Howdy."]
+
+
+def test_generate_experience(client, monkeypatch):
+    char = cs.create_character({"name": "Ada"})
+
+    async def fake_exp(job_id, job_dir, request, event_bus=None):
+        (job_dir / "final_output.txt").write_text(
+            '{"description": "Lost everything in a fire", "valence": "negative"}', encoding="utf-8"
+        )
+
+    monkeypatch.setattr(generator, "execute_chain_job", fake_exp)
+    r = client.post(
+        f"/v1/apps/hoodat/characters/{char['id']}/experiences/generate",
+        json={"experiences": []},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["value"] == {"description": "Lost everything in a fire", "valence": "negative"}
+    assert "prompt_id" in body and "job_id" in body
+    # generation does not persist
+    assert cs.get_character(char["id"])["experiences"] == []
+
+
+def test_generate_outfit_and_slot(client, monkeypatch):
+    char = cs.create_character({"name": "Ada"})
+
+    async def fake_outfit(job_id, job_dir, request, event_bus=None):
+        (job_dir / "final_output.txt").write_text(
+            '{"name": "Gala", "top": "gown"}', encoding="utf-8"
+        )
+
+    monkeypatch.setattr(generator, "execute_chain_job", fake_outfit)
+    r = client.post(
+        f"/v1/apps/hoodat/characters/{char['id']}/outfits/generate",
+        json={"outfits": [], "outfit": {}},
+    )
+    assert r.status_code == 200
+    assert r.json()["value"]["name"] == "Gala"
+
+    async def fake_slot(job_id, job_dir, request, event_bus=None):
+        (job_dir / "final_output.txt").write_text("silk gloves", encoding="utf-8")
+
+    monkeypatch.setattr(generator, "execute_chain_job", fake_slot)
+    r = client.post(
+        f"/v1/apps/hoodat/characters/{char['id']}/outfits/slot/accessories/generate",
+        json={"outfit": {"top": "gown"}, "outfits": []},
+    )
+    assert r.status_code == 200
+    assert r.json()["value"] == "silk gloves"
+
+
+def test_update_persists_experiences_and_outfits_wholesale(client):
+    char = cs.create_character({"name": "Ada", "appearance": {"hair_color": "red"}})
+    r = client.put(
+        f"/v1/apps/hoodat/characters/{char['id']}",
+        json={
+            "experiences": [{"description": "won a prize", "valence": "positive"}],
+            "appearance": {"outfits": [{"name": "Casual", "top": "tee", "primary": True}]},
+        },
+    )
+    assert r.status_code == 200
+    updated = r.json()
+    assert updated["experiences"][0]["description"] == "won a prize"
+    assert updated["appearance"]["outfits"][0]["name"] == "Casual"
+    # sibling appearance field preserved through the outfit patch
+    assert updated["appearance"]["hair_color"] == "red"
 
 
 def test_avatar_generate_503_without_image_capability(client, tmp_path, monkeypatch):

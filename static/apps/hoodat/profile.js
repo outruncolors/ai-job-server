@@ -1,23 +1,26 @@
 /* Hoodat character profile: tabbed sections, per-field generate + edit-prompt
    (via the shared FieldControls hover affordance + Prompt Pal), avatar
-   replace (generate/upload), voice, and targeted exports. */
+   replace (generate/upload), voice, dialogue/experiences/outfit lists, and
+   targeted exports. */
 (function () {
   const $ = (id) => document.getElementById(id);
   const APP = '/apps/hoodat';
 
-  // Field layout — mirrors app/apps/hoodat/models.py FIELD_SPECS.
+  const SEX_OPTIONS = ['Male', 'Female'];
+  const OUTFIT_SLOTS = ['top', 'bottoms', 'underwear', 'socks_shoes', 'accessories'];
+  const SLOT_LABELS = {
+    top: 'Top', bottoms: 'Bottoms', underwear: 'Underwear',
+    socks_shoes: 'Socks & shoes', accessories: 'Accessories',
+  };
+
+  // Identity/personality/background/speaking_style field layout — mirrors
+  // app/apps/hoodat/models.py FIELD_SPECS. Appearance is handled separately
+  // (renderAppearance) because of its sub-sections + outfit list.
   const FIELDS = {
     identity: [
       ['name', 'Name', 'scalar'], ['summary', 'Summary', 'scalar'],
       ['tagline', 'Tagline', 'scalar'], ['age', 'Age', 'int'],
-      ['sex', 'Sex', 'scalar'], ['occupation', 'Occupation', 'scalar'],
-    ],
-    appearance: [
-      ['height', 'Height', 'scalar'], ['build', 'Build', 'scalar'],
-      ['hair', 'Hair', 'scalar'], ['eyes', 'Eyes', 'scalar'],
-      ['skin', 'Skin tone', 'scalar'],
-      ['distinguishing_features', 'Distinguishing features', 'list'],
-      ['primary_outfit', 'Primary outfit', 'scalar'],
+      ['sex', 'Sex', 'radio'], ['occupation', 'Occupation', 'scalar'],
     ],
     personality: [
       ['traits', 'Traits', 'list'], ['quirks', 'Quirks', 'list'],
@@ -31,25 +34,32 @@
     speaking_style: [['description', 'How they speak', 'long']],
   };
 
+  // Appearance sub-sections (all live on the `appearance` block). Mirrors the
+  // appearance entries in models.FIELD_SPECS — keep both in sync.
+  const APPEARANCE_BASICS = [
+    ['height', 'Height', 'feet-inches'], ['build', 'Build', 'scalar'],
+    ['skin', 'Skin tone', 'scalar'],
+    ['hair_color', 'Hair color', 'scalar'], ['hair_details', 'Hair details', 'scalar'],
+    ['eye_color', 'Eye color', 'scalar'], ['eye_details', 'Eye details', 'scalar'],
+    ['distinguishing_features', 'Distinguishing features', 'list'],
+  ];
+  const NUDE_SHARED = [
+    ['body_hair', 'Body hair', 'scalar'], ['pubic_hair', 'Pubic hair', 'scalar'],
+    ['buttocks', 'Buttocks', 'scalar'], ['lips', 'Lips', 'scalar'],
+    ['hands', 'Hands', 'scalar'], ['feet', 'Feet', 'scalar'],
+  ];
+  const NUDE_MALE = [['penis', 'Penis', 'scalar'], ['testicles', 'Testicles', 'scalar']];
+  const NUDE_FEMALE = [['breasts', 'Breasts', 'scalar'], ['vulva', 'Vulva', 'scalar']];
+
   let charId = null;
   let character = null;
-  let promptMap = {};       // "field.section.field" -> prompt entry id
+  let promptMap = {};       // prompt key -> prompt entry id
   let caps = { image: true, voice: true };
 
   // ---- value helpers ----
   function getValue(section, field) {
     if (section === 'identity') return character[field];
     return (character[section] || {})[field];
-  }
-  function displayValue(kind, value) {
-    if (kind === 'list') return (value || []).join('\n');
-    if (value === null || value === undefined) return '';
-    return String(value);
-  }
-  function parseValue(kind, raw) {
-    if (kind === 'list') return raw.split('\n').map((s) => s.trim()).filter(Boolean);
-    if (kind === 'int') { const n = parseInt(raw, 10); return Number.isNaN(n) ? 0 : n; }
-    return raw;
   }
   function patchFor(section, field, value) {
     return section === 'identity' ? { [field]: value } : { [section]: { [field]: value } };
@@ -59,9 +69,69 @@
     else { character[section] = character[section] || {}; character[section][field] = value; }
   }
 
+  // ---- height (stored as a canonical `F'I"` string) ----
+  function parseHeight(str) {
+    str = String(str || '');
+    let m = str.match(/(\d+)\s*(?:'|’|ft|feet)\s*(\d+)/i);   // 5'10", 5ft 10, 5 feet 10
+    if (m) return { feet: m[1], inches: m[2] };
+    m = str.match(/(\d+)\s*(?:'|’|ft|feet)/i);                // just feet
+    if (m) return { feet: m[1], inches: '0' };
+    m = str.match(/(\d+)/);                                   // bare number -> feet
+    if (m) return { feet: m[1], inches: '0' };
+    return { feet: '', inches: '' };
+  }
+  function formatHeight(ft, inch) {
+    const f = parseInt(ft, 10); const i = parseInt(inch, 10);
+    if (Number.isNaN(f) && Number.isNaN(i)) return '';
+    return `${Number.isNaN(f) ? 0 : f}'${Number.isNaN(i) ? 0 : i}"`;
+  }
+
+  // ---- control registry: kind -> {render, set, get} ----
+  // `set(slot, storedValue)` populates the control; `get(slot)` returns the
+  // typed value to persist; `render(id)` returns the input HTML.
+  const _TEXTAREA = (rows) => ({
+    render: (id) => `<textarea id="${id}" rows="${rows}"></textarea>`,
+    set: (slot, v) => { slot.querySelector('textarea').value = (v == null) ? '' : String(v); },
+    get: (slot) => slot.querySelector('textarea').value,
+  });
+  const CONTROLS = {
+    scalar: _TEXTAREA(3),
+    long: _TEXTAREA(8),
+    list: {
+      render: (id) => `<textarea id="${id}" rows="5"></textarea>`,
+      set: (slot, v) => { slot.querySelector('textarea').value = (v || []).join('\n'); },
+      get: (slot) => slot.querySelector('textarea').value.split('\n').map((s) => s.trim()).filter(Boolean),
+    },
+    int: {
+      render: (id) => `<input type="number" id="${id}" min="0">`,
+      set: (slot, v) => { slot.querySelector('input').value = (v == null || v === '') ? '' : String(v); },
+      get: (slot) => { const n = parseInt(slot.querySelector('input').value, 10); return Number.isNaN(n) ? 0 : n; },
+    },
+    radio: {
+      render: (id) => `<div class="hd-radio-row">${SEX_OPTIONS.map((o) =>
+        `<label class="hd-radio"><input type="radio" name="${id}" value="${o}">${o}</label>`).join('')}</div>`,
+      set: (slot, v) => {
+        const val = String(v || '').toLowerCase();
+        slot.querySelectorAll('input[type=radio]').forEach((r) => { r.checked = r.value.toLowerCase() === val; });
+      },
+      get: (slot) => { const r = slot.querySelector('input[type=radio]:checked'); return r ? r.value : ''; },
+    },
+    'feet-inches': {
+      render: (id) => `<div class="hd-height">
+        <input type="number" min="0" class="hd-ft" id="${id}-ft"><span>ft</span>
+        <input type="number" min="0" max="11" class="hd-in" id="${id}-in"><span>in</span></div>`,
+      set: (slot, v) => {
+        const { feet, inches } = parseHeight(v);
+        slot.querySelector('.hd-ft').value = feet;
+        slot.querySelector('.hd-in').value = inches;
+      },
+      get: (slot) => formatHeight(slot.querySelector('.hd-ft').value, slot.querySelector('.hd-in').value),
+    },
+  };
+
   // ---- section cards (shared visual wrapper for every tab) ----
   const SECTION_TITLES = {
-    identity: 'Identity', appearance: 'Appearance', personality: 'Personality',
+    identity: 'Identity', personality: 'Personality',
     background: 'Background', speaking_style: 'Speaking Style',
   };
   function sectionCard(title, bodyHtml) {
@@ -71,59 +141,55 @@
     </section>`;
   }
 
-  // ---- field rendering ----
-  const _ROWS = { scalar: 3, list: 5, long: 8 };
-  function fieldInputHtml(kind, id) {
-    if (kind === 'int') return `<input type="number" id="${id}" min="0">`;
-    // every text field is a common, roomy full-width textarea
-    return `<textarea id="${id}" rows="${_ROWS[kind] || 3}"></textarea>`;
+  // ---- generic field rendering ----
+  function fieldRowHtml(section, field, label, kind) {
+    const inId = `f-${section}-${field}`;
+    const hint = kind === 'list' ? '<span class="hd-field-hint">one per line</span>' : '';
+    return `<div class="hd-field" data-section="${section}" data-field="${field}" data-kind="${kind}">
+      <label for="${inId}">${_escHtml(label)} ${hint}</label>
+      ${CONTROLS[kind].render(inId)}
+    </div>`;
   }
 
-  function renderSection(section, container) {
-    const fieldsHtml = FIELDS[section].map(([field, label, kind]) => {
-      const inId = `f-${section}-${field}`;
-      const hint = kind === 'list' ? '<span class="hd-field-hint">one per line</span>' : '';
-      return `<div class="hd-field" data-section="${section}" data-field="${field}" data-kind="${kind}">
-        <label for="${inId}">${_escHtml(label)} ${hint}</label>
-        ${fieldInputHtml(kind, inId)}
-      </div>`;
-    }).join('');
-    container.innerHTML = sectionCard(SECTION_TITLES[section] || section, fieldsHtml);
-
-    container.querySelectorAll('.hd-field').forEach((slot) => {
-      const { section: sec, field, kind } = slot.dataset;
-      const input = slot.querySelector('input, textarea');
-      input.value = displayValue(kind, getValue(sec, field));
-      input.addEventListener('change', () => saveField(sec, field, kind, input));
-      FieldControls.attach(slot, {
-        kind: 'field',
-        context: () => ({ section: sec, field, kind, input }),
-        controls: [
-          { id: 'gen', label: '✨', title: 'Generate this field', onClick: (ctx) => generateField(ctx) },
-          { id: 'prompt', label: '✏️', title: 'Edit this field\'s prompt', onClick: (ctx) => editPrompt(ctx) },
-        ],
-      });
+  function wireField(slot) {
+    const { section: sec, field, kind } = slot.dataset;
+    CONTROLS[kind].set(slot, getValue(sec, field));
+    slot.addEventListener('change', () => saveField(sec, field, kind, slot));
+    FieldControls.attach(slot, {
+      kind: 'field',
+      context: () => ({ section: sec, field, kind, slot }),
+      controls: [
+        { id: 'gen', label: '✨', title: 'Generate this field', onClick: generateField },
+        { id: 'prompt', label: '✏️', title: 'Edit this field\'s prompt', onClick: editPrompt },
+      ],
     });
   }
 
-  async function saveField(section, field, kind, input) {
-    const value = parseValue(kind, input.value);
+  function renderSection(section, container) {
+    const fieldsHtml = FIELDS[section].map(([f, l, k]) => fieldRowHtml(section, f, l, k)).join('');
+    container.innerHTML = sectionCard(SECTION_TITLES[section] || section, fieldsHtml);
+    container.querySelectorAll('.hd-field').forEach(wireField);
+  }
+
+  async function saveField(section, field, kind, slot) {
+    const value = CONTROLS[kind].get(slot);
     try {
       await api(`${APP}/characters/${charId}`, 'PUT', patchFor(section, field, value));
       setLocal(section, field, value);
       if (section === 'identity' && (field === 'name' || field === 'tagline')) renderHeader();
+      if (section === 'identity' && field === 'sex') renderAppearance();  // re-gate Nude
     } catch (err) {
       console.error('save failed', err);
     }
   }
 
-  async function generateField(ctx) {
-    const { section, field, kind, input } = ctx;
-    const btn = input.closest('.hd-field').querySelector('.fc-btn[data-id="gen"]');
+  async function generateField(ctx, meta) {
+    const { section, field, kind, slot } = ctx;
+    const btn = meta && meta.button;
     if (btn) { btn.disabled = true; btn.textContent = '…'; }
     try {
       const res = await api(`${APP}/characters/${charId}/fields/${section}/${field}/generate`, 'POST');
-      input.value = displayValue(kind, res.value);
+      CONTROLS[kind].set(slot, res.value);
       setLocal(section, field, res.value);
       if (res.prompt_id) promptMap[`field.${section}.${field}`] = res.prompt_id;
       if (section === 'identity' && (field === 'name' || field === 'tagline')) renderHeader();
@@ -134,13 +200,159 @@
     }
   }
 
-  function editPrompt(ctx) {
-    const key = `field.${ctx.section}.${ctx.field}`;
+  function openPromptFor(key) {
     const id = promptMap[key];
     const url = id
       ? `/prompt-pal/?app=hoodat&highlight=${encodeURIComponent(id)}`
       : `/prompt-pal/?app=hoodat`;
     window.open(url, '_blank');
+  }
+  function editPrompt(ctx) { openPromptFor(`field.${ctx.section}.${ctx.field}`); }
+
+  // ---- appearance: Basics / Nude (gendered) / Clothed (outfits) ----
+  function renderAppearance() {
+    const pane = $('tab-appearance');
+    const basics = APPEARANCE_BASICS.map(([f, l, k]) => fieldRowHtml('appearance', f, l, k)).join('');
+    const sex = (character.sex || '').toLowerCase();
+    let nudeFields = NUDE_SHARED.slice();
+    if (sex === 'male') nudeFields = nudeFields.concat(NUDE_MALE);
+    else if (sex === 'female') nudeFields = nudeFields.concat(NUDE_FEMALE);
+    const nude = nudeFields.map(([f, l, k]) => fieldRowHtml('appearance', f, l, k)).join('');
+    pane.innerHTML = sectionCard('Basics', basics) + sectionCard('Nude', nude)
+      + '<div id="hd-outfits"></div>';
+    pane.querySelectorAll('.hd-field').forEach(wireField);
+    renderOutfits();
+  }
+
+  // ---- outfits (frontend owns the list; persisted wholesale) ----
+  function outfitsList() { return ((character.appearance || {}).outfits) || []; }
+
+  function collectOutfits() {
+    return Array.from(document.querySelectorAll('#hd-outfits .hd-outfit-card')).map((card) => {
+      const o = { name: card.querySelector('.hd-outfit-name').value.trim() };
+      OUTFIT_SLOTS.forEach((slot) => { o[slot] = card.querySelector(`textarea[data-slot="${slot}"]`).value.trim(); });
+      o.primary = card.querySelector('.hd-outfit-primary').checked;
+      return o;
+    });
+  }
+
+  function normalizeOutfits(list) {
+    list = list.filter((o) => o.name || OUTFIT_SLOTS.some((s) => o[s]));
+    if (!list.length) return list;
+    let pi = list.findIndex((o) => o.primary);
+    if (pi === -1) pi = 0;
+    list.forEach((o, i) => { o.primary = (i === pi); });
+    return list;
+  }
+
+  function persistOutfits(list) {
+    const norm = normalizeOutfits(list);
+    character.appearance = character.appearance || {};
+    character.appearance.outfits = norm;
+    return api(`${APP}/characters/${charId}`, 'PUT', { appearance: { outfits: norm } });
+  }
+  function persistOutfitsFromDom() {
+    return persistOutfits(collectOutfits()).catch((e) => console.error('outfit save failed', e));
+  }
+
+  function outfitCardHtml(o, i) {
+    const slots = OUTFIT_SLOTS.map((slot) => `
+      <div class="hd-outfit-slot" data-slot="${slot}">
+        <label>${_escHtml(SLOT_LABELS[slot])}</label>
+        <textarea data-slot="${slot}" rows="2">${_escHtml(o[slot] || '')}</textarea>
+      </div>`).join('');
+    return `<div class="hd-outfit-card" data-index="${i}">
+      <div class="hd-outfit-head">
+        <input class="hd-outfit-name" placeholder="Outfit name" value="${_escHtml(o.name || '')}">
+        <label class="hd-radio"><input type="radio" class="hd-outfit-primary" name="hd-outfit-primary" ${o.primary ? 'checked' : ''}>primary</label>
+        <button type="button" class="hd-outfit-gen secondary" title="Generate the whole outfit">✨ Outfit</button>
+        <button type="button" class="hd-outfit-rm secondary" title="Remove outfit">✗</button>
+      </div>
+      <div class="hd-outfit-slots">${slots}</div>
+    </div>`;
+  }
+
+  function renderOutfits() {
+    const list = outfitsList();
+    const container = $('hd-outfits');
+    const cards = list.map((o, i) => outfitCardHtml(o, i)).join('');
+    const empty = list.length ? '' : '<div class="hd-dlg-empty">No outfits yet.</div>';
+    const body = `${empty}<div class="hd-outfit-cards">${cards}</div>
+      <div class="hd-dlg-actions"><button type="button" id="hd-outfit-add">+ Add outfit</button></div>`;
+    container.innerHTML = sectionCard('Clothed', body);
+    $('hd-outfit-add').addEventListener('click', addOutfit);
+    container.querySelectorAll('.hd-outfit-card').forEach(wireOutfitCard);
+  }
+
+  function wireOutfitCard(card) {
+    card.addEventListener('change', persistOutfitsFromDom);
+    card.querySelector('.hd-outfit-gen').addEventListener('click', (e) => generateWholeOutfit(card, e.currentTarget));
+    card.querySelector('.hd-outfit-rm').addEventListener('click', () => removeOutfit(Number(card.dataset.index)));
+    card.querySelectorAll('.hd-outfit-slot').forEach((slotEl) => {
+      FieldControls.attach(slotEl, {
+        kind: 'field',
+        context: () => ({ card, slot: slotEl.dataset.slot, textarea: slotEl.querySelector('textarea') }),
+        controls: [
+          { id: 'gen', label: '✨', title: 'Generate this slot', onClick: generateOutfitSlot },
+          { id: 'prompt', label: '✏️', title: 'Edit the outfit-slot prompt', onClick: () => openPromptFor('outfit.slot') },
+        ],
+      });
+    });
+  }
+
+  function addOutfit() {
+    const list = collectOutfits();
+    const blank = { name: '', primary: list.length === 0 };
+    OUTFIT_SLOTS.forEach((s) => { blank[s] = ''; });
+    list.push(blank);
+    persistOutfits(list).then(renderOutfits).catch((e) => console.error('outfit add failed', e));
+  }
+
+  function removeOutfit(index) {
+    const list = collectOutfits();
+    list.splice(index, 1);
+    persistOutfits(list).then(renderOutfits).catch((e) => console.error('outfit remove failed', e));
+  }
+
+  async function generateWholeOutfit(card, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    const all = collectOutfits();
+    const idx = Number(card.dataset.index);
+    const others = all.filter((_, i) => i !== idx);
+    try {
+      const res = await api(`${APP}/characters/${charId}/outfits/generate`, 'POST',
+        { outfits: others, outfit: all[idx] || {} });
+      if (res.prompt_id) promptMap['outfit.full'] = res.prompt_id;
+      const v = res.value || {};
+      const nameInput = card.querySelector('.hd-outfit-name');
+      if (v.name && !nameInput.value.trim()) nameInput.value = v.name;
+      OUTFIT_SLOTS.forEach((slot) => { if (v[slot] != null) card.querySelector(`textarea[data-slot="${slot}"]`).value = v[slot]; });
+      await persistOutfitsFromDom();
+    } catch (err) {
+      console.error('outfit generate failed', err);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✨ Outfit'; }
+    }
+  }
+
+  async function generateOutfitSlot(ctx, meta) {
+    const btn = meta && meta.button;
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    const { card, slot, textarea } = ctx;
+    const all = collectOutfits();
+    const idx = Number(card.dataset.index);
+    const others = all.filter((_, i) => i !== idx);
+    try {
+      const res = await api(`${APP}/characters/${charId}/outfits/slot/${slot}/generate`, 'POST',
+        { outfit: all[idx] || {}, outfits: others });
+      if (res.prompt_id) promptMap['outfit.slot'] = res.prompt_id;
+      textarea.value = res.value || '';
+      await persistOutfitsFromDom();
+    } catch (err) {
+      console.error('outfit slot generate failed', err);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✨'; }
+    }
   }
 
   // ---- dialogue examples ----
@@ -160,14 +372,6 @@
   function focusLastDialogue() {
     const tas = dlgTextareas();
     if (tas.length) tas[tas.length - 1].focus();
-  }
-
-  function openDialoguePrompt() {
-    const id = promptMap['dialogue.example'];
-    const url = id
-      ? `/prompt-pal/?app=hoodat&highlight=${encodeURIComponent(id)}`
-      : `/prompt-pal/?app=hoodat`;
-    window.open(url, '_blank');
   }
 
   async function generateDialogue(examples) {
@@ -250,8 +454,120 @@
         context: () => ({ index: Number(rowEl.dataset.index), input: textarea }),
         controls: [
           { id: 'gen', label: '✨', title: 'Regenerate this example', onClick: regenDialogue },
-          { id: 'prompt', label: '✏️', title: 'Edit the dialogue prompt', onClick: openDialoguePrompt },
+          { id: 'prompt', label: '✏️', title: 'Edit the dialogue prompt', onClick: () => openPromptFor('dialogue.example') },
           { id: 'rm', label: '✗', title: 'Remove', onClick: (ctx) => removeDialogue(ctx.index) },
+        ],
+      });
+    });
+  }
+
+  // ---- experiences (frontend owns the list; AI also picks the valence) ----
+  function experiencesList() { return character.experiences || []; }
+  function expRows() { return document.querySelectorAll('#tab-experiences .hd-exp-row'); }
+  function collectExperiencesRaw() {
+    return Array.from(expRows()).map((row) => ({
+      description: row.querySelector('textarea').value,
+      valence: (row.querySelector('input[type=radio]:checked') || {}).value || 'positive',
+    }));
+  }
+  function collectExperiences() {
+    return collectExperiencesRaw()
+      .map((e) => ({ description: e.description.trim(), valence: e.valence }))
+      .filter((e) => e.description);
+  }
+
+  function persistExperiences(list) {
+    character.experiences = list;
+    return api(`${APP}/characters/${charId}`, 'PUT', { experiences: list });
+  }
+
+  async function generateExperience(experiences) {
+    const res = await api(`${APP}/characters/${charId}/experiences/generate`, 'POST', { experiences });
+    if (res.prompt_id) promptMap['experience.example'] = res.prompt_id;
+    return res.value;  // { description, valence }
+  }
+
+  async function addExperience() {
+    const list = collectExperiences();
+    if (list.length === 0) {
+      // Nothing to learn from yet — give the user an empty row to type in (the
+      // ✨ on a row generates and lets the LLM pick the valence).
+      renderExperiences(collectExperiencesRaw().concat([{ description: '', valence: 'positive' }]));
+      const tas = expRows();
+      if (tas.length) tas[tas.length - 1].querySelector('textarea').focus();
+      return;
+    }
+    const btn = $('hd-exp-add');
+    if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+    try {
+      const value = await generateExperience(list);
+      const next = list.concat([value]);
+      await persistExperiences(next);
+      renderExperiences(next);
+    } catch (err) {
+      console.error('experience add failed', err);
+      if (btn) { btn.disabled = false; btn.textContent = '+ Add experience'; }
+    }
+  }
+
+  async function regenExperience(ctx, meta) {
+    const btn = meta && meta.button;
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    const rows = collectExperiencesRaw();
+    const others = rows.filter((_, i) => i !== ctx.index)
+      .map((e) => ({ description: e.description.trim(), valence: e.valence })).filter((e) => e.description);
+    try {
+      const value = await generateExperience(others);
+      rows[ctx.index] = value;
+      const cleaned = rows.map((e) => ({ description: e.description.trim(), valence: e.valence })).filter((e) => e.description);
+      await persistExperiences(cleaned);
+      renderExperiences(cleaned);
+    } catch (err) {
+      console.error('experience regenerate failed', err);
+      if (btn) { btn.disabled = false; btn.textContent = '✨'; }
+    }
+  }
+
+  async function removeExperience(index) {
+    const cleaned = collectExperiencesRaw().filter((_, i) => i !== index)
+      .map((e) => ({ description: e.description.trim(), valence: e.valence })).filter((e) => e.description);
+    try {
+      await persistExperiences(cleaned);
+      renderExperiences(cleaned);
+    } catch (err) {
+      console.error('experience remove failed', err);
+    }
+  }
+
+  function expRowHtml(e, i) {
+    const neg = e.valence === 'negative';
+    return `<div class="hd-exp-row" data-index="${i}">
+      <textarea rows="3" placeholder="Something that happened to them, and how it made them feel…">${_escHtml(e.description || '')}</textarea>
+      <div class="hd-radio-row">
+        <label class="hd-radio"><input type="radio" name="hd-exp-val-${i}" value="positive" ${neg ? '' : 'checked'}>Positive</label>
+        <label class="hd-radio"><input type="radio" name="hd-exp-val-${i}" value="negative" ${neg ? 'checked' : ''}>Negative</label>
+      </div>
+    </div>`;
+  }
+
+  function renderExperiences(list) {
+    if (list === undefined) list = experiencesList();
+    const container = $('tab-experiences');
+    const rowsHtml = list.map((e, i) => expRowHtml(e, i)).join('');
+    const empty = list.length ? '' : '<div class="hd-dlg-empty">No experiences yet.</div>';
+    const body = `${empty}<div class="hd-exp-rows">${rowsHtml}</div>
+      <div class="hd-dlg-actions"><button type="button" id="hd-exp-add">+ Add experience</button></div>`;
+    container.innerHTML = sectionCard('Experiences', body);
+    $('hd-exp-add').addEventListener('click', addExperience);
+    container.querySelectorAll('.hd-exp-row').forEach((row) => {
+      row.addEventListener('change', () => persistExperiences(collectExperiences()));
+      FieldControls.attach(row, {
+        kind: 'field',
+        context: () => ({ index: Number(row.dataset.index), row }),
+        controls: [
+          { id: 'gen', label: '✨', title: 'Regenerate this experience', onClick: regenExperience },
+          { id: 'prompt', label: '✏️', title: 'Edit the experience prompt', onClick: () => openPromptFor('experience.example') },
+          { id: 'rm', label: '✗', title: 'Remove', onClick: (ctx) => removeExperience(ctx.index) },
         ],
       });
     });
@@ -512,9 +828,10 @@
     }
     renderHeader();
     renderSection('identity', $('tab-identity'));
-    renderSection('appearance', $('tab-appearance'));
+    renderAppearance();
     renderSection('personality', $('tab-personality'));
     renderSection('background', $('tab-background'));
+    renderExperiences();
     renderSection('speaking_style', $('speaking-fields'));
     renderDialogue();
     await loadVoice();

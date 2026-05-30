@@ -18,7 +18,7 @@ from ...prompt_pal import store as pp_store
 from ...prompt_pal.service import get_text
 from . import characters_store
 from .generator import GenerationError, _read_final_output, _resolve_llm
-from .prompts import render_character_context
+from .prompts import experiences_split, render_character_context
 
 EXPORT_JOB_TYPE = "hoodat_export"
 EXPORT_PREFIX = "export."
@@ -55,8 +55,11 @@ async def run_export(
     rendered = render_character_context(character)
     examples = ((character.get("speaking_style") or {}).get("dialogue_examples")) or []
     examples_text = "\n".join(f"- {e}" for e in examples)
+    experiences_positive, experiences_negative = experiences_split(character)
     prompt = get_text("hoodat", export_key, variables={
         "character": rendered, "detail": detail, "dialogue_examples": examples_text,
+        "experiences_positive": experiences_positive,
+        "experiences_negative": experiences_negative,
     })
 
     request = ChainJobRequest(

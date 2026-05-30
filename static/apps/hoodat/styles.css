@@ -104,12 +104,38 @@ button:disabled { opacity: 0.5; cursor: default; }
   width: 100%; box-sizing: border-box; padding-right: 56px;
 }
 
+/* ===== radio groups (sex, experience valence, outfit primary) ===== */
+.hd-radio-row { display: flex; flex-wrap: wrap; gap: var(--gap-md); align-items: center; }
+.hd-radio { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: var(--font-size-sm); color: var(--color-text); }
+.hd-radio input { width: auto; margin: 0; }
+
+/* ===== height (feet + inches) ===== */
+.hd-height { display: flex; align-items: center; gap: 6px; }
+.hd-height input { width: 72px; }
+.hd-height span { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
 /* ===== dialogue examples ===== */
 .hd-dlg-rows { display: flex; flex-direction: column; gap: var(--gap-md); }
 .hd-dlg-row { position: relative; }
 /* leave room at the top-right for the three-button hover cluster */
 .hd-dlg-row textarea { width: 100%; box-sizing: border-box; padding-right: 92px; }
 .hd-dlg-empty { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+/* ===== experiences ===== */
+.hd-exp-rows { display: flex; flex-direction: column; gap: var(--gap-md); }
+.hd-exp-row { position: relative; display: flex; flex-direction: column; gap: var(--gap-sm); }
+.hd-exp-row textarea { width: 100%; box-sizing: border-box; padding-right: 92px; }
+
+/* ===== outfits ===== */
+.hd-outfit-cards { display: flex; flex-direction: column; gap: var(--gap-md); }
+.hd-outfit-card { background: var(--color-bg-input); border: 1px solid var(--color-border-mid); border-radius: 6px; padding: var(--gap-md); display: flex; flex-direction: column; gap: var(--gap-md); }
+.hd-outfit-head { display: flex; align-items: center; gap: var(--gap-sm); flex-wrap: wrap; }
+.hd-outfit-name { flex: 1; min-width: 140px; }
+.hd-outfit-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--gap-md); }
+.hd-outfit-slot { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.hd-outfit-slot label { font-size: var(--font-size-label); color: var(--color-text-sub); }
+/* leave room at the top-right for the two-button hover cluster */
+.hd-outfit-slot textarea { width: 100%; box-sizing: border-box; padding-right: 60px; }
 
 /* ===== voice block ===== */
 .hd-voice-preset { display: flex; flex-direction: column; gap: 4px; max-width: 360px; font-size: var(--font-size-label); color: var(--color-text-sub); }

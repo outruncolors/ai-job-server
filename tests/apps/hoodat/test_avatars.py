@@ -8,7 +8,7 @@ from app.jobs import _update_artifacts
 
 
 async def test_generate_avatar_copies_artifact(monkeypatch):
-    char = cs.create_character({"name": "Ada", "appearance": {"hair": "red"}})
+    char = cs.create_character({"name": "Ada", "appearance": {"hair_color": "red"}})
 
     async def fake_image(job_id, job_dir, request, config, manager):
         out = job_dir / "ComfyUI_0001.png"
@@ -46,11 +46,20 @@ async def test_generate_avatar_missing_character(monkeypatch):
 def test_build_avatar_prompt_uses_appearance():
     char = cs.create_character({
         "name": "Ada", "age": 41, "sex": "female",
-        "appearance": {"hair": "silver", "primary_outfit": "lab coat"},
+        "appearance": {
+            "hair_color": "silver", "hair_details": "in a bun",
+            "eye_color": "grey",
+            "outfits": [
+                {"name": "Off-duty", "top": "hoodie"},
+                {"name": "Work", "top": "lab coat", "primary": True},
+            ],
+        },
     })
     prompt = avatars.build_avatar_prompt(char)
     # natural-language photographic portrait template, appearance woven in
-    assert "41-year-old female" in prompt and "silver" in prompt and "lab coat" in prompt
+    assert "41-year-old female" in prompt
+    assert "silver in a bun" in prompt        # combined hair color + details
+    assert "lab coat" in prompt               # from the PRIMARY outfit, not the first
     assert "photographic" in prompt and "85mm" in prompt
     assert "{{var." not in prompt  # all variables substituted
 
