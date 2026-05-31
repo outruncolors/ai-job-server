@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Catch everything up in one shot: commit working changes, fold the active
+# branch into master, publish master to the bare repo + GitHub, then deploy to
+# the secondary peer.
+#
+#   bash scripts/deploy_all "<commit message>" [peer-host]
+#
+# Steps:
+#   1. cd to the repo root.
+#   2. Stage + commit everything with <commit message> (no-op if tree is clean).
+#   3. If not on master: checkout master and merge the previously-active branch.
+#   4. git push local master   (the bare repo the peer pulls from; skipped with
+#      a warning if the remote is unset/DISABLED).
+#   5. git push gh master:main  (GitHub; skipped with a warning if gh is unset).
+#   6. Hand off to scripts/deploy-secondary.sh [peer-host] — which pushes to the
+#      bare repo, SSHes in to pull + restart the peer, and restarts this local
+#      service so its self-reported git_sha refreshes.
+#
+# deploy_all *composes* deploy-secondary.sh: it is the single "catch up"
+# action behind the topnav Quick Actions > Catch-Up button.
+#
+# Peer host is forwarded to deploy-secondary.sh, which defaults it to the first
+# "llm" peer in config/server.json when omitted.
+
+set -euo pipefail
+
+# ── Resolve repo root + cd there ─────────────────────────────────────────────
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &>/dev/null && pwd)"
+cd "$REPO_ROOT"
+
+MESSAGE=""
+PEER_HOST=""
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help)
+            sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        --*)
+            echo "ERROR: unknown flag: $arg" >&2
+            exit 2
+            ;;
+        *)
+            if [ -z "$MESSAGE" ]; then
+                MESSAGE="$arg"
+            elif [ -z "$PEER_HOST" ]; then
+                PEER_HOST="$arg"
+            else
+                echo "ERROR: extra positional argument: $arg" >&2
+                exit 2
+            fi
+            ;;
+    esac
+done
+
+if [ -z "$MESSAGE" ]; then
+    echo "ERROR: a commit message is required." >&2
+    echo "       usage: $0 \"<commit message>\" [peer-host]" >&2
+    exit 2
+fi
+
+START_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+echo "--- Active branch: $START_BRANCH"
+
+# ── 2. Commit working changes (no-op if clean) ───────────────────────────────
+if [ -n "$(git status --porcelain)" ]; then
+    echo "--- git add -A && git commit ---"
+    git add -A
+    git commit -m "$MESSAGE"
+else
+    echo "--- Working tree clean; nothing to commit ---"
+fi
+
+# ── 3. Fold the active branch into master ────────────────────────────────────
+if [ "$START_BRANCH" != "master" ]; then
+    echo "--- Merging $START_BRANCH into master ---"
+    git checkout master
+    git merge --no-ff "$START_BRANCH" -m "Merge $START_BRANCH: $MESSAGE"
+else
+    echo "--- Already on master; no merge needed ---"
+fi
+
+# ── Helper: push if the remote exists and is pushable, else warn + skip ───────
+push_remote() {
+    local remote="$1"
+    local refspec="$2"
+    if ! git remote get-url "$remote" &>/dev/null; then
+        echo "WARN: remote '$remote' not configured; skipping push." >&2
+        return 0
+    fi
+    local pushurl
+    pushurl="$(git remote get-url --push "$remote" 2>/dev/null || true)"
+    if [ -z "$pushurl" ] || [ "$pushurl" = "DISABLED" ]; then
+        echo "WARN: remote '$remote' push is disabled; skipping." >&2
+        return 0
+    fi
+    echo "--- git push $remote $refspec ---"
+    # shellcheck disable=SC2086
+    git push "$remote" $refspec
+}
+
+# ── 4 + 5. Publish master to the bare repo and GitHub ────────────────────────
+# `local` is the bare repo the peer pulls from; deploy-secondary.sh re-pushes it
+# below, so this is belt-and-suspenders (a no-op the second time).
+push_remote local "master"
+push_remote gh "master:main"
+
+# ── 6. Compose deploy-secondary.sh (bare-repo push + peer/local restart) ──────
+echo ""
+echo "=== Handing off to deploy-secondary.sh ==="
+if [ -n "$PEER_HOST" ]; then
+    exec bash "$REPO_ROOT/scripts/deploy-secondary.sh" "$PEER_HOST"
+else
+    exec bash "$REPO_ROOT/scripts/deploy-secondary.sh"
+fi

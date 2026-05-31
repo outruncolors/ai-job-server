@@ -34,11 +34,27 @@ class SynthesisError(ValueError):
 
 # ── Audio assembly ─────────────────────────────────────────────────────────
 
+# Clip paths prefixed with this scheme refer to a previously-saved synthesis
+# sample (a user-created sound) rather than a pack clip under SFX_ROOT — so
+# saved samples can be folded into a new composition.
+SYNTH_SCHEME = "synth:"
+
+
 def _load_mono_48k(rel_path: str) -> np.ndarray:
-    """Resolve a clip under SFX_ROOT → float32 mono samples at TARGET_RATE."""
-    path = store.resolve_file_path(rel_path)
-    if path is None:
-        raise SynthesisError(f"clip not found: {rel_path}")
+    """Resolve a clip → float32 mono samples at TARGET_RATE.
+
+    A ``synth:<id>`` path points at a saved synthesis sample; anything else is
+    a pack clip resolved under SFX_ROOT.
+    """
+    if rel_path.startswith(SYNTH_SCHEME):
+        sample_id = rel_path[len(SYNTH_SCHEME):]
+        path = sample_path(sample_id)
+        if path is None:
+            raise SynthesisError(f"synthesis sample not found: {sample_id}")
+    else:
+        path = store.resolve_file_path(rel_path)
+        if path is None:
+            raise SynthesisError(f"clip not found: {rel_path}")
     if path.suffix.lower() != ".wav":
         raise SynthesisError(f"unsupported format (WAV only for now): {path.name}")
     try:

@@ -15,12 +15,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function appendLink(parent, item) {
     const a = document.createElement('a');
-    a.href = item.href;
     a.textContent = item.label;
     if (item.cls) a.className = item.cls;
-    if (item.page) {
-      a.dataset.page = item.page;
-      if (item.page === currentPage) a.classList.add('active');
+    if (item.action) {
+      // Quick Action: dispatch to the shared handler instead of navigating.
+      a.href = '#';
+      a.classList.add('nav-action');
+      a.dataset.action = item.action;
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        menu.classList.remove('open');
+        if (typeof window.runQuickAction === 'function') {
+          window.runQuickAction(item.action);
+        }
+      });
+    } else {
+      a.href = item.href;
+      if (item.page) {
+        a.dataset.page = item.page;
+        if (item.page === currentPage) a.classList.add('active');
+      }
     }
     parent.appendChild(a);
   }

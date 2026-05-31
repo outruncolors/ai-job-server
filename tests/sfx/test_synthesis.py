@@ -102,3 +102,25 @@ def test_save_list_path_delete_roundtrip(synth_env):
 def test_blank_name_falls_back(synth_env):
     rec = synthesis.save_sample("   ", [{"path": "clips/a.wav", "delay_ms": 0}])
     assert rec["name"] == "Untitled"
+
+
+def test_compose_saved_sample_as_clip(synth_env):
+    """A saved sample can be folded back in via a ``synth:<id>`` clip path."""
+    rec = synthesis.save_sample("Base", [{"path": "clips/a.wav", "delay_ms": 0}])
+    _, base_ms = synthesis.synthesize([{"path": "clips/a.wav", "delay_ms": 0}])
+
+    wav, dur = synthesis.synthesize([
+        {"path": f"synth:{rec['id']}", "delay_ms": 0},
+        {"path": "clips/b.wav", "delay_ms": 0},
+    ])
+    assert wav[:4] == b"RIFF"
+    assert dur > base_ms  # the saved sample plus another clip is longer
+
+    # Composing one saved sample into another persists fine.
+    nested = synthesis.save_sample("Nested", [{"path": f"synth:{rec['id']}", "delay_ms": 0}])
+    assert nested["duration_ms"] > 0
+
+
+def test_missing_saved_sample_raises(synth_env):
+    with pytest.raises(synthesis.SynthesisError, match="synthesis sample not found"):
+        synthesis.synthesize([{"path": "synth:deadbeef", "delay_ms": 0}])

@@ -361,45 +361,7 @@
 .peer-dot-amber { background: var(--color-warn);   box-shadow: 0 0 4px rgba(255, 170,   0, 0.6); }
 .peer-dot-red   { background: var(--color-danger); box-shadow: 0 0 4px rgba(228,  68,  68, 0.6); }
 
-/* Version-skew banner under the fixed topnav (44px tall). */
-.peer-skew-banner {
-  position: fixed;
-  top: 44px;
-  left: 0;
-  right: 0;
-  padding: 6px 16px;
-  background: var(--color-danger-bg);
-  color: var(--color-text);
-  border-bottom: 1px solid var(--color-border-hi);
-  font-family: var(--font-family);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.04em;
-  z-index: 99;            /* below topnav (z-index: 100) so the bar overlaps cleanly */
-  text-align: center;
-}
-.peer-skew-banner code {
-  color: var(--color-warn);
-  background: none;
-  padding: 0 2px;
-  font-family: var(--font-family);
-}
-.peer-skew-msg { margin-right: 10px; }
-.peer-skew-deploy-btn {
-  font-family: var(--font-family);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.04em;
-  padding: 2px 10px;
-  background: var(--color-warn);
-  color: #1a1a1a;
-  border: 1px solid var(--color-border-hi);
-  border-radius: 3px;
-  cursor: pointer;
-  vertical-align: baseline;
-}
-.peer-skew-deploy-btn:hover { filter: brightness(1.1); }
-.peer-skew-deploy-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
-
-/* Floating deploy log panel — opened by the banner's Deploy now button. */
+/* Floating run-log panel — opened by Quick Actions (Reboot / Catch-Up). */
 .peer-deploy-panel {
   position: fixed;
   right: 16px;
@@ -464,6 +426,44 @@
   flex: 1 1 auto;
   min-height: 120px;
 }
+
+/* ── Quick Actions ──────────────────────────────────────────────────────── */
+
+/* Action entries in a dropdown panel are <a> elements with no real href; the
+   pointer cursor distinguishes them from a navigation link on hover. */
+.nav-dropdown-panel a.nav-action { cursor: pointer; }
+
+/* Self-contained toast stack for quick-action feedback (independent of the
+   per-page Map-based toast system, which needs its own #toast-stack). */
+#qa-toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 300;
+  pointer-events: none;
+}
+.qa-toast {
+  pointer-events: auto;
+  padding: 8px 14px;
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border-mid);
+  border-left-width: 3px;
+  border-radius: 4px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  color: var(--color-text);
+  max-width: 320px;
+  transition: opacity 0.3s, transform 0.3s;
+}
+.qa-toast-done  { border-left-color: var(--color-accent); }
+.qa-toast-error { border-left-color: var(--color-danger); }
+.qa-toast-info  { border-left-color: var(--color-border-hi); }
+.qa-toast-out { opacity: 0; transform: translateX(12px); }
 
 /* ── Responsive overrides (@media max-width: 768px) ─────────────────────── */
 @media (max-width: 768px) {

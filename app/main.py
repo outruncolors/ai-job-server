@@ -1063,7 +1063,7 @@ async def server_deploy_secondary(request: Request):
 
     runner = get_deploy_runner()
     try:
-        snap = runner.start(peer_host=peer_host)
+        snap = runner.start_secondary(peer_host=peer_host)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     except RuntimeError as exc:
@@ -1071,8 +1071,40 @@ async def server_deploy_secondary(request: Request):
     return snap
 
 
+@app.post("/v1/server/deploy-all")
+async def server_deploy_all(request: Request):
+    """Catch-Up: commit + merge to master + push local/gh + deploy-secondary."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+    message = (body.get("message") or "").strip()
+    peer_host = body.get("peer_host")
+    if not message:
+        raise HTTPException(status_code=400, detail="a commit message is required")
+
+    runner = get_deploy_runner()
+    try:
+        snap = runner.start_all(message=message, peer_host=peer_host)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return snap
+
+
+@app.get("/v1/server/deploy-status")
+def server_deploy_status():
+    """Shared status poll for whichever deploy script is/was running."""
+    return get_deploy_runner().snapshot()
+
+
 @app.get("/v1/server/deploy-secondary")
 def server_deploy_secondary_status():
+    # Back-compat alias for /v1/server/deploy-status.
     return get_deploy_runner().snapshot()
 
 

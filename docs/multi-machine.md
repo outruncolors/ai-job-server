@@ -18,7 +18,7 @@ Both machines run from the **same git checkout** (deployed via a bare repo on th
 Cross-machine wiring:
 
 - **Chain LLM steps** call `POST http://gpu.local:8090/v1/llamacpp/ensure-loaded` before each chat completion, then hit `http://gpu.local:8080/v1/chat/completions` directly. The ensure-loaded call is a no-op when the same preset is already loaded; on a swap it SIGTERMs the running `llama-server` and starts the new args (180s readiness deadline).
-- **Peer health** is pulled, never pushed — every node polls each peer's `GET /v1/server/health` every 30s (5s timeout) and serves the snapshot at `/v1/server/peers`. Topnav dots and the version-skew banner read from that endpoint.
+- **Peer health** is pulled, never pushed — every node polls each peer's `GET /v1/server/health` every 30s (5s timeout) and serves the snapshot at `/v1/server/peers`. The topnav dots read from that endpoint; an amber dot's tooltip spells out the commit skew.
 - **Deploys** are manual and idempotent — `scripts/deploy-secondary.sh` pushes to the bare repo, SSHes to the peer to pull + restart, then verifies `git_sha` parity.
 
 See [`reference/multi-machine-plan.md`](reference/multi-machine-plan.md) for the full design discussion — capability vs role enum, swap-key hashing, why pull-based health, what's deliberately deferred (auth, idle eviction, cancel-while-running).
@@ -301,7 +301,16 @@ bash scripts/deploy-secondary.sh gpu.local      # or name the peer explicitly
 bash scripts/deploy-secondary.sh --force        # deploy even with a dirty working tree
 ```
 
-The script:
+To catch *everything* up in one shot — commit working changes, fold the active branch into master, push to the `local` bare repo + GitHub, then deploy to the peer — use `scripts/deploy_all` (this is what the topnav **Quick Actions ▸ Catch-Up** button runs):
+
+```bash
+bash scripts/deploy_all "your commit message"            # then auto-picks the peer
+bash scripts/deploy_all "your commit message" gpu.local  # or name the peer
+```
+
+`deploy_all` commits (no-op if the tree is clean), merges to master when run off-branch, pushes `master` to `local` (the bare repo) and `master:main` to `gh` (skipping any remote that is unset or whose push URL is `DISABLED`), then `exec`s `deploy-secondary.sh` — which re-pushes `local` and restarts the peer + local service.
+
+The `deploy-secondary.sh` script:
 
 1. Refuses to run if the working tree is dirty (override with `--force`).
 2. Runs `git push local master` to publish to the bare repo at `/srv/git/ai-job-server.git`.
@@ -318,7 +327,7 @@ Common failure modes the script will surface:
 - **Service didn't come back** — five 2-second-spaced retries on `/v1/server/health`, then exit non-zero with a pointer to `journalctl --user -u ai-job-server`.
 - **SHA mismatch after deploy** — a successful push + pull + restart that lands on a different commit than local (e.g., the bare repo and peer diverged) exits non-zero rather than declaring success.
 
-After a green run the amber version-skew banner (see the next section) should clear within 30 seconds, once the in-process peer poller re-fetches `/v1/server/health` on each node.
+After a green run the amber peer dot (see the next section) should return to green within 30 seconds, once the in-process peer poller re-fetches `/v1/server/health` on each node.
 
 ## Peer health and version-skew
 
@@ -352,11 +361,17 @@ Status rules:
 - **amber** — peer reachable but `git_sha` differs (or either side has no SHA known). Functional, but flagged.
 - **red** — peer unreachable or returned 5xx within the 5s timeout. `last_seen` and `git_sha` stay sticky from the prior successful poll so the UI can show the most recent known state.
 
-The topnav widget (`static/js/peer-status-widget.js`) draws one colored dot per peer with a tooltip carrying the full status detail. When any peer is amber it also renders a fixed banner under the topnav with an inline **Deploy now** button:
+The topnav widget (`static/js/peer-status-widget.js`) draws one colored dot per peer. The dot's tooltip carries the full status detail; on **amber** it spells out the commit difference (peer SHA vs. local SHA) and points at the **Quick Actions ▸ Catch-Up** action to sync. There is no separate banner — the orange dot *is* the version-skew signal.
 
-> Peer `gpu.local` is on commit `abc1234`, this machine is on `def5678`. **[Deploy now]**
+To sync a behind peer, use **Quick Actions ▸ Catch-Up** in the topnav (see "Quick Actions" below), which runs `scripts/deploy_all` — that commits any local changes, folds the active branch into master, pushes to `local` + `gh`, then composes `scripts/deploy-secondary.sh`. The run streams into a bounded ring buffer (`app/deploy_secondary.py`); a floating log panel polls `GET /v1/server/deploy-status` once a second. Since the script restarts the local FastAPI process at the end, the panel treats a burst of fetch failures after the last `running` snapshot as expected and prompts the user to refresh — it does not flag it as an error. (`scripts/deploy-secondary.sh` can still be run on its own from a shell, or via `POST /v1/server/deploy-secondary`.)
 
-The button POSTs `/v1/server/deploy-secondary`, which spawns `scripts/deploy-secondary.sh` on the primary and streams stdout/stderr into a bounded ring buffer (`app/deploy_secondary.py`). A floating log panel polls `GET /v1/server/deploy-secondary` once a second and shows live output. Since the script restarts the local FastAPI process at the end, the widget treats a burst of fetch failures after the last `running` snapshot as expected and prompts the user to refresh — it does not flag it as an error.
+### Quick Actions
+
+The topnav **Quick Actions** dropdown (`static/js/nav.js`, present on every page) collects commonly-repeated chores:
+
+- **Reboot** — `POST /v1/server/restart`, then polls `/v1/server/health` until the re-exec'd process is back, clears the browser Cache Storage, and hard-refreshes the tab.
+- **Catch-Up** — prompts for a commit message and `POST`s it to `/v1/server/deploy-all`, which runs `scripts/deploy_all` (commit → merge to master → push `local`/`gh` → `deploy-secondary.sh`). A push to a remote that is unset or whose push URL is `DISABLED` is skipped with a warning rather than failing the run.
+- **Delete Jobs** — `DELETE /v1/jobs/all` after a confirm.
 
 Both the server-side poll and the client-side fetch are pull-based; nothing pushes status. To eyeball it without a browser:
 
@@ -409,15 +424,18 @@ Symptom: topnav widget shows a red dot for the peer; `/v1/server/peers` reports 
    ```
 4. **Firewall?** `sudo ufw status` on the peer; allow `8090/tcp` if UFW is on.
 
-### Amber banner / version-skew warning
+### Amber dot / version-skew warning
 
-Symptom: green dot but a banner "Peer gpu.local is on commit X, this machine is on Y".
+Symptom: an orange peer dot whose tooltip reads "version skew — peer is on a different commit than this node".
+
+Use **Quick Actions ▸ Catch-Up** in the topnav, or from a shell:
 
 ```bash
-bash scripts/deploy-secondary.sh
+bash scripts/deploy_all "your commit message"   # commit + merge + push + deploy-secondary
+bash scripts/deploy-secondary.sh                 # just re-sync the peer to current master
 ```
 
-The banner clears within 30s after a green deploy run, once both pollers re-fetch each other's `/health`. If it persists after a successful deploy, hard-refresh the browser tab (the widget caches its DOM, not the data).
+The dot returns to green within 30s after a green deploy run, once both pollers re-fetch each other's `/health`. If it persists after a successful deploy, hard-refresh the browser tab (the widget caches its DOM, not the data).
 
 ### Model swap returns 503 with timeout
 

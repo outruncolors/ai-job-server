@@ -7,6 +7,11 @@ let _sfxInited   = false;   // lazy-init guard (first switch to the SFX tab)
 let _synthList   = [];      // synthesis builder: [{path, label, delay_ms}]
 let _synthUrl    = null;    // object URL of the last preview (revoked on replace)
 
+// Synthetic pack id for the "My Sounds" source: previously-saved synthesis
+// samples, surfaced in the Explorer grid so they can be composed again. Their
+// clip paths use the `synth:<id>` scheme the backend resolves to saved WAVs.
+const USER_PACK_ID = '__user_sounds__';
+
 // Build the served file URL for a clip. Paths carry spaces and commas, so
 // encode each segment but keep the slashes the route splits on.
 function sfxFileUrl(path) {
@@ -17,7 +22,6 @@ async function initSfxBrowser() {
   if (_sfxInited) return;
   _sfxInited = true;
 
-  const grid = document.getElementById('sfx-grid');
   try {
     const r = await fetch('/v1/sfx/packs');
     _sfxPacks = r.ok ? ((await r.json()).packs || []) : [];
@@ -25,10 +29,10 @@ async function initSfxBrowser() {
     _sfxPacks = [];
   }
 
-  if (_sfxPacks.length === 0) {
-    grid.innerHTML = '<p class="sfx-empty">No SFX packs installed.</p>';
-    return;
-  }
+  // Always offer "My Sounds" — user-created (saved) synthesis samples — as a
+  // browsable source, even when no SFX packs are installed. Its profiles are
+  // filled lazily from /v1/sfx/synthesis whenever it's selected.
+  _sfxPacks.push({ id: USER_PACK_ID, display_name: '★ My Sounds', profiles: [], user: true });
 
   const packSel = document.getElementById('sfx-pack');
   packSel.innerHTML = _sfxPacks.map((p) =>
@@ -45,6 +49,36 @@ async function initSfxBrowser() {
   onSfxPackChange();
 }
 
+// Pull saved synthesis samples and shape them like pack items so the existing
+// grid/filter/sort path renders them unchanged. `synth:true` + `_url` let the
+// grid enable the ➕ button and play from the right route.
+async function loadUserSoundsProfile(pack) {
+  let samples = [];
+  try {
+    const r = await fetch('/v1/sfx/synthesis');
+    samples = r.ok ? ((await r.json()).samples || []) : [];
+  } catch (e) { samples = []; }
+
+  const items = samples.map((s) => ({
+    id: s.id,
+    description: s.name || 'Untitled',
+    path: 'synth:' + s.id,
+    _url: `/v1/sfx/synthesis/${encodeURIComponent(s.id)}/file`,
+    duration_ms: s.duration_ms || 0,
+    category: 'My Sounds',
+    tags: [],
+    synth: true,
+  }));
+  pack.profiles = [{ id: 'all', display_name: 'All', items }];
+}
+
+// Re-fetch the My Sounds grid if it's the source currently on screen (after a
+// save/delete elsewhere in the tab).
+function refreshExplorerIfUserSounds() {
+  const packSel = document.getElementById('sfx-pack');
+  if (packSel && packSel.value === USER_PACK_ID) onSfxPackChange();
+}
+
 function currentSfxPack() {
   const id = document.getElementById('sfx-pack').value;
   return _sfxPacks.find((p) => p.id === id) || null;
@@ -57,8 +91,9 @@ function currentSfxProfile() {
   return (pack.profiles || []).find((pr) => pr.id === id) || null;
 }
 
-function onSfxPackChange() {
+async function onSfxPackChange() {
   const pack = currentSfxPack();
+  if (pack && pack.user) await loadUserSoundsProfile(pack);
   const profSel = document.getElementById('sfx-profile');
   const profiles = (pack && pack.profiles) || [];
   profSel.innerHTML = profiles.map((pr) =>
@@ -127,11 +162,13 @@ function renderSfxGrid() {
     const dur   = it.duration_ms ? (it.duration_ms / 1000).toFixed(1) + 's' : '';
     const tags  = (it.tags || []).map((t) => `<span class="sfx-tag-chip">${_escHtml(t)}</span>`).join('');
     const label = it.description || it.id || '';
-    const isWav = /\.wav$/i.test(it.path || '');
-    const addBtn = isWav
+    // Saved samples (synth:true) are always WAV; pack OGG clips can't synthesize yet.
+    const canAdd = it.synth === true || /\.wav$/i.test(it.path || '');
+    const url = it._url || sfxFileUrl(it.path);
+    const addBtn = canAdd
       ? `<button type="button" class="sfx-add" title="Add to synthesis">➕</button>`
       : `<button type="button" class="sfx-add" disabled title="WAV only — OGG can't be synthesized yet">➕</button>`;
-    return `<div class="sfx-card" data-url="${_escHtml(sfxFileUrl(it.path))}"
+    return `<div class="sfx-card" data-url="${_escHtml(url)}"
                  data-path="${_escHtml(it.path)}" data-label="${_escHtml(label)}">
       <div class="sfx-card-head">
         <span class="sfx-card-cat">${_escHtml(it.category || '')}</span>
@@ -273,6 +310,7 @@ async function saveSynthesis() {
     msg.textContent = `Saved “${rec.name}”.`;
     document.getElementById('sfx-synth-name').value = '';
     loadSavedSamples();
+    refreshExplorerIfUserSounds();
   } catch (e) {
     msg.textContent = 'Error: ' + e.message;
   }
@@ -318,6 +356,7 @@ async function deleteSavedSample(id) {
     const r = await fetch(`/v1/sfx/synthesis/${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (!r.ok) throw new Error(await r.text());
     loadSavedSamples();
+    refreshExplorerIfUserSounds();
   } catch (e) {
     document.getElementById('sfx-synth-msg').textContent = 'Error: ' + e.message;
   }

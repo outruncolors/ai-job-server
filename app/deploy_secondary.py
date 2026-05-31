@@ -1,14 +1,20 @@
-"""Trigger `scripts/deploy-secondary.sh` from the running FastAPI process.
+"""Trigger the deploy scripts from the running FastAPI process.
 
-The script pushes master to the bare repo on a peer, SSHes in to pull +
-restart the peer's systemd unit, and finally restarts the local service so
-its self-reported git_sha refreshes. That last step kills the FastAPI
-process this module lives in, so the in-memory state here is intentionally
-ephemeral — by the time it's gone, the user is looking at the freshly
-restarted process anyway.
+Two scripts share this runner:
 
-One deploy at a time. Output streams into a bounded deque; the UI polls
-`GET /v1/server/deploy-secondary` until status flips out of "running".
+- ``scripts/deploy-secondary.sh`` pushes master to the bare repo on a peer,
+  SSHes in to pull + restart the peer's systemd unit, and finally restarts the
+  local service so its self-reported git_sha refreshes.
+- ``scripts/deploy_all`` (the Quick Actions > Catch-Up action) commits the
+  working tree, folds the active branch into master, publishes to origin +
+  GitHub, then *composes* deploy-secondary.sh.
+
+Both end by restarting the local service, which kills the FastAPI process this
+module lives in, so the in-memory state here is intentionally ephemeral — by
+the time it's gone, the user is looking at the freshly restarted process anyway.
+
+One run at a time (either script). Output streams into a bounded deque; the UI
+polls ``GET /v1/server/deploy-status`` until status flips out of "running".
 """
 from __future__ import annotations
 
@@ -23,6 +29,7 @@ from typing import Optional
 from .server import PROJECT_ROOT
 
 SCRIPT_PATH: Path = PROJECT_ROOT / "scripts" / "deploy-secondary.sh"
+DEPLOY_ALL_PATH: Path = PROJECT_ROOT / "scripts" / "deploy_all"
 
 
 class DeployRunner:
@@ -33,7 +40,7 @@ class DeployRunner:
         self._exit_code: Optional[int] = None
         self._started_at: Optional[float] = None
         self._ended_at: Optional[float] = None
-        self._peer_host: Optional[str] = None
+        self._label: Optional[str] = None
         self._proc: Optional[subprocess.Popen] = None
         self._thread: Optional[threading.Thread] = None
 
@@ -44,7 +51,7 @@ class DeployRunner:
                 "exit_code": self._exit_code,
                 "started_at": self._started_at,
                 "ended_at": self._ended_at,
-                "peer_host": self._peer_host,
+                "label": self._label,
                 "lines": list(self._lines),
             }
 
@@ -52,10 +59,24 @@ class DeployRunner:
         with self._lock:
             return self._status == "running"
 
-    def start(self, peer_host: Optional[str] = None) -> dict:
+    def start_secondary(self, peer_host: Optional[str] = None) -> dict:
+        """Run deploy-secondary.sh (optionally targeting a specific peer)."""
         peer_host = (peer_host or "").strip() or None
-        if not SCRIPT_PATH.is_file():
-            raise FileNotFoundError(f"deploy script not found: {SCRIPT_PATH}")
+        args = [peer_host] if peer_host else []
+        return self.start(script=SCRIPT_PATH, args=args, label="deploy-secondary.sh")
+
+    def start_all(self, message: str, peer_host: Optional[str] = None) -> dict:
+        """Run deploy_all: commit + merge + publish + deploy-secondary."""
+        message = (message or "").strip()
+        if not message:
+            raise ValueError("a commit message is required")
+        peer_host = (peer_host or "").strip() or None
+        args = [message] + ([peer_host] if peer_host else [])
+        return self.start(script=DEPLOY_ALL_PATH, args=args, label="deploy_all")
+
+    def start(self, *, script: Path, args: list[str], label: str) -> dict:
+        if not script.is_file():
+            raise FileNotFoundError(f"deploy script not found: {script}")
 
         with self._lock:
             if self._status == "running":
@@ -65,11 +86,9 @@ class DeployRunner:
             self._exit_code = None
             self._started_at = time.time()
             self._ended_at = None
-            self._peer_host = peer_host
+            self._label = label
 
-        cmd = ["bash", str(SCRIPT_PATH)]
-        if peer_host:
-            cmd.append(peer_host)
+        cmd = ["bash", str(script), *args]
 
         # Inherit env so HOME / PATH / SSH_AUTH_SOCK reach the script.
         env = os.environ.copy()

@@ -54,6 +54,35 @@ def test_server_restart_accepted(client, monkeypatch):
     assert called  # TestClient runs background tasks synchronously
 
 
+def test_deploy_all_requires_message(client):
+    # Empty / missing commit message is a 400 before any script runs.
+    assert client.post("/v1/server/deploy-all", json={}).status_code == 400
+    assert client.post("/v1/server/deploy-all", json={"message": "   "}).status_code == 400
+
+
+def test_deploy_all_starts_runner(client, monkeypatch):
+    import app.main as m
+    captured = {}
+
+    class FakeRunner:
+        def start_all(self, *, message, peer_host=None):
+            captured["message"] = message
+            captured["peer_host"] = peer_host
+            return {"status": "running", "label": "deploy_all", "lines": []}
+
+    monkeypatch.setattr(m, "get_deploy_runner", lambda: FakeRunner())
+    r = client.post("/v1/server/deploy-all", json={"message": "ship it"})
+    assert r.status_code == 200
+    assert r.json()["label"] == "deploy_all"
+    assert captured == {"message": "ship it", "peer_host": None}
+
+
+def test_deploy_status_snapshot(client):
+    body = client.get("/v1/server/deploy-status").json()
+    for key in ("status", "label", "lines"):
+        assert key in body
+
+
 # ---------- capability helpers ----------
 
 
