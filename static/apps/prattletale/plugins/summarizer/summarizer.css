@@ -1,0 +1,47 @@
+/* Summarizer plugin styling — the slide-up form (in #pt-plugin-panel) and the
+   summary card bubble. The slide/bounce animation itself lives in the core
+   styles.css (the .pt-plugin-panel / .pt-panel-open hooks). */
+
+.pt-summarizer {
+  display: flex; flex-direction: column; gap: var(--gap-sm);
+  padding: var(--gap-sm) 2px var(--gap-xs);
+}
+.pt-sum-head {
+  font-size: var(--font-size-sm); color: var(--color-text); font-weight: 600;
+}
+.pt-sum-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--gap-md);
+}
+.pt-sum-label {
+  flex: 0 0 3.5rem; font-size: var(--font-size-xs); color: var(--color-text-dim);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.pt-sum-opt {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: var(--font-size-sm); color: var(--color-text);
+}
+.pt-sum-opt small { color: var(--color-text-dim); font-size: var(--font-size-micro); }
+.pt-sum-focus {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: var(--font-size-xs); color: var(--color-text-dim);
+}
+.pt-sum-focus small { text-transform: none; letter-spacing: 0; }
+.pt-sum-focus-input { resize: vertical; min-height: 2.4rem; }
+.pt-sum-actions { display: flex; justify-content: flex-end; gap: var(--gap-sm); }
+.pt-sum-msg { font-size: var(--font-size-sm); color: var(--color-text-dim); }
+.pt-sum-err { color: var(--color-danger); }
+
+/* the summary card bubble */
+.pt-summary-card {
+  width: 100%; box-sizing: border-box;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-hi); border-radius: 12px;
+  padding: var(--gap-sm) var(--gap-md);
+  display: flex; flex-direction: column; gap: 4px;
+  white-space: normal; text-align: left; max-width: none;
+}
+.pt-summary-head {
+  font-size: var(--font-size-xs); color: var(--color-accent);
+  text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
+}
+.pt-summary-text { color: var(--color-text); line-height: 1.5; }

@@ -324,6 +324,13 @@
 
   function turnHtml(turn) {
     const conv = _current.conversation;
+    // A system turn (e.g. a Summarizer recap) is avatar-less and centered.
+    if (turn.author === 'system') {
+      const sysBubbles = (turn.items || []).map((it) => bubbleHtml(it, turn)).join('');
+      return `<div class="pt-turn pt-turn--system" data-turn="${_escHtml(turn.id)}">
+        <div class="pt-stack pt-stack--system">${sysBubbles}</div>
+      </div>`;
+    }
     const isUser = turn.author === 'user';
     const cp = counterpartOf(conv);
     const name = isUser ? (conv.device_user && conv.device_user.display_name) || 'You'
@@ -642,7 +649,8 @@
     _panelMode = modeType;
     const box = $('pt-plugin-panel');
     box.innerHTML = '';
-    box.hidden = false;
+    // The composer's .pt-panel-open class drives the slide-up (CSS); the panel is
+    // collapsed by max-height when closed, so it animates instead of snapping.
     $('pt-composer').classList.add('pt-panel-open');
     try {
       panel.renderPanel(box, pluginCtx(panel.pluginId));
@@ -654,9 +662,8 @@
   function closePluginPanel() {
     if (_panelMode === null) return;
     _panelMode = null;
-    const box = $('pt-plugin-panel');
-    box.hidden = true;
-    box.innerHTML = '';
+    // Leave the content in place (collapsed by CSS, replaced on next open) so the
+    // slide-down animates rather than emptying instantly.
     $('pt-composer').classList.remove('pt-panel-open');
   }
 

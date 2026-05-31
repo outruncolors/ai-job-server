@@ -297,6 +297,33 @@ dialog input, dialog textarea, dialog select { width: 100%; box-sizing: border-b
 .pt-node-link { color: var(--color-accent); font-size: var(--font-size-sm); text-decoration: none; }
 .pt-node-link:hover { text-decoration: underline; }
 
+/* plugin composer panel — slides up over the composer when a plugin mode is active.
+   Collapsed by max-height so it animates; a bounce/overshoot easing on the reveal.
+   The plugin renders its form into #pt-plugin-panel; summarizer.css styles it. */
+.pt-plugin-panel {
+  max-height: 0; overflow: hidden; opacity: 0;
+  transform: translateY(10px);
+  transition:
+    max-height 0.34s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.18s ease,
+    transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+#pt-composer.pt-panel-open .pt-plugin-panel {
+  max-height: 60vh; opacity: 1; transform: translateY(0);
+}
+/* the plugin panel replaces the text composer while open */
+#pt-composer.pt-panel-open .pt-compose-row,
+#pt-composer.pt-panel-open .pt-draft,
+#pt-composer.pt-panel-open .pt-hint { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pt-plugin-panel { transition: none; transform: none; }
+}
+
+/* system (summary) turn — avatar-less, centered, full-width card */
+.pt-turn--system { justify-content: center; }
+.pt-stack--system { align-items: stretch; max-width: 92%; width: 100%; }
+
 /* config dialog — Plugins section */
 .pt-config-plugins:not(:empty) {
   border-top: 1px solid var(--color-border-mid);
