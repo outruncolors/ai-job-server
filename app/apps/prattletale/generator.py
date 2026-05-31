@@ -153,6 +153,8 @@ def _read_final_output(job_dir: Path) -> str:
 async def run_model_turn(
     conversation_id: str,
     llm: Optional[ChainLLMConfig] = None,
+    *,
+    replace_turn_id: Optional[str] = None,
 ) -> tuple[dict, str]:
     """Run the full pipeline for ``conversation_id`` and persist a model turn.
 
@@ -162,6 +164,12 @@ async def run_model_turn(
     the router can return HTTP 200 with an inline error bubble, and a failed turn
     never poisons the next attempt (``system_error`` items are skipped by
     :func:`build_context`).
+
+    When ``replace_turn_id`` is given (the **retry** path) the turn is excluded
+    from the context window and, on success, overwritten **in place** via
+    :func:`store.replace_turn` (same ``turn_id``/position, new committed items) so
+    the chat layout stays stable. A retry that fails again appends a fresh
+    ``system_error`` turn like any other failure.
     """
     from .prompts import parse_items  # lazy: avoids a prompts<->generator import cycle
 
@@ -169,6 +177,13 @@ async def run_model_turn(
     transcript = store.get_transcript(conversation_id)
     if conversation is None or transcript is None:
         raise GenerationError(f"conversation not found: {conversation_id}")
+
+    if replace_turn_id is not None:
+        # Re-run against the transcript with the turn being retried excluded.
+        transcript = {
+            **transcript,
+            "turns": [t for t in transcript.get("turns", []) if t.get("id") != replace_turn_id],
+        }
 
     job_id: Optional[str] = None
     context_vars: Optional[dict] = None
@@ -193,9 +208,12 @@ async def run_model_turn(
         raw = _read_final_output(job_dir)
         items = parse_items(raw)
 
-        turn = store.append_model_turn(conversation_id, items, job_id=job_id)
-        if turn is None:  # pragma: no cover — transcript checked above
-            raise GenerationError("transcript disappeared while appending model turn")
+        if replace_turn_id is not None:
+            turn = store.replace_turn(conversation_id, replace_turn_id, items, job_id=job_id)
+        else:
+            turn = store.append_model_turn(conversation_id, items, job_id=job_id)
+        if turn is None:  # pragma: no cover — transcript/turn checked above
+            raise GenerationError("transcript disappeared while persisting model turn")
         store.write_trace(conversation_id, turn["id"], {
             "job_id": job_id,
             "context_input": context_vars,
