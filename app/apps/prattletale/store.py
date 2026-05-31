@@ -324,6 +324,114 @@ def apply_audio(conversation_id: str, turn_id: str, audio_by_item_id: dict) -> O
     return None
 
 
+# --- in-place item / turn edits (Phase 2 SP1) ------------------------------
+
+def _find_turn(transcript: dict, turn_id: str) -> Optional[dict]:
+    for turn in transcript.get("turns", []):
+        if turn.get("id") == turn_id:
+            return turn
+    return None
+
+
+def edit_item(conversation_id: str, turn_id: str, item_id: str, text: str) -> Optional[dict]:
+    """Overwrite one item's ``text`` in place (id/type/audio/status unchanged).
+
+    Returns the updated turn, or None if the conversation, turn, or item is
+    missing. Re-reads before writing (concurrent-write safe), mirroring
+    :func:`replace_turn`.
+    """
+    transcript = _read_transcript(conversation_id)
+    if transcript is None:
+        return None
+    turn = _find_turn(transcript, turn_id)
+    if turn is None:
+        return None
+    item = next((it for it in turn.get("items", []) if it.get("id") == item_id), None)
+    if item is None:
+        return None
+    item["text"] = text
+    _atomic_write(_transcript_path(conversation_id), transcript)
+    _touch_conversation(conversation_id)
+    return turn
+
+
+def set_item_hidden(conversation_id: str, turn_id: str, item_id: str, hidden: bool) -> Optional[dict]:
+    """Set an item's ``hidden_from_context`` flag in place. Returns the updated
+    turn, or None if the conversation, turn, or item is missing."""
+    transcript = _read_transcript(conversation_id)
+    if transcript is None:
+        return None
+    turn = _find_turn(transcript, turn_id)
+    if turn is None:
+        return None
+    item = next((it for it in turn.get("items", []) if it.get("id") == item_id), None)
+    if item is None:
+        return None
+    item["hidden_from_context"] = bool(hidden)
+    _atomic_write(_transcript_path(conversation_id), transcript)
+    _touch_conversation(conversation_id)
+    return turn
+
+
+def delete_item(conversation_id: str, turn_id: str, item_id: str) -> Optional[dict]:
+    """Drop one item from a turn. If the turn is left with **zero** items, the
+    whole turn is removed and ``{"turn_deleted": turn_id}`` is returned; otherwise
+    the updated turn is returned. None if the conversation, turn, or item is
+    missing. Surviving turns/items are **not** renumbered (ids stay stable)."""
+    transcript = _read_transcript(conversation_id)
+    if transcript is None:
+        return None
+    turn = _find_turn(transcript, turn_id)
+    if turn is None:
+        return None
+    items = turn.get("items", [])
+    if not any(it.get("id") == item_id for it in items):
+        return None
+    remaining = [it for it in items if it.get("id") != item_id]
+    if not remaining:
+        transcript["turns"] = [t for t in transcript.get("turns", []) if t.get("id") != turn_id]
+        _atomic_write(_transcript_path(conversation_id), transcript)
+        _touch_conversation(conversation_id)
+        return {"turn_deleted": turn_id}
+    turn["items"] = remaining
+    _atomic_write(_transcript_path(conversation_id), transcript)
+    _touch_conversation(conversation_id)
+    return turn
+
+
+def delete_turn(conversation_id: str, turn_id: str) -> bool:
+    """Remove a whole turn. Returns True if removed, False if the conversation or
+    turn is missing. Surviving turns keep their ids (no renumbering)."""
+    transcript = _read_transcript(conversation_id)
+    if transcript is None:
+        return False
+    turns = transcript.get("turns", [])
+    if not any(t.get("id") == turn_id for t in turns):
+        return False
+    transcript["turns"] = [t for t in turns if t.get("id") != turn_id]
+    _atomic_write(_transcript_path(conversation_id), transcript)
+    _touch_conversation(conversation_id)
+    return True
+
+
 def write_trace(conversation_id: str, turn_id: str, trace: dict) -> None:
     """Persist a per-model-turn debug capture at ``traces/<turn_id>.json``."""
     _atomic_write(_trace_path(conversation_id, turn_id), trace)
+
+
+# --- trace read (Phase 2 SP3) ----------------------------------------------
+
+def get_trace(conversation_id: str, turn_id: str) -> Optional[dict]:
+    """Read ``traces/<turn_id>.json``. None if the trace (or conversation) is absent."""
+    p = _trace_path(conversation_id, turn_id)
+    if not p.exists():
+        return None
+    return _load(p)
+
+
+def list_traces(conversation_id: str) -> list[str]:
+    """Turn ids that have a trace on disk (sorted). Empty if none / no folder."""
+    traces = _dir_for(conversation_id) / "traces"
+    if not traces.exists():
+        return []
+    return sorted(p.stem for p in traces.iterdir() if p.suffix == ".json")

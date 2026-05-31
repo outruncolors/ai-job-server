@@ -39,15 +39,39 @@ class ConversationCreate(BaseModel):
 
 
 class ConfigPatch(BaseModel):
-    """Partial conversation ``config`` update (toggles). Unset fields are left alone."""
+    """Partial conversation ``config`` update. Unset fields are left alone."""
 
+    context_window_turns: Optional[int] = None
     voice_enabled: Optional[bool] = None
     typing_timing_enabled: Optional[bool] = None
     variety_pass_enabled: Optional[bool] = None
 
 
+class ConversationUpdate(ConfigPatch):
+    """Broadened conversation ``PATCH`` body (SP2): editable metadata + behaviour.
+
+    Inherits the flat config keys from :class:`ConfigPatch` (so the Phase-1
+    frontend's flat ``{voice_enabled: …}`` toggles keep working — they're hoisted
+    into ``config``) and also accepts a nested ``config`` patch. All fields are
+    optional; only those set are applied.
+    """
+
+    title: Optional[str] = None
+    scenario: Optional[str] = None
+    role_instructions: Optional[str] = None
+    device_user: Optional[DeviceUser] = None
+    config: Optional[ConfigPatch] = None
+
+
 class SettingsPatch(BaseModel):
     narrator_voice_preset_id: Optional[str] = None
+
+
+class ItemPatch(BaseModel):
+    """In-place edit of one transcript item (SP1). Unset fields are left alone."""
+
+    text: Optional[str] = None
+    hidden_from_context: Optional[bool] = None
 
 
 class TurnItemIn(BaseModel):
@@ -82,14 +106,43 @@ def get_conversation(conversation_id: str):
 
 
 @router.patch("/conversations/{conversation_id}")
-def update_conversation_config(conversation_id: str, body: ConfigPatch):
-    """Toggle the conversation's ``config`` flags (voice / typing timing) in place."""
+def update_conversation_config(conversation_id: str, body: ConversationUpdate):
+    """Edit a conversation's metadata (``title``/``scenario``/``role_instructions``/
+    ``device_user``) and/or behaviour ``config`` in place.
+
+    Config can be supplied nested (``{config: {context_window_turns: …}}``) or as
+    flat back-compat keys (``{voice_enabled: …}``, hoisted into ``config``); the
+    nested form wins on conflict. Unset config keys are preserved (deep merge).
+    """
     conversation = store.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    config = dict(conversation.get("config") or {})
-    config.update(body.model_dump(exclude_none=True))
-    return store.update_conversation(conversation_id, {"config": config})
+
+    # Hoist flat config keys, then layer the nested config patch on top.
+    config_patch = ConfigPatch(
+        **{k: getattr(body, k) for k in ConfigPatch.model_fields}
+    ).model_dump(exclude_none=True)
+    if body.config is not None:
+        config_patch.update(body.config.model_dump(exclude_none=True))
+
+    if "context_window_turns" in config_patch and config_patch["context_window_turns"] < 1:
+        raise HTTPException(status_code=422, detail="context_window_turns must be >= 1")
+
+    patch: dict = {}
+    for field in ("title", "scenario", "role_instructions"):
+        value = getattr(body, field)
+        if value is not None:
+            patch[field] = value
+    if body.device_user is not None:
+        patch["device_user"] = body.device_user.model_dump()
+    if config_patch:
+        config = dict(conversation.get("config") or {})
+        config.update(config_patch)
+        patch["config"] = config
+
+    if not patch:
+        return conversation
+    return store.update_conversation(conversation_id, patch)
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
@@ -185,3 +238,63 @@ async def synthesize_item_audio(conversation_id: str, turn_id: str, item_id: str
     if audio:
         store.apply_audio(conversation_id, turn_id, {item_id: audio})
     return {"audio": audio}
+
+
+# --- transcript editing (edit / hide / delete) -----------------------------
+
+def _require_item(conversation_id: str, turn_id: str, item_id: str) -> None:
+    """404 if the conversation, turn, or item is missing."""
+    transcript = store.get_transcript(conversation_id)
+    if transcript is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    turn = next((t for t in transcript.get("turns", []) if t.get("id") == turn_id), None)
+    if turn is None:
+        raise HTTPException(status_code=404, detail="Turn not found")
+    if not any(it.get("id") == item_id for it in (turn.get("items") or [])):
+        raise HTTPException(status_code=404, detail="Item not found")
+
+
+@router.patch("/conversations/{conversation_id}/turns/{turn_id}/items/{item_id}")
+def edit_item(conversation_id: str, turn_id: str, item_id: str, body: ItemPatch):
+    """Edit one item in place: set its ``text`` and/or its ``hidden_from_context``
+    flag. Editing does **not** re-run the model. Returns the updated turn."""
+    _require_item(conversation_id, turn_id, item_id)
+    turn: Optional[dict] = None
+    if body.text is not None:
+        turn = store.edit_item(conversation_id, turn_id, item_id, body.text)
+    if body.hidden_from_context is not None:
+        turn = store.set_item_hidden(conversation_id, turn_id, item_id, body.hidden_from_context)
+    if turn is None:  # nothing set → return the current turn unchanged
+        transcript = store.get_transcript(conversation_id) or {}
+        turn = next((t for t in transcript.get("turns", []) if t.get("id") == turn_id), None)
+    return turn
+
+
+@router.delete("/conversations/{conversation_id}/turns/{turn_id}/items/{item_id}")
+def delete_item(conversation_id: str, turn_id: str, item_id: str):
+    """Delete one item. If it was the turn's last item, the turn is removed too —
+    the response then is ``{"turn_deleted": turn_id}``; otherwise the updated turn."""
+    _require_item(conversation_id, turn_id, item_id)
+    return store.delete_item(conversation_id, turn_id, item_id)
+
+
+@router.delete("/conversations/{conversation_id}/turns/{turn_id}", status_code=204)
+def delete_turn(conversation_id: str, turn_id: str):
+    """Delete a whole turn. Surviving turns keep their ids (no renumbering)."""
+    if not store.delete_turn(conversation_id, turn_id):
+        raise HTTPException(status_code=404, detail="Conversation or turn not found")
+    return Response(status_code=204)
+
+
+# --- per-turn trace read (dev tools) ---------------------------------------
+
+@router.get("/conversations/{conversation_id}/turns/{turn_id}/trace")
+def get_trace(conversation_id: str, turn_id: str):
+    """Return the per-model-turn debug trace (``traces/<turn_id>.json``). 404 when
+    the conversation or that turn's trace is absent."""
+    if store.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    trace = store.get_trace(conversation_id, turn_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    return trace

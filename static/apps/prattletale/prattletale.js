@@ -199,7 +199,7 @@
     try {
       const updated = await api(
         `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}`,
-        'PATCH', { [key]: !current });
+        'PATCH', { config: { [key]: !current } });
       if (updated) _current.conversation = updated;
       renderToggles();
     } catch (_) { /* leave state as-is on failure */ }
@@ -254,6 +254,7 @@
     thread.innerHTML = turns.map(turnHtml).join('');
     wireRetry();
     wirePlay();
+    wireThreadControls();
     scrollToBottom();
   }
 
@@ -268,7 +269,7 @@
     const avId = isUser ? 'device-user' : conv.counterpart_character_id;
     const av = avatarHtml(name, avPath, avId, 'pt-av pt-av-sm');
     const bubbles = (turn.items || []).map((it) => bubbleHtml(it, turn)).join('');
-    return `<div class="pt-turn pt-turn--${isUser ? 'user' : 'model'}">
+    return `<div class="pt-turn pt-turn--${isUser ? 'user' : 'model'}" data-turn="${_escHtml(turn.id)}">
       ${isUser ? '' : av}
       <div class="pt-stack">${bubbles}</div>
       ${isUser ? av : ''}
@@ -292,7 +293,13 @@
       play = `<button type="button" class="pt-play" data-turn="${_escHtml(turn.id)}"` +
         ` data-item="${_escHtml(item.id)}"${urlAttr} title="Play audio" aria-label="Play audio">🔊</button>`;
     }
-    return `<div class="pt-bubble pt-bubble--${_escHtml(type)}">${_escHtml(item.text || '')}${play}</div>`;
+    // Hidden-from-context items still render (history) but styled as excluded,
+    // with a clear "won't be sent to the model" tag (SP5).
+    const hidden = item.hidden_from_context;
+    const cls = `pt-bubble pt-bubble--${_escHtml(type)}${hidden ? ' pt-bubble--hidden' : ''}`;
+    const tag = hidden ? '<span class="pt-hidden-tag" title="Hidden from context">🚫 hidden</span>' : '';
+    return `<div class="${cls}" data-turn="${_escHtml(turn.id)}" data-item="${_escHtml(item.id)}">` +
+      `${_escHtml(item.text || '')}${play}${tag}</div>`;
   }
 
   function scrollToBottom() {
@@ -444,6 +451,7 @@
     const av = avatarHtml(cp ? cp.name : 'Character', cp && cp.avatar_path, conv.counterpart_character_id, 'pt-av pt-av-sm');
     const el = document.createElement('div');
     el.className = 'pt-turn pt-turn--model';
+    el.dataset.turn = turn.id;
     el.innerHTML = `${av}<div class="pt-stack"></div>`;
     thread.appendChild(el);
     const stack = el.querySelector('.pt-stack');
@@ -507,6 +515,7 @@
       if (audioDone) await audioDone;  // don't cut a clip off if it ran long
       if (!stillHere()) return;
     }
+    wireThreadControls();  // attach edit/hide/delete + trace once fully revealed
   }
 
   // ---------- composer ----------
@@ -683,6 +692,10 @@
         `${APP}/conversations/${encodeURIComponent(id)}/turns`, 'POST', { items });
       typingEl.remove();
       _current.transcript.turns.push(res.user_turn, res.model_turn);
+      // Reconcile the optimistic turn to the persisted one so its bubbles carry
+      // real ids (the per-message edit/hide/delete controls target them).
+      optimisticEl.outerHTML = turnHtml(res.user_turn);
+      wireThreadControls();
       await revealModelTurn(res.model_turn);
     } catch (err) {
       // hard failure (network / 5xx): undo the optimistic turn and restore the
@@ -712,6 +725,7 @@
     thread.insertAdjacentHTML('beforeend', turnHtml(turn));
     wireRetry();
     wirePlay();
+    wireThreadControls();
   }
 
   // Render the user's turn immediately (before the server echoes ids back) and
@@ -779,6 +793,7 @@
         turnEl.outerHTML = turnHtml(newTurn);
         wireRetry();
         wirePlay();
+        wireThreadControls();
       } else {
         renderThread();
       }
@@ -807,6 +822,349 @@
     if (!confirm(`Delete the conversation with ${name}? This cannot be undone.`)) return;
     await api(`${APP}/conversations/${encodeURIComponent(conv.id)}`, 'DELETE');
     goList();
+  }
+
+  // ---------- conversation config view (SP4) ----------
+
+  function openConfig() {
+    if (!_current) return;
+    const conv = _current.conversation;
+    const cfg = conv.config || {};
+    const du = conv.device_user || {};
+    $('pt-config-title').value = conv.title || '';
+    $('pt-config-scenario').value = conv.scenario || '';
+    $('pt-config-role').value = conv.role_instructions || '';
+    $('pt-config-username').value = du.display_name || 'You';
+    $('pt-config-persona').value = du.persona || '';
+    $('pt-config-window').value = cfg.context_window_turns != null ? cfg.context_window_turns : 12;
+    $('pt-config-voice').checked = !!cfg.voice_enabled;
+    $('pt-config-timing').checked = !!cfg.typing_timing_enabled;
+    $('pt-config-variety').checked = cfg.variety_pass_enabled !== false;
+    $('pt-config-msg').textContent = '';
+    $('pt-config-save').disabled = false;
+    $('pt-config-dialog').showModal();
+  }
+
+  async function saveConfig() {
+    if (!_current) return;
+    const msg = $('pt-config-msg');
+    const window = parseInt($('pt-config-window').value, 10);
+    if (!Number.isInteger(window) || window < 1) {
+      msg.textContent = 'Context window must be a whole number ≥ 1.';
+      return;
+    }
+    const btn = $('pt-config-save');
+    btn.disabled = true;
+    msg.textContent = 'Saving…';
+    try {
+      const updated = await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}`,
+        'PATCH', {
+          title: $('pt-config-title').value.trim() || 'Conversation',
+          scenario: $('pt-config-scenario').value,
+          role_instructions: $('pt-config-role').value,
+          device_user: {
+            display_name: $('pt-config-username').value.trim() || 'You',
+            persona: $('pt-config-persona').value,
+          },
+          config: {
+            context_window_turns: window,
+            voice_enabled: $('pt-config-voice').checked,
+            typing_timing_enabled: $('pt-config-timing').checked,
+            variety_pass_enabled: $('pt-config-variety').checked,
+          },
+        });
+      if (updated) _current.conversation = updated;
+      $('pt-config-dialog').close();
+      renderChatHead();   // reflect new title/scenario + toggle states
+    } catch (err) {
+      msg.textContent = 'Save failed: ' + err.message;
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- per-message controls: edit / hide / delete (SP5) ----------
+
+  function getTurn(turnId) {
+    const turns = (_current && _current.transcript && _current.transcript.turns) || [];
+    return turns.find((t) => t.id === turnId) || null;
+  }
+
+  function findItem(turnId, itemId) {
+    const t = getTurn(turnId);
+    return t ? (t.items || []).find((i) => i.id === itemId) || null : null;
+  }
+
+  function findTurnEl(turnId) {
+    return $('pt-thread').querySelector(`.pt-turn[data-turn="${CSS.escape(turnId)}"]`);
+  }
+
+  // Re-render one turn in place from the in-memory transcript (mirrors the retry
+  // path's DOM swap), then re-wire the thread's per-bubble + per-turn affordances.
+  function rerenderTurn(turnId) {
+    const turn = getTurn(turnId);
+    const el = findTurnEl(turnId);
+    if (!turn || !el) { renderThread(); return; }
+    el.outerHTML = turnHtml(turn);
+    wireRetry();
+    wirePlay();
+    wireThreadControls();
+  }
+
+  function removeTurnFromDom(turnId) {
+    const el = findTurnEl(turnId);
+    if (el) el.remove();
+    const turns = (_current.transcript && _current.transcript.turns) || [];
+    if (!turns.length) renderThread();  // restore the empty-state hint
+  }
+
+  function startEditItem(bubbleEl, turnId, item) {
+    bubbleEl.classList.add('pt-bubble--editing');
+    bubbleEl.innerHTML =
+      `<textarea class="pt-edit-input" rows="2"></textarea>
+       <div class="pt-edit-actions">
+         <button type="button" class="pt-edit-save">Save</button>
+         <button type="button" class="pt-edit-cancel secondary">Cancel</button>
+       </div>`;
+    const ta = bubbleEl.querySelector('.pt-edit-input');
+    ta.value = item.text || '';
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    bubbleEl.querySelector('.pt-edit-cancel').addEventListener('click', () => rerenderTurn(turnId));
+    bubbleEl.querySelector('.pt-edit-save').addEventListener('click', () => saveEditItem(turnId, item.id, ta.value));
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditItem(turnId, item.id, ta.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); rerenderTurn(turnId); }
+    });
+  }
+
+  async function saveEditItem(turnId, itemId, text) {
+    try {
+      const updated = await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}` +
+        `/turns/${encodeURIComponent(turnId)}/items/${encodeURIComponent(itemId)}`,
+        'PATCH', { text });
+      updateTurnInMemory(turnId, updated);
+    } catch (_) { /* keep the editor open on failure */ }
+    rerenderTurn(turnId);
+  }
+
+  async function toggleHiddenOp(turnId, item) {
+    try {
+      const updated = await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}` +
+        `/turns/${encodeURIComponent(turnId)}/items/${encodeURIComponent(item.id)}`,
+        'PATCH', { hidden_from_context: !item.hidden_from_context });
+      updateTurnInMemory(turnId, updated);
+      rerenderTurn(turnId);
+    } catch (_) { /* leave as-is on failure */ }
+  }
+
+  async function deleteItemOp(turnId, item) {
+    if (!confirm('Delete this message?')) return;
+    let res;
+    try {
+      res = await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}` +
+        `/turns/${encodeURIComponent(turnId)}/items/${encodeURIComponent(item.id)}`, 'DELETE');
+    } catch (_) { return; }
+    const turns = _current.transcript.turns;
+    const idx = turns.findIndex((t) => t.id === turnId);
+    if (res && res.turn_deleted) {
+      if (idx >= 0) turns.splice(idx, 1);
+      removeTurnFromDom(turnId);
+    } else {
+      if (idx >= 0 && res) turns[idx] = res;
+      rerenderTurn(turnId);
+    }
+  }
+
+  async function deleteTurnOp(turnId) {
+    if (!confirm('Delete this entire turn? This cannot be undone.')) return;
+    try {
+      await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}` +
+        `/turns/${encodeURIComponent(turnId)}`, 'DELETE');
+    } catch (_) { return; }
+    const turns = _current.transcript.turns;
+    const idx = turns.findIndex((t) => t.id === turnId);
+    if (idx >= 0) turns.splice(idx, 1);
+    removeTurnFromDom(turnId);
+  }
+
+  function updateTurnInMemory(turnId, updatedTurn) {
+    if (!updatedTurn) return;
+    const turns = _current.transcript.turns;
+    const idx = turns.findIndex((t) => t.id === turnId);
+    if (idx >= 0) turns[idx] = updatedTurn;
+  }
+
+  // Wrap each non-error bubble with edit / hide / delete, and each turn's avatar
+  // with delete-turn (+ trace on model turns). Idempotent — FieldControls skips
+  // already-wrapped slots, so re-rendered turns get fresh wrapping.
+  function wireThreadControls() {
+    if (!window.FieldControls) return;
+    const thread = $('pt-thread');
+    thread.querySelectorAll('.pt-bubble[data-item]').forEach((el) => {
+      if (el.__fcAttached) return;
+      const turnId = el.dataset.turn;
+      const itemId = el.dataset.item;
+      const item0 = findItem(turnId, itemId);
+      const hidden = item0 && item0.hidden_from_context;
+      FieldControls.attach(el, {
+        kind: 'field',
+        controls: [
+          { id: 'edit', label: '✏️', title: 'Edit text',
+            onClick: (_ctx, ui) => { const it = findItem(turnId, itemId); if (it) startEditItem(ui.slot, turnId, it); } },
+          { id: 'hide', label: hidden ? '👁' : '🚫', title: hidden ? 'Show in context' : 'Hide from context',
+            onClick: () => { const it = findItem(turnId, itemId); if (it) toggleHiddenOp(turnId, it); } },
+          { id: 'del', label: '🗑', title: 'Delete message',
+            onClick: () => { const it = findItem(turnId, itemId); if (it) deleteItemOp(turnId, it); } },
+        ],
+      });
+    });
+    thread.querySelectorAll('.pt-turn[data-turn]').forEach((tEl) => {
+      const av = tEl.querySelector('.pt-av');
+      const turnId = tEl.dataset.turn;
+      if (!av || av.__fcAttached || turnId === '__pending__') return;
+      const isModel = tEl.classList.contains('pt-turn--model');
+      const controls = [];
+      if (isModel) controls.push({ id: 'trace', label: '🔍', title: 'View turn trace', onClick: () => openTrace(turnId) });
+      controls.push({ id: 'delturn', label: '🗑', title: 'Delete this turn', onClick: () => deleteTurnOp(turnId) });
+      FieldControls.attach(av, { kind: 'avatar', controls });
+    });
+  }
+
+  // ---------- dev tools: trace viewer + pipeline node-graph (SP6) ----------
+
+  let _promptIds = null;  // prattletale prompt-pal key -> entry id (lazy, cached)
+
+  async function loadPromptIds() {
+    if (_promptIds) return _promptIds;
+    _promptIds = {};
+    try {
+      const data = await api('/prompt-pal/entries?app=prattletale');
+      (data.entries || []).forEach((e) => {
+        const key = (e.data || {}).key;
+        if (key) _promptIds[key] = e.id;
+      });
+    } catch (_) { /* deep-links degrade to the unfiltered Prompt Pal page */ }
+    return _promptIds;
+  }
+
+  // A pipeline step id maps to its Prompt Pal entry: the guard lives on the
+  // "turn" entry (it's that prompt's guard sub-section).
+  function promptKeyForStep(stepId) {
+    return stepId === 'guard' ? 'turn' : stepId;
+  }
+
+  function promptPalLink(stepId) {
+    const id = _promptIds && _promptIds[promptKeyForStep(stepId)];
+    return id ? `/prompt-pal/?app=prattletale&highlight=${encodeURIComponent(id)}`
+              : '/prompt-pal/?app=prattletale';
+  }
+
+  async function openTrace(turnId) {
+    const body = $('pt-trace-body');
+    body.innerHTML = '<div class="pt-empty">Loading trace…</div>';
+    $('pt-trace-dialog').showModal();
+    await loadPromptIds();
+    let trace;
+    try {
+      trace = await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}` +
+        `/turns/${encodeURIComponent(turnId)}/trace`);
+    } catch (err) {
+      const m = String(err.message || '');
+      body.innerHTML = `<div class="pt-empty">${m.includes('404') ? 'No trace for this turn.' : 'Could not load trace: ' + _escHtml(m)}</div>`;
+      return;
+    }
+    renderTrace(body, trace);
+  }
+
+  function traceSection(title, contentHtml) {
+    return `<details class="pt-trace-sec" open><summary>${_escHtml(title)}</summary>${contentHtml}</details>`;
+  }
+
+  function pre(text) {
+    return `<pre class="pt-trace-pre">${_escHtml(text || '')}</pre>`;
+  }
+
+  function renderTrace(body, trace) {
+    _traceSteps = trace.steps || [];
+    const parts = [];
+
+    // node-graph of the pipeline (turn -> variety? -> guard)
+    parts.push(nodeGraphHtml(_traceSteps));
+
+    // error first when present, so a failed turn is debuggable
+    if (trace.error) parts.push(traceSection('Error', pre(trace.error)));
+    if (trace.voice_error) parts.push(traceSection('Voice error', pre(trace.voice_error)));
+
+    const ctx = trace.context_input || {};
+    const ctxRows = ['scenario', 'role_instructions', 'user_persona', 'character', 'transcript']
+      .filter((k) => ctx[k] != null)
+      .map((k) => `<div class="pt-ctx-row"><span class="pt-ctx-key">${_escHtml(k)}</span>${pre(ctx[k])}</div>`)
+      .join('');
+    if (ctxRows) parts.push(traceSection('Context input', ctxRows));
+
+    parts.push(traceSection('Raw final output', pre(trace.raw_final_output)));
+
+    const items = trace.parsed_items || [];
+    const itemsHtml = items.length
+      ? items.map((it) => `<div class="pt-ctx-row"><span class="pt-ctx-key">${_escHtml(it.type || '')}</span>${pre(it.text)}</div>`).join('')
+      : '<div class="pt-empty">No parsed items.</div>';
+    parts.push(traceSection(`Parsed items (${items.length})`, itemsHtml));
+
+    if (trace.reveal_schedule) {
+      parts.push(traceSection('Reveal schedule', pre(JSON.stringify(trace.reveal_schedule, null, 2))));
+    }
+    if (trace.job_id) parts.push(`<div class="pt-trace-job">job: ${_escHtml(trace.job_id)}</div>`);
+
+    body.innerHTML = parts.join('');
+    wireNodeGraph(body);
+  }
+
+  const STEP_LABELS = { turn: 'Turn', variety: 'Variety', guard: 'Guard' };
+
+  function nodeGraphHtml(steps) {
+    if (!steps.length) return '<div class="pt-empty">No pipeline steps captured.</div>';
+    const nodes = steps.map((s, i) => {
+      const label = STEP_LABELS[s.id] || s.name || s.id || `Step ${i + 1}`;
+      const arrow = i < steps.length - 1 ? '<span class="pt-node-arrow">→</span>' : '';
+      return `<button type="button" class="pt-node" data-idx="${i}" title="Show prompt & output">${_escHtml(label)}</button>${arrow}`;
+    }).join('');
+    return `<div class="pt-nodegraph-wrap">
+      <div class="pt-nodegraph">${nodes}</div>
+      <div class="pt-node-detail" id="pt-node-detail" hidden></div>
+    </div>`;
+  }
+
+  // Stash the steps on the dialog so the node buttons can pull prompt/output.
+  function wireNodeGraph(body) {
+    body.querySelectorAll('.pt-node').forEach((btn) => {
+      btn.addEventListener('click', () => showNodeDetail(Number(btn.dataset.idx), btn));
+    });
+  }
+
+  let _traceSteps = [];
+
+  function showNodeDetail(idx, btn) {
+    const step = _traceSteps[idx];
+    const detail = $('pt-node-detail');
+    if (!step || !detail) return;
+    document.querySelectorAll('.pt-node').forEach((n) => n.classList.remove('on'));
+    btn.classList.add('on');
+    const link = promptPalLink(step.id);
+    const out = step.output != null ? pre(step.output) : '<div class="pt-empty">(output not captured)</div>';
+    detail.hidden = false;
+    detail.innerHTML =
+      `<div class="pt-node-head">
+         <strong>${_escHtml(STEP_LABELS[step.id] || step.name || step.id)}</strong>
+         <a href="${link}" target="_blank" rel="noopener" class="pt-node-link">Edit prompt ↗</a>
+       </div>
+       <div class="pt-ctx-row"><span class="pt-ctx-key">prompt</span>${pre(step.prompt)}</div>
+       <div class="pt-ctx-row"><span class="pt-ctx-key">output</span>${out}</div>`;
   }
 
   // ---------- new conversation ----------
@@ -892,6 +1250,13 @@
     $('pt-settings-close').addEventListener('click', () => $('pt-settings-dialog').close());
     $('pt-settings-cancel').addEventListener('click', () => $('pt-settings-dialog').close());
     $('pt-settings-save').addEventListener('click', saveSettings);
+
+    $('pt-config').addEventListener('click', openConfig);
+    $('pt-config-close').addEventListener('click', () => $('pt-config-dialog').close());
+    $('pt-config-cancel').addEventListener('click', () => $('pt-config-dialog').close());
+    $('pt-config-save').addEventListener('click', saveConfig);
+
+    $('pt-trace-close').addEventListener('click', () => $('pt-trace-dialog').close());
 
     const inp = $('pt-input');
     inp.addEventListener('input', () => { autoGrow(); updateSendBtn(); });

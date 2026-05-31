@@ -166,6 +166,38 @@ def _read_final_output(job_dir: Path) -> str:
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
+def _collect_steps(job_dir: Path, request: ChainJobRequest) -> list[dict]:
+    """Pair the request's ordered steps with the outputs the executor wrote under
+    ``steps/NNN_<id>/`` so the trace is self-describing (drives SP6's node-graph).
+
+    Best-effort: a step whose ``prompt.txt``/``output.txt`` can't be read records
+    that field as ``None`` rather than failing the turn. The turn pipeline never
+    loops (no gotos), so each step ran exactly once (``NNN_<id>``, no ``_xII``).
+    """
+    steps_dir = job_dir / "steps"
+    collected: list[dict] = []
+    for step in request.steps:
+        alt = step.alternatives[0] if step.alternatives else None
+        rendered_prompt = alt.prompt if alt is not None else None
+        output: Optional[str] = None
+        step_dir = steps_dir / f"{step.number:03d}_{step.id}"
+        if step_dir.is_dir():
+            prompt_file = step_dir / "prompt.txt"
+            if prompt_file.exists():
+                rendered_prompt = prompt_file.read_text(encoding="utf-8")
+            output_file = step_dir / "output.txt"
+            if output_file.exists():
+                output = output_file.read_text(encoding="utf-8")
+        collected.append({
+            "number": step.number,
+            "id": step.id,
+            "name": step.name,
+            "prompt": rendered_prompt,
+            "output": output,
+        })
+    return collected
+
+
 # ---- the pipeline ----------------------------------------------------------
 
 async def run_model_turn(
@@ -256,6 +288,7 @@ async def run_model_turn(
             "context_input": context_vars,
             "raw_final_output": raw,
             "parsed_items": items,
+            "steps": _collect_steps(job_dir, request),
             "reveal_schedule": reveal_schedule(turn),
             "voice_error": voice_error,
             "error": None,

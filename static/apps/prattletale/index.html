@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Prattletale · Apps</title>
   <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/field-controls.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -38,6 +39,7 @@
       <button type="button" id="pt-voice-toggle" class="pt-icon-btn pt-toggle" aria-label="Toggle voice" title="Voice (synthesize replies)">🔊</button>
       <button type="button" id="pt-timing-toggle" class="pt-icon-btn pt-toggle" aria-label="Toggle typing timing" title="Typing timing (reveal cadence)">⏱</button>
       <button type="button" id="pt-variety-toggle" class="pt-icon-btn pt-toggle" aria-label="Toggle variety pass" title="Variety pass (rewrites repetitive replies)">🎲</button>
+      <button type="button" id="pt-config" class="pt-icon-btn" aria-label="Conversation settings" title="Conversation settings">⚙</button>
       <button type="button" id="pt-delete" class="pt-icon-btn pt-danger" aria-label="Delete conversation" title="Delete conversation">🗑</button>
     </header>
 
@@ -109,8 +111,52 @@
     </form>
   </dialog>
 
+  <!-- ===== conversation config dialog (per-conversation, SP4) ===== -->
+  <dialog id="pt-config-dialog">
+    <form id="pt-config-form" method="dialog">
+      <div class="dlg-head">
+        <h3>Conversation settings</h3>
+        <button type="button" class="x" id="pt-config-close" aria-label="Close">×</button>
+      </div>
+      <label>Title<input type="text" id="pt-config-title"></label>
+      <label>Scenario
+        <textarea id="pt-config-scenario" rows="3"></textarea>
+      </label>
+      <label>Role instructions
+        <textarea id="pt-config-role" rows="2"></textarea>
+      </label>
+      <label>Your display name<input type="text" id="pt-config-username"></label>
+      <label>Your persona
+        <textarea id="pt-config-persona" rows="2"></textarea>
+      </label>
+      <label>Context window (turns)
+        <input type="number" id="pt-config-window" min="1" step="1">
+      </label>
+      <div class="pt-create-toggles">
+        <label class="pt-check"><input type="checkbox" id="pt-config-voice"> 🔊 Voice</label>
+        <label class="pt-check"><input type="checkbox" id="pt-config-timing"> ⏱ Typing timing</label>
+        <label class="pt-check"><input type="checkbox" id="pt-config-variety"> 🎲 Variety pass</label>
+      </div>
+      <div id="pt-config-msg" class="msg"></div>
+      <div class="dlg-actions">
+        <button type="button" class="secondary" id="pt-config-cancel">Cancel</button>
+        <button type="button" id="pt-config-save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===== per-turn trace viewer + pipeline node-graph (dev tools, SP6) ===== -->
+  <dialog id="pt-trace-dialog">
+    <div class="dlg-head">
+      <h3>Turn trace</h3>
+      <button type="button" class="x" id="pt-trace-close" aria-label="Close">×</button>
+    </div>
+    <div id="pt-trace-body" class="pt-trace-body"></div>
+  </dialog>
+
   <script src="/js/api.js"></script>
   <script src="/js/escape.js"></script>
+  <script src="/js/field-controls.js"></script>
   <script src="/js/nav.js"></script>
   <script src="prattletale.js"></script>
   <script src="/js/nav-mobile.js"></script>

@@ -242,6 +242,61 @@ dialog input, dialog textarea, dialog select { width: 100%; box-sizing: border-b
 .pt-check { flex-direction: row !important; align-items: center; gap: 6px; margin: 0 !important; cursor: pointer; }
 .pt-check input { width: auto; }
 
+/* ===== per-message controls (SP5) ===== */
+/* float the hover cluster just above the bubble so it doesn't cover the text */
+.pt-bubble.fc-field > .fc-cluster { top: -16px; right: 2px; }
+.pt-turn--user .pt-bubble.fc-field > .fc-cluster { right: auto; left: 2px; }
+
+/* hidden-from-context bubbles still render (history) but read as excluded */
+.pt-bubble--hidden { opacity: 0.5; text-decoration: line-through; }
+.pt-hidden-tag {
+  display: inline-block; margin-left: 6px; vertical-align: baseline;
+  font-size: var(--font-size-micro); text-decoration: none;
+  color: var(--color-warn); opacity: 0.9;
+}
+
+/* inline item editor (replaces the bubble content while editing) */
+.pt-bubble--editing { display: flex; flex-direction: column; gap: var(--gap-sm); width: min(72vw, 480px); }
+.pt-edit-input { width: 100%; box-sizing: border-box; min-height: 3em; }
+.pt-edit-actions { display: flex; gap: var(--gap-sm); justify-content: flex-end; }
+.pt-edit-actions button { padding: 4px 10px; font-size: var(--font-size-sm); }
+
+/* ===== trace viewer + node-graph (SP6) ===== */
+#pt-trace-dialog { width: min(760px, 94vw); max-height: 88vh; overflow-y: auto; }
+.pt-trace-body { display: flex; flex-direction: column; gap: var(--gap-md); }
+.pt-trace-sec { border: 1px solid var(--color-border-mid); border-radius: 6px; padding: var(--gap-sm) var(--gap-md); }
+.pt-trace-sec > summary { cursor: pointer; font-weight: bold; color: var(--color-text-sub); }
+.pt-trace-pre {
+  background: var(--color-bg-input); border: 1px solid var(--color-border-mid);
+  border-radius: 4px; padding: 8px; margin: 6px 0 0;
+  white-space: pre-wrap; word-break: break-word; font-size: var(--font-size-sm);
+  max-height: 320px; overflow-y: auto;
+}
+.pt-ctx-row { margin-top: var(--gap-sm); }
+.pt-ctx-key {
+  display: inline-block; font-size: var(--font-size-xs); text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--color-text-dim);
+}
+.pt-trace-job { font-size: var(--font-size-xs); color: var(--color-text-dim); }
+
+.pt-nodegraph-wrap { display: flex; flex-direction: column; gap: var(--gap-sm); }
+.pt-nodegraph { display: flex; align-items: center; gap: var(--gap-sm); flex-wrap: wrap; }
+.pt-node {
+  background: var(--color-bg-raised); color: var(--color-text);
+  border: 1px solid var(--color-border-hi); border-radius: 8px;
+  padding: 6px 14px; font-size: var(--font-size-sm); cursor: pointer;
+}
+.pt-node:hover { border-color: var(--color-accent); }
+.pt-node.on { border-color: var(--color-accent); color: var(--color-accent); }
+.pt-node-arrow { color: var(--color-text-dim); }
+.pt-node-detail {
+  border: 1px solid var(--color-border-mid); border-radius: 6px;
+  padding: var(--gap-sm) var(--gap-md); background: var(--color-bg-panel);
+}
+.pt-node-head { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); }
+.pt-node-link { color: var(--color-accent); font-size: var(--font-size-sm); text-decoration: none; }
+.pt-node-link:hover { text-decoration: underline; }
+
 @media (max-width: 560px) {
   .pt-stack { max-width: 82%; }
   #pt-chat-view { height: calc(100dvh - 44px); }

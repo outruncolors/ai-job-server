@@ -14,7 +14,8 @@ logic in their own package (`app/apps/<name>/`, `static/apps/<name>/`).
 - **[Prattletale](prattletale/index.md)** — an iMessage-style roleplay chat with a
   Hoodat character: typed bubble stacks (dialogue/action/narration), a
   self-contained conversation folder per chat, a synchronous turn-generation
-  pipeline, and optional per-item voice + reveal timing.
+  pipeline, and optional per-item voice + reveal timing. An in-chat config view,
+  per-message edit/hide/delete, and a dev-tools trace viewer + pipeline node-graph.
 
 Blaboratory and Hoodat dogfood the cross-app [Prompt Pal](../tools/prompt-pal.md) registry and
 the FieldControls hover affordance. The single bridge from the systems UI is one
