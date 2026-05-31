@@ -46,6 +46,9 @@
     <main id="pt-thread" aria-busy="false"></main>
 
     <footer id="pt-composer">
+      <!-- Plugin mode panel — slides up over the composer when a plugin mode is
+           active (e.g. Summarizer). Rendered by the plugin's renderPanel. -->
+      <div id="pt-plugin-panel" class="pt-plugin-panel" hidden></div>
       <div id="pt-draft" class="pt-draft" hidden></div>
       <div class="pt-compose-row">
         <button type="button" id="pt-mode" class="pt-mode-btn" title="Bubble type — ←/→ or A/D to switch"></button>
@@ -137,6 +140,7 @@
         <label class="pt-check"><input type="checkbox" id="pt-config-timing"> ⏱ Typing timing</label>
         <label class="pt-check"><input type="checkbox" id="pt-config-variety"> 🎲 Variety pass</label>
       </div>
+      <div id="pt-config-plugins" class="pt-config-plugins"></div>
       <div id="pt-config-msg" class="msg"></div>
       <div class="dlg-actions">
         <button type="button" class="secondary" id="pt-config-cancel">Cancel</button>
@@ -158,6 +162,7 @@
   <script src="/js/escape.js"></script>
   <script src="/js/field-controls.js"></script>
   <script src="/js/nav.js"></script>
+  <script src="plugins.js"></script>
   <script src="prattletale.js"></script>
   <script src="/js/nav-mobile.js"></script>
 </body>

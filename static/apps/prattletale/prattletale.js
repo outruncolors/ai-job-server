@@ -11,12 +11,16 @@
   const $ = (id) => document.getElementById(id);
   const APP = '/apps/prattletale';
 
-  // user-authorable bubble modes, cycled by the composer's mode button
-  const MODES = [
+  // The built-in text bubble modes. Plugin-contributed composer modes are merged
+  // onto these per chat in `rebuildModes()`; staged *text* bubbles only ever cycle
+  // within BASE_MODES (a plugin mode is never a text-bubble type).
+  const BASE_MODES = [
     { type: 'dialogue', label: '💬 Say' },
     { type: 'action', label: '🎬 Do' },
     { type: 'narration', label: '📖 Narrate' },
   ];
+  // Active composer modes (BASE_MODES + enabled plugins' modes), cycled by the mode button.
+  let MODES = BASE_MODES.slice();
 
   let _characters = {};   // id -> character summary
   let _conversations = []; // list summaries
@@ -101,6 +105,65 @@
     }
   }
 
+  // ---------- plugins (frontend loader + hook glue) ----------
+
+  let _pluginManifests = null;        // cached GET /plugins
+  const _assetsInjected = new Set();  // plugin id -> its frontend assets injected
+
+  async function loadPluginManifests() {
+    if (_pluginManifests) return _pluginManifests;
+    try {
+      const data = await api(`${APP}/plugins`);
+      _pluginManifests = data.plugins || [];
+    } catch (_) {
+      _pluginManifests = [];
+    }
+    return _pluginManifests;
+  }
+
+  function enabledPluginIds() {
+    return (_current && _current.conversation.config
+      && _current.conversation.config.enabled_plugins) || [];
+  }
+
+  // Inject one asset (script/link), once per URL. Resolves on load or error so a
+  // missing asset never blocks the chat.
+  function loadAsset(rel) {
+    const url = '/' + String(rel).replace(/^\/+/, '');
+    return new Promise((resolve) => {
+      const isCss = url.endsWith('.css');
+      const sel = isCss ? `link[href="${url}"]` : `script[src="${url}"]`;
+      if (document.querySelector(sel)) return resolve();
+      const el = isCss
+        ? Object.assign(document.createElement('link'), { rel: 'stylesheet', href: url })
+        : Object.assign(document.createElement('script'), { src: url });
+      el.onload = el.onerror = () => resolve();
+      document.head.appendChild(el);
+    });
+  }
+
+  function injectPluginAssets(manifest) {
+    if (_assetsInjected.has(manifest.id)) return Promise.resolve();
+    _assetsInjected.add(manifest.id);
+    return Promise.all((manifest.frontend || []).map(loadAsset));
+  }
+
+  // Inject the enabled plugins' assets, then rebuild the composer mode list. Run
+  // on chat load and after the config dialog toggles plugins.
+  async function syncPlugins() {
+    const manifests = await loadPluginManifests();
+    const enabled = enabledPluginIds();
+    await Promise.all(manifests.filter((m) => enabled.includes(m.id)).map(injectPluginAssets));
+    rebuildModes();
+  }
+
+  function rebuildModes() {
+    const extra = window.PtPlugins ? PtPlugins.composerModes(enabledPluginIds()) : [];
+    MODES = BASE_MODES.concat(extra);
+    if (_modeIdx >= MODES.length) _modeIdx = 0;
+    renderMode();
+  }
+
   // ---------- conversation list ----------
 
   async function loadCharacters() {
@@ -168,6 +231,7 @@
     renderChatHead();
     renderThread();
     resetComposer();
+    await syncPlugins();  // inject enabled plugins' assets + merge composer modes
     thread.setAttribute('aria-busy', 'false');
   }
 
@@ -278,6 +342,14 @@
 
   function bubbleHtml(item, turn) {
     const type = item.type || 'dialogue';
+    // A plugin can own a bubble type (e.g. Summarizer's `summary` card). Fall
+    // back to the core renderer if the plugin renderer throws or is absent.
+    if (window.PtPlugins) {
+      const r = PtPlugins.bubbleRenderer(type);
+      if (r && r.render) {
+        try { return r.render(item, turn); } catch (_) { /* fall through */ }
+      }
+    }
     if (type === 'system_error') {
       return `<div class="pt-bubble pt-bubble--error" data-turn="${_escHtml(turn.id)}">
         <span class="pt-err-text">${_escHtml(item.text || 'Generation failed.')}</span>
@@ -541,9 +613,16 @@
   }
 
   function renderMode() {
-    const type = MODES[_modeIdx].type;
-    $('pt-mode').textContent = MODES[_modeIdx].label;
-    $('pt-input').placeholder = PLACEHOLDERS[type] || 'Message…';
+    const mode = MODES[_modeIdx] || BASE_MODES[0];
+    $('pt-mode').textContent = mode.label;
+    // A plugin mode opens its slide-up panel in place of the text input.
+    const panel = window.PtPlugins ? PtPlugins.panel(mode.type) : null;
+    if (panel) {
+      openPluginPanel(mode.type, panel);
+    } else {
+      closePluginPanel();
+      $('pt-input').placeholder = PLACEHOLDERS[mode.type] || 'Message…';
+    }
     updateSendBtn();
   }
 
@@ -552,6 +631,76 @@
     const n = MODES.length;
     _modeIdx = (_modeIdx + (step || 1) + n) % n;
     renderMode();
+  }
+
+  // ---------- plugin composer panel ----------
+
+  let _panelMode = null;  // the mode type whose panel is open, or null
+
+  function openPluginPanel(modeType, panel) {
+    if (_panelMode === modeType) return;  // already open for this mode
+    _panelMode = modeType;
+    const box = $('pt-plugin-panel');
+    box.innerHTML = '';
+    box.hidden = false;
+    $('pt-composer').classList.add('pt-panel-open');
+    try {
+      panel.renderPanel(box, pluginCtx(panel.pluginId));
+    } catch (_) {
+      box.innerHTML = '<div class="pt-empty">Plugin panel failed to load.</div>';
+    }
+  }
+
+  function closePluginPanel() {
+    if (_panelMode === null) return;
+    _panelMode = null;
+    const box = $('pt-plugin-panel');
+    box.hidden = true;
+    box.innerHTML = '';
+    $('pt-composer').classList.remove('pt-panel-open');
+  }
+
+  // The context handed to a plugin's renderPanel: the conversation, the raw api(),
+  // a bound action-invoker, result helpers, and a close() that returns to Say.
+  function pluginCtx(pluginId) {
+    const convId = _current.conversation.id;
+    return {
+      conversation: _current.conversation,
+      api,
+      invokeAction: (action, params) => api(
+        `${APP}/conversations/${encodeURIComponent(convId)}` +
+        `/plugins/${encodeURIComponent(pluginId)}/actions/${encodeURIComponent(action)}`,
+        'POST', params || {}),
+      onResult: (res) => applyPluginResult(res),
+      appendTurn: (turn) => { _current.transcript.turns.push(turn); appendTurn(turn); scrollToBottom(); },
+      markHidden: (ids) => markItemsHidden(ids),
+      close: () => { _modeIdx = 0; renderMode(); },
+    };
+  }
+
+  // Default handling of a plugin result: append a returned turn, and on a purge
+  // mark the covered originals hidden in place.
+  function applyPluginResult(res) {
+    if (!res) return;
+    if (res.summary_turn) {
+      _current.transcript.turns.push(res.summary_turn);
+      appendTurn(res.summary_turn);
+      scrollToBottom();
+    }
+    if (res.mode === 'purge' && Array.isArray(res.hidden_item_ids)) {
+      markItemsHidden(res.hidden_item_ids);
+    }
+  }
+
+  function markItemsHidden(itemIds) {
+    const set = new Set(itemIds || []);
+    const affected = new Set();
+    ((_current.transcript && _current.transcript.turns) || []).forEach((t) => {
+      (t.items || []).forEach((it) => {
+        if (set.has(it.id)) { it.hidden_from_context = true; affected.add(t.id); }
+      });
+    });
+    affected.forEach((tid) => rerenderTurn(tid));
   }
 
   // The primary button doubles as Stack / Send: with text it stacks the bubble,
@@ -610,8 +759,9 @@
         const i = Number(b.dataset.i);
         const ta = box.querySelector(`.pt-staged-input[data-i="${i}"]`);
         if (ta) _draft[i].text = ta.value;            // keep in-progress edits across a type change
-        const cur = MODES.findIndex((m) => m.type === _draft[i].type);
-        _draft[i].type = MODES[(cur + 1) % MODES.length].type;
+        // Staged text bubbles cycle only the built-in text modes (never a plugin mode).
+        const cur = BASE_MODES.findIndex((m) => m.type === _draft[i].type);
+        _draft[i].type = BASE_MODES[(cur + 1) % BASE_MODES.length].type;
         renderDraft();
         focusEditor();
       }));
@@ -651,6 +801,7 @@
 
   // stack the active input as a new bubble; returns true if anything was staged
   function stackItem() {
+    if (_panelMode) return false;  // a plugin mode owns the composer — no text bubbles
     const inp = $('pt-input');
     const text = inp.value.trim();
     if (!text) return false;
@@ -840,9 +991,24 @@
     $('pt-config-voice').checked = !!cfg.voice_enabled;
     $('pt-config-timing').checked = !!cfg.typing_timing_enabled;
     $('pt-config-variety').checked = cfg.variety_pass_enabled !== false;
+    renderPluginToggles();
     $('pt-config-msg').textContent = '';
     $('pt-config-save').disabled = false;
     $('pt-config-dialog').showModal();
+  }
+
+  // The config dialog's Plugins section: one checkbox per registered plugin, bound
+  // to the conversation's enabled_plugins. Empty (no section) when no plugins exist.
+  async function renderPluginToggles() {
+    const box = $('pt-config-plugins');
+    if (!box) return;
+    const manifests = await loadPluginManifests();
+    if (!manifests.length) { box.innerHTML = ''; return; }
+    const enabled = enabledPluginIds();
+    box.innerHTML = '<div class="pt-config-plugins-head">Plugins</div>' +
+      manifests.map((m) => `<label class="pt-check" title="${_escHtml(m.description || '')}">
+        <input type="checkbox" class="pt-plugin-check" value="${_escHtml(m.id)}" ${enabled.includes(m.id) ? 'checked' : ''}>
+        ${_escHtml(m.name)}</label>`).join('');
   }
 
   async function saveConfig() {
@@ -856,6 +1022,16 @@
     const btn = $('pt-config-save');
     btn.disabled = true;
     msg.textContent = 'Saving…';
+    const config = {
+      context_window_turns: window,
+      voice_enabled: $('pt-config-voice').checked,
+      typing_timing_enabled: $('pt-config-timing').checked,
+      variety_pass_enabled: $('pt-config-variety').checked,
+    };
+    const pluginChecks = document.querySelectorAll('.pt-plugin-check');
+    if (pluginChecks.length) {
+      config.enabled_plugins = Array.from(pluginChecks).filter((c) => c.checked).map((c) => c.value);
+    }
     try {
       const updated = await api(
         `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}`,
@@ -867,16 +1043,12 @@
             display_name: $('pt-config-username').value.trim() || 'You',
             persona: $('pt-config-persona').value,
           },
-          config: {
-            context_window_turns: window,
-            voice_enabled: $('pt-config-voice').checked,
-            typing_timing_enabled: $('pt-config-timing').checked,
-            variety_pass_enabled: $('pt-config-variety').checked,
-          },
+          config,
         });
       if (updated) _current.conversation = updated;
       $('pt-config-dialog').close();
       renderChatHead();   // reflect new title/scenario + toggle states
+      await syncPlugins();  // load/unload plugin assets + refresh composer modes
     } catch (err) {
       msg.textContent = 'Save failed: ' + err.message;
       btn.disabled = false;
@@ -1199,6 +1371,9 @@
     const btn = $('pt-create-submit');
     btn.disabled = true;
     msg.textContent = 'Creating…';
+    // New conversations start with each plugin whose default_enabled is true.
+    const manifests = await loadPluginManifests();
+    const defaultPlugins = manifests.filter((m) => m.default_enabled).map((m) => m.id);
     try {
       const res = await api(`${APP}/conversations`, 'POST', {
         title,
@@ -1212,6 +1387,7 @@
         config: {
           voice_enabled: $('pt-create-voice').checked,
           typing_timing_enabled: $('pt-create-timing').checked,
+          enabled_plugins: defaultPlugins,
         },
       });
       $('pt-create-dialog').close();
