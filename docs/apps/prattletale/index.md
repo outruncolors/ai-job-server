@@ -18,10 +18,13 @@ on Hoodat for every non-user character (sheet, avatar, voice); Hoodat stays app-
 
 ## Status
 
-Planning complete; Phase 1 not yet built. Phases 2–4 (config/dev-tools, plugins, advanced) are
-sketched in the design and get their own build plans just-in-time once Phase 1 lands.
+**Phase 1 (text-first conversation loop + voice) is built.** A human can create a conversation
+against a Hoodat character and exchange typed-bubble turns; model dialogue/narration can be
+synthesized to audio with a per-item reveal cadence (degrades to text when voice is off or the
+`voice` capability is absent). Phases 2–4 (config/dev-tools, plugins, advanced) are sketched in the
+design and get their own build plans just-in-time.
 
-## How it will work (Phase 1)
+## How it works (Phase 1)
 
 1. Open **Apps** (`/apps`) → the **Prattletale** card → `/apps/prattletale/`.
 2. The landing page lists conversations. **+ New conversation** picks a Hoodat counterpart, a
@@ -35,5 +38,5 @@ sketched in the design and get their own build plans just-in-time once Phase 1 l
 5. Reloading restores the full transcript from disk.
 
 **Prerequisite:** a default LLM endpoint (Server → LLM → Endpoints), used via
-`get_default_as_chain_llm_config()`. Voice (a later session) additionally needs the `voice`
-capability; without it Prattletale degrades to text.
+`get_default_as_chain_llm_config()`. Voice additionally needs the `voice` capability and a narrator
+voice (Prattletale settings); without it Prattletale degrades to text.
