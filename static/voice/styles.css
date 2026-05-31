@@ -56,9 +56,58 @@
   background: var(--color-bg-raised); border: 1px solid var(--color-border-mid);
   border-radius: 3px; padding: 1px 6px;
 }
-.sfx-play {
-  margin: 4px 0 0; padding: 5px 10px; font-size: 0.74rem; align-self: flex-start;
+.sfx-card-actions { display: flex; gap: 6px; margin-top: 4px; }
+.sfx-play { margin: 0; padding: 5px 10px; font-size: 0.74rem; }
+.sfx-add  { margin: 0; padding: 5px 9px; font-size: 0.78rem; line-height: 1; }
+.sfx-add[disabled] { opacity: 0.35; }
+
+/* ── SFX L2 nav (Explorer / Synthesis) ── */
+#sfx-l2-nav {
+  display: flex; gap: 2px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--color-border-mid);
 }
+.l2-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--color-text-muted); font: inherit; font-size: 0.78rem;
+  padding: 8px 14px; border-bottom: 2px solid transparent; margin: 0;
+}
+.l2-btn:hover  { color: #999; }
+.l2-btn.active { color: var(--color-text); border-bottom-color: var(--color-accent); }
+
+/* ── Synthesis builder ── */
+.sfx-synth-help { font-size: 0.76rem; color: var(--color-text-muted); margin: 0 0 14px; max-width: 640px; }
+.sfx-synth-help em { color: var(--color-text-sub); font-style: italic; }
+
+#sfx-synth-list { display: flex; flex-direction: column; gap: 6px; max-width: 640px; }
+.sfx-synth-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--color-bg-panel); border: 1px solid var(--color-border-mid);
+  border-radius: 6px; padding: 6px 10px;
+}
+.sfx-synth-idx { color: var(--color-text-muted); font-size: 0.72rem; min-width: 1.2em; text-align: right; }
+.sfx-synth-label { flex: 1; font-size: 0.8rem; color: var(--color-text); word-break: break-word; }
+.sfx-synth-delay { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; color: var(--color-text-muted); margin: 0; }
+.sfx-synth-delay-in { width: 64px; margin: 0; }
+.sfx-synth-row button { margin: 0; padding: 3px 8px; font-size: 0.74rem; }
+
+#sfx-synth-actions { display: flex; gap: var(--gap-sm); margin: 14px 0 10px; }
+#sfx-synth-player { display: block; width: 100%; max-width: 640px; margin: 4px 0; }
+.sfx-synth-save { display: flex; gap: var(--gap-sm); align-items: center; margin: 10px 0 4px; max-width: 640px; }
+.sfx-synth-save input { flex: 1; margin: 0; }
+
+.sfx-saved-head {
+  margin: 24px 0 10px; font-size: 0.74rem; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--color-text-sub);
+}
+#sfx-saved { display: flex; flex-direction: column; gap: 6px; max-width: 640px; }
+.sfx-saved-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--color-bg-panel); border: 1px solid var(--color-border-mid);
+  border-radius: 6px; padding: 6px 10px;
+}
+.sfx-saved-name { flex: 1; font-size: 0.8rem; color: var(--color-text); word-break: break-word; }
+.sfx-saved-meta { font-size: 0.7rem; color: var(--color-text-muted); white-space: nowrap; }
+.sfx-saved-row button { margin: 0; padding: 3px 9px; font-size: 0.74rem; }
 
 /* ── Mobile: stack the Voice two-panel view (panels themselves stack via
    responsive.css; the new #voice-view wrapper needs to follow suit) ── */

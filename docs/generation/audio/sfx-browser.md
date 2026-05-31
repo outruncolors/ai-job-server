@@ -1,12 +1,14 @@
 # SFX browser
 
-The **SFX** section of the Audio page (`/voice`, L1 nav → **SFX**) is a read-only grid for
-scanning and auditioning the sound-effect / emote clips that have been imported into the SFX
-service. It does not edit, tag, import, or delete clips — just browse and play.
+The **SFX** section of the Audio page (`/voice`, L1 nav → **SFX**) is where you work with the
+sound-effect / emote clips imported into the SFX service. It has an **L2 nav** with two tabs:
 
-## How it works
+- **Explorer** — a read-only grid to scan and audition clips (browse + play only).
+- **Synthesis** — combine clips into a new sample with delays between them, then save it.
 
-The page loads `GET /v1/sfx/packs` once on first open and does all filtering and sorting
+## Explorer
+
+The Explorer loads `GET /v1/sfx/packs` once on first open and does all filtering and sorting
 client-side from the cached structure (one round trip, no per-clip calls).
 
 Scope a view with the two leftmost selectors, then narrow and order it:
@@ -23,8 +25,28 @@ Scope a view with the two leftmost selectors, then narrow and order it:
 - **Sort** — by name, category, or duration.
 
 Each card shows the clip's category, duration, description and tag chips, with a **▶ Play**
-button. Playback runs through one shared `<audio>` player at the top of the view; the active
-card is highlighted. Clips stream from `GET /v1/sfx/file/{path}`.
+button and a **➕** button that adds the clip to the Synthesis builder. Playback runs through
+one shared `<audio>` player at the top of the view; the active card is highlighted. Clips
+stream from `GET /v1/sfx/file/{path}`.
+
+## Synthesis
+
+The Synthesis tab combines clips into a single new sample. Add clips from the Explorer with
+**➕** (the tab shows a count), then in **Synthesis**:
+
+- Reorder rows (↑ / ↓), remove them (✕), and set a **delay (ms)** of silence inserted *after*
+  each clip — the trailing delay of the last clip is ignored.
+- **Synthesize** posts the clip list to `POST /v1/sfx/synthesize`, which concatenates the
+  clips (normalized to 48 kHz mono 16-bit) and returns one WAV to preview.
+- **Save** (with a name) persists it via `POST /v1/sfx/synthesis`. Saved samples are listed
+  below with play (`GET /v1/sfx/synthesis/{id}/file`) and delete; they live in the gitignored
+  `config/sfx_synthesis/` tree (`index.json` + `<id>.wav`), mirroring the voice-presets layout.
+
+This tab is the first step of a feature that will grow over time. Current limits:
+
+- **WAV clips only** — parselmouth (the only available decoder) can't read the OGG packs and
+  there's no system decoder, so the Explorer's ➕ button is disabled for OGG clips and the
+  endpoint rejects them with a clear error. The bulk of the emote library is WAV.
 
 ## Related
 

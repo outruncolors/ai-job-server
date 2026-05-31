@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import store
+from . import store, synthesis
 from .models import Identity, identity_label
 
 router = APIRouter(prefix="/v1/sfx", tags=["sfx"])
@@ -80,3 +80,58 @@ def get_file(rel_path: str):
     if path is None:
         raise HTTPException(status_code=404, detail="sfx file not found")
     return FileResponse(path, media_type=_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"))
+
+
+# ── Synthesis: combine clips (+ delays) into one sample ────────────────────
+
+class SynthClip(BaseModel):
+    path: str
+    delay_ms: int = 0
+
+
+class SynthesizeRequest(BaseModel):
+    clips: list[SynthClip]
+
+
+class SaveSynthesisRequest(BaseModel):
+    name: str = ""
+    clips: list[SynthClip]
+
+
+@router.post("/synthesize")
+def synthesize(req: SynthesizeRequest):
+    """Combine clips into one WAV and return the bytes (preview, not saved)."""
+    try:
+        wav_bytes, duration_ms = synthesis.synthesize([c.model_dump() for c in req.clips])
+    except synthesis.SynthesisError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return Response(content=wav_bytes, media_type="audio/wav",
+                    headers={"X-Duration-Ms": str(duration_ms)})
+
+
+@router.get("/synthesis")
+def list_synthesis() -> dict:
+    return {"samples": synthesis.list_samples()}
+
+
+@router.post("/synthesis")
+def save_synthesis(req: SaveSynthesisRequest) -> dict:
+    try:
+        return synthesis.save_sample(req.name, [c.model_dump() for c in req.clips])
+    except synthesis.SynthesisError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/synthesis/{sample_id}/file")
+def get_synthesis_file(sample_id: str):
+    path = synthesis.sample_path(sample_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="synthesis sample not found")
+    return FileResponse(path, media_type="audio/wav")
+
+
+@router.delete("/synthesis/{sample_id}")
+def delete_synthesis(sample_id: str) -> dict:
+    if not synthesis.delete_sample(sample_id):
+        raise HTTPException(status_code=404, detail="synthesis sample not found")
+    return {"ok": True}

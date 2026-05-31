@@ -87,6 +87,17 @@ categories from the source folder name.
 | `GET /identities` | selectable identity profiles (base + pitch), for Hoodat |
 | `POST /preview` | resolve one clip (by `effect_id`, or weighted-random in a category) → served URL |
 | `GET /file/{rel_path}` | serve a clip (path-traversal guarded under `SFX_ROOT`) |
+| `POST /synthesize` | combine `{clips:[{path, delay_ms}]}` → one preview WAV (not saved) |
+| `GET /synthesis` | list saved synthesized samples |
+| `POST /synthesis` | synthesize + save `{name, clips}` → index record |
+| `GET /synthesis/{id}/file` | serve a saved sample |
+| `DELETE /synthesis/{id}` | delete a saved sample |
+
+**Synthesis** (`app/sfx/synthesis.py`) concatenates clips with per-clip trailing silence,
+normalizing each to 48 kHz mono 16-bit via parselmouth. **WAV only** — the OGG packs can't be
+decoded (no Vorbis decoder available), so non-WAV clips are rejected. Saved samples live in the
+gitignored `config/sfx_synthesis/` (`index.json` + `<id>.wav`). See the
+[SFX browser](../generation/audio/sfx-browser.md) for the UI.
 
 ## Resolver
 

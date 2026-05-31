@@ -339,34 +339,69 @@
     <!-- ════════════ SFX view ════════════ -->
     <div id="sfx-view" style="display:none;">
 
-      <div id="sfx-controls">
-        <label class="sfx-ctl">Pack
-          <select id="sfx-pack"></select>
-        </label>
-        <label class="sfx-ctl">Profile
-          <select id="sfx-profile"></select>
-        </label>
-        <label class="sfx-ctl sfx-ctl-grow">Search
-          <input type="search" id="sfx-search" placeholder="description, id, tag…" autocomplete="off">
-        </label>
-        <label class="sfx-ctl">Category
-          <select id="sfx-category"><option value="">All</option></select>
-        </label>
-        <label class="sfx-ctl">Tag / domain
-          <select id="sfx-tag"><option value="">All</option></select>
-        </label>
-        <label class="sfx-ctl">Sort
-          <select id="sfx-sort">
-            <option value="name">Name</option>
-            <option value="category">Category</option>
-            <option value="duration">Duration</option>
-          </select>
-        </label>
+      <!-- ── L2 nav: Explorer / Synthesis ── -->
+      <div id="sfx-l2-nav">
+        <button class="l2-btn active" data-l2="explorer"  onclick="switchSfxTab('explorer')">Explorer</button>
+        <button class="l2-btn"        data-l2="synthesis" onclick="switchSfxTab('synthesis')">Synthesis</button>
       </div>
 
-      <audio id="sfx-player" controls preload="none"></audio>
-      <div id="sfx-count" class="sfx-count"></div>
-      <div id="sfx-grid"></div>
+      <!-- ── Explorer: browse + audition clips ── -->
+      <div id="sfx-explorer">
+        <div id="sfx-controls">
+          <label class="sfx-ctl">Pack
+            <select id="sfx-pack"></select>
+          </label>
+          <label class="sfx-ctl">Profile
+            <select id="sfx-profile"></select>
+          </label>
+          <label class="sfx-ctl sfx-ctl-grow">Search
+            <input type="search" id="sfx-search" placeholder="description, id, tag…" autocomplete="off">
+          </label>
+          <label class="sfx-ctl">Category
+            <select id="sfx-category"><option value="">All</option></select>
+          </label>
+          <label class="sfx-ctl">Tag / domain
+            <select id="sfx-tag"><option value="">All</option></select>
+          </label>
+          <label class="sfx-ctl">Sort
+            <select id="sfx-sort">
+              <option value="name">Name</option>
+              <option value="category">Category</option>
+              <option value="duration">Duration</option>
+            </select>
+          </label>
+        </div>
+
+        <audio id="sfx-player" controls preload="none"></audio>
+        <div id="sfx-count" class="sfx-count"></div>
+        <div id="sfx-grid"></div>
+      </div><!-- /sfx-explorer -->
+
+      <!-- ── Synthesis: combine clips with delays, play, save ── -->
+      <div id="sfx-synthesis" style="display:none;">
+        <p class="sfx-synth-help">
+          Add clips from the <strong>Explorer</strong> (➕), then arrange them and set the
+          delay after each. Synthesize to preview, then save. <em>WAV clips only for now.</em>
+        </p>
+
+        <div id="sfx-synth-list"></div>
+
+        <div id="sfx-synth-actions">
+          <button type="button" id="sfx-synth-run" onclick="runSynthesis()">Synthesize</button>
+          <button type="button" class="secondary" id="sfx-synth-clear" onclick="clearSynthesis()">Clear</button>
+        </div>
+
+        <audio id="sfx-synth-player" controls preload="none"></audio>
+
+        <div class="sfx-synth-save">
+          <input type="text" id="sfx-synth-name" placeholder="Name this sample…" autocomplete="off">
+          <button type="button" id="sfx-synth-save" onclick="saveSynthesis()" disabled>Save</button>
+        </div>
+        <div id="sfx-synth-msg" class="sfx-count"></div>
+
+        <h4 class="sfx-saved-head">Saved samples</h4>
+        <div id="sfx-saved"></div>
+      </div><!-- /sfx-synthesis -->
 
     </div><!-- /sfx-view -->
 
