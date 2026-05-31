@@ -70,21 +70,24 @@ parentheticals, and other non-spoken symbols, so the result sounds right over TT
 
 ## Data model
 
-File-per-document at `config/prompt_pal/<id>.json`:
+File-per-document at `config/prompt_pal/<id>.json`, in the unified [Cruddable envelope](packs.md):
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `id` | uuid | stable surrogate; what `?highlight=` and the filename use |
-| `schema_version` | int | `1` |
-| `app` | string | owning app, e.g. `"hoodat"` — **immutable** |
-| `key` | string | code-facing id, e.g. `"IDEATE"` / `"field.appearance.primary_outfit"` — **immutable** |
-| `title` | string | |
+| `schema_version` | int | envelope format version (`1`) |
+| `type` | string | `"prompt_pal"` |
+| `id` | slug | derived from `app_key` (e.g. `hoodat_ideate`); the `?highlight=` surrogate + filename |
+| `name` | string | display title |
 | `description` | string | |
 | `tags` | string[] | |
-| `prompt` | string | the body (may contain `{{var.NAME}}` and chain tokens) |
-| `variables` | object | compose variables (literal, nested node, or `{prompt_id}`) |
-| `guard` | object? | optional `{enabled, prompt, variables}` editor pass (see above) |
+| `data.app` | string | owning app, e.g. `"hoodat"` (entries with no owning app default to `"system"`) — **immutable** |
+| `data.key` | string | code-facing id, e.g. `"IDEATE"` / `"field.appearance.primary_outfit"` — **immutable** |
+| `data.prompt` | string | the body (may contain `{{var.NAME}}` and chain tokens) |
+| `data.variables` | object | compose variables (literal, nested node, or `{prompt_id}`) |
+| `data.guard` | object? | optional `{enabled, prompt, variables}` editor pass (see above) |
 | `created_at`, `updated_at` | ISO 8601 | |
+
+The logical identity code references is `(data.app, data.key)`; the slug `id` is derived from it. A Prompt Pal entry is a [cruddable](../management/cruddables.md): Export / Copy / Extend the registry, or ship prompt sets in a [Pack](packs.md).
 
 ## Endpoints
 
@@ -110,14 +113,14 @@ Hoodat uses it to give each field a **✨ Generate** (fill the field from the re
 the document) and **✏️ Edit prompt** (deep-link to that field's Prompt Pal entry)
 button, and the avatar a **Replace** control.
 
-## Migrating an app onto Prompt Pal
+## Onboarding an app onto Prompt Pal
 
-1. In the app's `prompts.py`, keep the literal prompt strings and add a
-   `register("<app>", "<key>", title=…, prompt=<literal>, …)` for each.
-2. Replace direct prompt lookups with `get_text("<app>", "<key>")` (Blaboratory's
-   `get_prompt` is now a one-liner wrapper around this).
+1. In the app's `prompts.py`, define each prompt as a literal string and
+   `register("<app>", "<key>", title=…, prompt=<literal>, …)` for it.
+2. Look prompts up with `get_text("<app>", "<key>")` rather than referencing the
+   literal directly.
 3. Ensure the app's prompts module is listed in `registry._PROMPT_MODULES` so
    `seed_registered()` imports it.
 
-Because `get_text` falls back to the in-code default when the store is empty,
-existing behavior and tests keep working before anything is seeded.
+Because `get_text` falls back to the in-code default when the store is empty, an
+app works on a fresh checkout (and in tests) before anything is seeded.

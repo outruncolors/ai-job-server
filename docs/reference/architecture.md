@@ -47,6 +47,18 @@ app/
     registry.py          register() table + seed_registered() (seed-if-absent)
     service.py           get_text(app, key) — store-wins-else-default; id_for()
     router.py            /v1/prompt-pal/entries CRUD + /preview
+  cruddables/            Unified envelope over every in-scope CRUD type
+    envelope.py          Cruddable model + slugify/unique_id/now_iso
+    base.py              CruddableAdapter ABC (list/get/upsert/delete/migrate_native)
+    adapters/            One adapter per type, wrapping its store
+    registry.py          REGISTRY, get_adapter(type), list_types()
+    service.py           apply_items() — routes each item by its own type, reports per item
+    router.py            /v1/cruddables/{types, {type}/export, {type}/extend}
+    migrate.py           Idempotent reshape/re-slug migration to the envelope
+  packs/                 Curated bundles of envelopes (builtin + user trees)
+    store.py             packs/ (builtin) + config/packs/ (user shadows builtin)
+    service.py           apply_pack(type, id) → cruddables.service.apply_items
+    router.py            /v1/packs/{packs, {type}/{id}, {type}/{id}/apply}
   apps/                  Consumer experiences (own package per app)
     blaboratory/         Virtual lab of AI residents (rooms, sim, memory)
     hoodat/              Character creation/management
@@ -187,3 +199,5 @@ Step runners under `app/chain/steps/` raise on failure. The executor owns all st
 **Step runner isolation.** Steps know how to do their work and raise on failure. The executor owns all status and log state. This prevents circular imports and concentrates I/O concerns.
 
 **Static SPA UI.** No template engine. Each page is a self-contained set of HTML/CSS/JS in `static/<page>/`. `nav.js` builds the nav from a single config array shared by every page.
+
+**One on-disk shape per CRUD entity.** Every in-scope cruddable (`wildcard`, `context_item`, `image_prompt`, `chain_sequence`, `prompt_pal`, `hoodat_character`) persists the same unified envelope — shared meta fields plus a typed `data` payload, keyed by a human-readable slug `id`. On-disk shape == export shape == envelope, which is what makes a type exportable, LLM-generatable, and bundleable into a [Pack](../tools/packs.md). Each store is the envelope boundary: it persists envelopes but its domain API still returns the flat domain doc, so the rest of the app is unaffected. See [Packs](../tools/packs.md) and [Cruddables](../management/cruddables.md).

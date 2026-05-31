@@ -36,10 +36,9 @@ re-import, and bundle into **Packs**.
 | `hoodat_character` | the `Character` body (identity fields + `appearance`/`personality`/`background`/`speaking_style` blocks + `experiences`/`qa` + `avatar_path`) + `content_version` |
 
 Wildcards are referenced by **name** (`%%name%%`); context items and sequences are
-referenced by **id**. The one-time re-slug migration (`app/cruddables/migrate.py`, already
-applied — run via `python -m app.cruddables.migrate`) converted every legacy uuid-keyed doc to a
-human slug id, fixing those reference sites (`chain_sequence` step `sequence_id`/`context_ids`) and
-re-keying hoodat avatar files + `data.avatar_path`. It is idempotent, so re-running is a safe no-op.
+referenced by **id**. Because every `id` is a stable human slug, those reference sites
+(`chain_sequence` step `sequence_id` / `context_ids`, and hoodat avatar files keyed by
+`data.avatar_path`) stay readable and portable across machines.
 
 ## Packs
 
@@ -98,7 +97,7 @@ valid `data`), writes `packs/<type>/<pack_id>.json`, and validates each item aga
 | `app/cruddables/registry.py` | `REGISTRY`, `get_adapter`, `list_types` |
 | `app/cruddables/service.py` | `apply_items(items, expected_type=None)` — shared upsert/report |
 | `app/cruddables/router.py` | `/v1/cruddables/{types, {type}/export, {type}/extend}` |
-| `app/cruddables/migrate.py` | one-time re-slug migration (uuid→slug, reshape, ref-fix, avatar re-key); idempotent, already applied |
+| `app/cruddables/migrate.py` | Idempotent reshape/re-slug migration to the envelope (`python -m app.cruddables.migrate`) |
 | `app/packs/store.py` | two-tree pack file store (builtin + user) |
 | `app/packs/service.py` | `apply_pack(type, id)` → `apply_items` |
 | `app/packs/router.py` | `/v1/packs/*` |

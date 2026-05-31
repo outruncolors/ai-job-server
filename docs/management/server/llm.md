@@ -5,7 +5,7 @@ Two sub-tabs sitting under one page:
 - **Models** — llama.cpp load presets (what GGUF + CLI args to load on the LLM-capable peer). Reads/writes `/v1/llm-presets`. Full schema reference in [LLM Models](../../tools/llm-presets.md).
 - **Endpoints** — OpenAI-compatible HTTP destinations (where to POST chat completions). Reads/writes `/v1/llm-endpoints`.
 
-Both surfaces lived as separate pages before multi-machine; the consolidation makes the relationship between them visible. When a chain LLM step has a preset selected (or `default_preset` is set in the peer's `config/llamacpp.json`), the **endpoint's api_base + model fields are overridden at runtime** to point at the LLM-capable peer — so for a typical multi-machine setup the endpoint values are placeholders. Endpoints still matter for voice auto-segmentation and legacy chains without a preset.
+The two surfaces share one page so the relationship between them stays visible. When a chain LLM step has a preset selected (or `default_preset` is set in the peer's `config/llamacpp.json`), the **endpoint's api_base + model fields are overridden at runtime** to point at the LLM-capable peer — so for a typical multi-machine setup the endpoint values are placeholders. Endpoints still matter for voice auto-segmentation and for chains that run without a preset.
 
 ## Models sub-tab
 
@@ -48,4 +48,4 @@ The default preset is the one [ticks](../../tools/ticks.md) and any chain submit
 | DELETE | `/v1/llm-endpoints/{id}` | Remove |
 | PUT | `/v1/llm-endpoints/default` | Set default by id |
 
-> Prior to the multi-machine work this route lived at `/v1/llm-presets`; `/v1/llm-presets` now addresses llama.cpp **model load** presets (a different concept).
+> Mind the two route prefixes: `/v1/llm-endpoints` (here) is for HTTP destinations, while `/v1/llm-presets` addresses llama.cpp **model load** presets — a different concept, served by the Models sub-tab.

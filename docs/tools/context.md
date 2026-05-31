@@ -10,16 +10,20 @@ The Context Library is a small CMS for reusable text blocks. Items are reference
 
 ## Data model
 
-Stored in `config/context_items/index.json`:
+Stored in `config/context_items/index.json` as [Cruddable envelopes](../management/cruddables.md):
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `id` | uuid | |
-| `title` | string | required |
+| `schema_version` | int | envelope format version (`1`) |
+| `type` | string | `"context_item"` |
+| `id` | slug | human-readable, unique within type; chain steps reference items by this id (`context_ids`) |
+| `name` | string | display title (the UI/API "Title" field maps here) |
 | `description` | string | optional |
 | `tags` | string[] | free-form |
-| `content` | string | the text injected into prompts |
+| `data.content` | string | the text injected into prompts |
 | `created_at`, `updated_at` | ISO 8601 | |
+
+A context item is a [cruddable](../management/cruddables.md): Export / Copy / Extend the library, or ship reusable blocks in a [Pack](packs.md).
 
 ## How it's used
 

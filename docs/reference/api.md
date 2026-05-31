@@ -241,6 +241,31 @@ Not capability-gated.
 | DELETE | `/v1/prompt-pal/entries/{id}` | Remove |
 | POST | `/v1/prompt-pal/entries/{id}/preview` | `{ "variables": {...}, "target": "prompt"\|"guard" }` → composed `{ "text": ... }` |
 
+## Cruddables
+
+Every in-scope CRUD entity is stored as one unified [envelope](../tools/packs.md) shape, so any
+type can be exported as a JSON array, edited (or LLM-generated), and re-imported by `id`. In-scope
+types: `wildcard`, `context_item`, `image_prompt`, `chain_sequence`, `prompt_pal`, `hoodat_character`.
+See [Cruddables](../management/cruddables.md).
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/cruddables/types` | `{ types: [{type, label, count}] }` |
+| GET | `/v1/cruddables/{type}/export` | Envelope array for the type |
+| POST | `/v1/cruddables/{type}/extend` | Upsert an envelope array by `id` → `{ created, updated, errored, results }` |
+
+## Packs
+
+A pack bundles fully-formed envelopes; applying one routes its `items` through the same upsert as
+`extend`. Builtin packs live in `packs/<type>/<id>.json`; user packs in `config/packs/<type>/<id>.json`
+(user shadows builtin). See [Packs](../tools/packs.md).
+
+| Method | Path | |
+|--------|------|---|
+| GET | `/v1/packs/packs` | Pack summaries (`{id, name, description, tags, type, item_count, source}`) |
+| GET | `/v1/packs/{type}/{id}` | Full pack doc |
+| POST | `/v1/packs/{type}/{id}/apply` | Apply → `apply_items` report (+ `pack` field) |
+
 ## Apps — Hoodat
 
 Character creation/management (see [Hoodat](../apps/hoodat/index.md)). Prefix `/v1/apps/hoodat`.

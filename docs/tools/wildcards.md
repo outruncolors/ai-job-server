@@ -18,15 +18,20 @@ Every prompt field on the site exposes a `%%` popover that lists known wildcards
 
 ## Data model
 
-Stored in `config/wildcards/index.json`:
+Stored in `config/wildcards/index.json` as [Cruddable envelopes](../management/cruddables.md):
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `id` | uuid | |
+| `schema_version` | int | envelope format version (`1`) |
+| `type` | string | `"wildcard"` |
+| `id` | slug | human-readable, unique within type. Wildcards are referenced by **name** (`%%name%%`), not id |
 | `name` | string | the token identifier; case-sensitive |
 | `description` | string | optional one-line note shown in the list and autocomplete |
-| `entries` | `{text, weight}[]` | at least one required, no empty text |
+| `tags` | string[] | envelope meta |
+| `data.entries` | `{text, weight}[]` | at least one required, no empty text |
 | `created_at`, `updated_at` | ISO 8601 | |
+
+A wildcard is a [cruddable](../management/cruddables.md): Export / Copy / Extend the whole collection, or ship a vocabulary in a [Pack](packs.md).
 
 ## Expansion
 

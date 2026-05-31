@@ -6,15 +6,20 @@ The same data backs two places: the **Save / Load** toolbar above the prompt tex
 
 ## Data model
 
-Stored at `config/image_prompts/index.json` (gitignored).
+Stored at `config/image_prompts/index.json` (gitignored) as [Cruddable envelopes](../../management/cruddables.md).
 
 | Field | Notes |
 |---|---|
-| `id` | UUID |
+| `schema_version` | Envelope format version (`1`) |
+| `type` | `"image_prompt"` |
+| `id` | Human-readable slug, unique within type |
 | `name` | Required. Unique — duplicates are auto-suffixed `(2)`, `(3)`, … on create or rename |
-| `prompt` | Required. The text injected into the workflow's `PROMPT` node |
-| `workflow` | Optional. Filename (without `.json`) of a ComfyUI workflow, or `null` for generic |
+| `description` / `tags` | Envelope meta |
+| `data.prompt` | Required. The text injected into the workflow's `PROMPT` node |
+| `data.workflow` | Optional. Filename (without `.json`) of a ComfyUI workflow, or `null` for generic |
 | `created_at` / `updated_at` | ISO timestamps |
+
+A saved image prompt is a [cruddable](../../management/cruddables.md): Export / Copy / Extend the library, or ship prompts in a [Pack](../../tools/packs.md).
 
 ## UI
 

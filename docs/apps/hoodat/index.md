@@ -94,17 +94,22 @@ which ones it shows. `dialogue_examples`, `outfits`, `experiences`, and `qa` are
 intentionally **not** in `FIELD_SPECS`: they are list-of-objects/few-shot fields
 the frontend owns and generates one item at a time (see below).
 
-**Migration (v1 → v2):** older characters carried flat `hair` / `eyes` /
-`primary_outfit`. A `model_validator(mode="before")` on `Appearance` hoists them
-into `hair_color` / `eye_color` / a single primary `outfits` entry, and the store
-normalizes legacy docs on read (`schema_version` bumped to `2`), so no data is
-lost and the UI never sees the old shape.
+**Read-normalization:** the store tolerates flat/older character docs on read — a
+`model_validator(mode="before")` on `Appearance` maps any flat `hair` / `eyes` /
+`primary_outfit` into `hair_color` / `eye_color` / a single primary `outfits`
+entry, so callers only ever see the current v2 shape.
 
 ## How it works
 
 - **Store** (`characters_store.py`) — file-per-document JSON at
-  `config/hoodat/characters/<id>.json`; `update_character_fields(id, patch)`
-  deep-merges nested-section patches.
+  `config/hoodat/characters/<id>.json`, persisted as the unified
+  [Cruddable envelope](../../tools/packs.md) (`type="hoodat_character"`, the
+  `Character` body under `data`). The store is the envelope boundary: its flat-body
+  API (`get_character` / `create_character` / `update_character_fields`, which
+  deep-merges nested-section patches) returns the flat `Character` doc, so the
+  router, generator, avatars, and frontend are unaffected. A character is therefore a
+  [cruddable](../../management/cruddables.md) — Export / Copy / Extend characters or
+  ship them in a [Pack](../../tools/packs.md) (the `starter_hero` builtin pack is one).
 - **Generator** (`generator.py`) — runs the chain executor **directly** (not the
   shared `JobQueue`), mirroring Blaboratory. `run_create()` does ideate → assemble,
   parses strict JSON with ≤2 retries, merges the user's name, and persists.
