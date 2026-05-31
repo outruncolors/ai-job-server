@@ -126,12 +126,19 @@ plus a typed `data` payload. On-disk shape == export shape == envelope (single s
 exportable, LLM-generatable, bundleable into Packs). IDs are human-readable underscore slugs;
 pack items end `_pack_<pack_id>`. Full contract: `docs/tools/packs.md`.
 
-**Migrated types (5 of 6):** `wildcard`, `context_item`, `image_prompt`, `chain_sequence`,
-`prompt_pal` — each store persists the envelope (`data.*` payload), tolerates legacy docs on
-read (`migrate_native`), and exposes `upsert_envelope(dict)→(action,id)`. `chain_sequence`
-keeps `steps`/`variables` under `data` with `data.content_version` (envelope `schema_version`=1).
-`prompt_pal` identity is logical `(data.app, data.key)`; `id = slug(app_key)`; no-app→`app="system"`.
-**Pending:** `hoodat_character` (largest — nested body→`data`, avatar re-keying, big `profile.js`).
+**Migrated types (all 6):** `wildcard`, `context_item`, `image_prompt`, `chain_sequence`,
+`prompt_pal`, `hoodat_character` — each store persists the envelope (`data.*` payload), tolerates
+legacy docs on read (`migrate_native`), and exposes `upsert_envelope(dict)→(action,id)`.
+`chain_sequence` keeps `steps`/`variables` under `data` with `data.content_version` (envelope
+`schema_version`=1). `prompt_pal` identity is logical `(data.app, data.key)`; `id = slug(app_key)`;
+no-app→`app="system"`. `hoodat_character` nests the whole `Character` body under `data` with
+`data.content_version`; the **store is the envelope boundary** — its flat-body API
+(`get_character`/`list_characters`/`create_character`/`save_character`/`update_character_fields`)
+still returns the flat `Character` doc so router/generator/avatars/exports/`profile.js` are
+unchanged, while `list_envelopes`/`get_envelope`/`upsert_envelope` back the adapter. `create_character`
+now assigns a slug id (was uuid); existing uuid-keyed docs + avatars are tolerated until the
+re-slug migration. **Pending:** the one-time live re-slug `migrate.py` (do LAST; includes hoodat
+avatar re-keying).
 
 | File | Purpose |
 |------|---------|
@@ -153,14 +160,15 @@ auto-served by the root `StaticFiles(html=True)` mount — no page routes. **app
 applying a pack routes its `items` through the same `apply_items` as a pasted Extend, upserting
 by `id` (re-applying overwrites local edits to a pack item). For `chain_sequence`, apply runs
 structural validation but skips capability validation (cross-machine packs). Example builtin
-pack: `packs/wildcard/basic_colors.json`. Tests: `tests/packs/`, `tests/cruddables/`.
+packs: `packs/wildcard/basic_colors.json`, `packs/hoodat_character/starter_hero.json`. Tests:
+`tests/packs/`, `tests/cruddables/`.
 
 ### Hoodat — character creation/management (`app/apps/hoodat/`, `static/apps/hoodat/`)
 
 | File | Purpose |
 |------|---------|
 | `app/apps/hoodat/models.py` | `Character` (**v2**, nested `Appearance`/`Personality`/`Background`/`SpeakingStyle` blocks + top-level Identity fields + top-level `experiences: list[Experience]` + top-level `qa: list[QAPair]` (`{question, answer}`, AliChat interview exemplars, frontend-owned) + server `avatar_path`) + `CharacterDraft` (all-Optional LLM target). `Appearance` is split into Basics (incl. `hair_color`/`hair_details`/`eye_color`/`eye_details`), flat Nude fields (shared + male-only `penis`/`testicles` + female-only `breasts`/`vulva`; UI-gated on `sex`, kept flat so the standard `field.appearance.<x>` path works), and `outfits: list[Outfit]` (garment slots + one `primary`). `SpeakingStyle.dialogue_examples`, `Appearance.outfits`, and `experiences` are **not** in `FIELD_SPECS` — list-of-objects/few-shot, frontend-owned. A `model_validator(mode='before')` on `Appearance` migrates v1 flat `hair`/`eyes`/`primary_outfit` → v2 (the store also normalizes legacy docs on read; `schema_version`→2). `FIELD_SPECS` (section→field→{label,kind}) is the single source of truth for generatable scalar/list fields (drives prompt registration, patch-building, normalization). |
-| `app/apps/hoodat/characters_store.py` | File-per-doc at `config/hoodat/characters/<id>.json` (mirrors residents_store); `update_character_fields(id, patch)` deep-merges nested-section patches. |
+| `app/apps/hoodat/characters_store.py` | File-per-doc at `config/hoodat/characters/<id>.json` — **Cruddable envelope on disk** (`type="hoodat_character"`, the `Character` body under `data` + `data.content_version`). Store is the envelope boundary: flat-body API (`get_character`/`list_characters`/`create_character` [slug id]/`save_character`/`update_character_fields` deep-merges nested-section patches) returns the flat `Character` doc; `list_envelopes`/`get_envelope`/`upsert_envelope` back the cruddable adapter. Legacy flat/v1 docs tolerated on read; tags ride the envelope, not the body. |
 | `app/apps/hoodat/prompts.py` | Registers Prompt Pal entries: `IDEATE`/`ASSEMBLE` (create chain) + one `field.<section>.<field>` per generatable field + `dialogue.example` + `experience.example` (`{{var.character}}`+`{{var.experiences}}` → JSON `{description,valence}`) + `qa.answer` (`{{var.character}}`+`{{var.question}}`+`{{var.qa}}`) + `qa.question` (suggest helper) + `outfit.full`/`outfit.slot` + `avatar.image_prompt` (templated). `dialogue.example` and `qa.answer` carry a **shared spoken-only guard** (`SPOKEN_ONLY_GUARD` / `_spoken_only_guard()`) so their output is TTS-safe (no actions/symbols). `render_character_context(doc)` (explicit appearance render — combined hair/eyes, non-empty Nude block, numbered Outfits, split Positive/Negative experiences, **Q&A pairs last** per AliChat "bottom weighted stronger") / `experiences_split(doc)` / `avatar_prompt_variables(doc)` helpers. |
 | `app/apps/hoodat/generator.py` | `run_create(name, prompt)` (ideate→assemble→parse w/ ≤2 retries→persist) + `run_field(id, section, field)` (single-step, normalize per kind, persist) + `run_dialogue_example(id, examples)` / `run_experience_example(id, experiences)` (returns `{description,valence}`, LLM picks valence) / `run_outfit(id, outfits, outfit)` / `run_outfit_slot(id, slot, outfit, outfits)` / `run_qa_answer(id, question, pairs)` / `run_qa_question(id, pairs)` (single-step, **do not persist** — frontend owns those lists). `_run_single_step(..., guard_prompt=None)` appends a SECOND `llm` "guard" step when given (the guard's output becomes `final_output.txt`); dialogue + qa.answer pass `get_guard("hoodat", key)`. Runs `execute_chain_job` **directly** (not the queue), mirroring blaboratory. |
 | `app/apps/hoodat/avatars.py` | `generate_avatar(id)` (build prompt → `execute_image_job` `workflow="image"` → copy first image artifact to `config/hoodat/avatars/<id>.png`) + `save_uploaded_avatar(id, bytes, ctype)`; sets `avatar_path` to the serve URL. `execute_image_job` imported by name (monkeypatchable). |

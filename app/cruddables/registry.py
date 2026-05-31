@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from .adapters.chain_sequence import ChainSequenceAdapter
 from .adapters.context_item import ContextItemAdapter
+from .adapters.hoodat_character import HoodatCharacterAdapter
 from .adapters.image_prompt import ImagePromptAdapter
 from .adapters.prompt_pal import PromptPalAdapter
 from .adapters.wildcard import WildcardAdapter
@@ -18,6 +19,7 @@ _ADAPTERS: list[CruddableAdapter] = [
     ImagePromptAdapter(),
     ChainSequenceAdapter(),
     PromptPalAdapter(),
+    HoodatCharacterAdapter(),
 ]
 
 REGISTRY: dict[str, CruddableAdapter] = {a.type_name: a for a in _ADAPTERS}

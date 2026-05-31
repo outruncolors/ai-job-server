@@ -33,7 +33,7 @@ re-import, and bundle into **Packs**.
 | `image_prompt` | `{ "prompt": str, "workflow": str\|null }` |
 | `chain_sequence` | `{ "steps": [ChainStep], "variables": [SequenceVariable], "content_version": int }` |
 | `prompt_pal` | `{ "app": str, "key": str, "prompt": str, "variables": {}, "guard": {}\|null }` |
-| `hoodat_character` | character body blocks + `avatar_path` *(migration pending)* |
+| `hoodat_character` | the `Character` body (identity fields + `appearance`/`personality`/`background`/`speaking_style` blocks + `experiences`/`qa` + `avatar_path`) + `content_version` |
 
 Wildcards are still referenced by **name** (`%%name%%`); context items and sequences are
 referenced by **id**, so re-slugging those requires fixing reference sites (see the re-slug

@@ -1,0 +1,72 @@
+{
+  "id": "starter_hero",
+  "name": "Starter Hero",
+  "description": "A ready-made example Hoodat character to explore the profile editor.",
+  "tags": ["Pack", "character", "example"],
+  "items": [
+    {
+      "schema_version": 1,
+      "type": "hoodat_character",
+      "id": "nova_quill_pack_starter_hero",
+      "name": "Nova Quill",
+      "description": "A wandering cartographer who maps places that move.",
+      "tags": ["Pack", "character", "example"],
+      "data": {
+        "content_version": 2,
+        "summary": "A wandering cartographer who maps places that move.",
+        "tagline": "Every map is a promise to come back.",
+        "age": 29,
+        "sex": "female",
+        "occupation": "Cartographer",
+        "appearance": {
+          "height": "5'7\"",
+          "build": "wiry",
+          "skin": "sun-warmed brown",
+          "hair_color": "ink-black",
+          "hair_details": "cropped short, ink-stained at the tips",
+          "eye_color": "amber",
+          "eye_details": "quick, always scanning the horizon",
+          "distinguishing_features": ["compass tattoo on her left wrist"],
+          "outfits": [
+            {
+              "name": "Field Kit",
+              "top": "weathered canvas jacket over a linen shirt",
+              "bottoms": "reinforced travel trousers",
+              "underwear": "",
+              "socks_shoes": "scuffed leather boots",
+              "accessories": "leather satchel of rolled charts; brass compass",
+              "primary": true
+            }
+          ]
+        },
+        "personality": {
+          "traits": ["curious", "stubborn", "warm"],
+          "quirks": ["narrates distances out loud", "collects unusual inks"],
+          "values": ["honesty", "the right to wander"],
+          "fears": ["being lost somewhere she cannot chart"]
+        },
+        "background": {
+          "backstory": "Raised in a port town where the coastline shifted with the tides, Nova learned early that no map stays true for long.",
+          "origin": "the tidal port of Mirewick",
+          "relationships": ["an estranged twin who stayed home"],
+          "affiliations": ["the Itinerant Cartographers' Guild"],
+          "skills": ["dead reckoning", "ink-making", "reading weather"]
+        },
+        "speaking_style": {
+          "description": "Plain-spoken and precise, with a surveyor's habit of measuring things in steps and landmarks.",
+          "voice_preset_id": null,
+          "dialogue_examples": [
+            "Give me a fixed star and a steady hand, and I'll find anywhere twice."
+          ]
+        },
+        "experiences": [
+          { "description": "Charted a marsh that drained overnight, proving her oldest map wrong.", "valence": "negative" },
+          { "description": "Guided a stranded caravan home by the smell of the sea.", "valence": "positive" }
+        ],
+        "qa": [
+          { "question": "What do you do when the map is wrong?", "answer": "I trust my feet over the paper, and then I fix the paper." }
+        ]
+      }
+    }
+  ]
+}

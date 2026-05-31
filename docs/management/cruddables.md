@@ -40,6 +40,6 @@ Because the on-disk shape is the envelope, Export → edit → Extend is lossles
 
 ## In-scope types
 
-`wildcard`, `context_item`, `image_prompt`, `chain_sequence`, `prompt_pal` are live.
-`hoodat_character` is planned (migration pending). Tickets, voice presets, and LLM
-presets/endpoints are out of scope.
+`wildcard`, `context_item`, `image_prompt`, `chain_sequence`, `prompt_pal`, and
+`hoodat_character` are all live. Tickets, voice presets, and LLM presets/endpoints are
+out of scope.
