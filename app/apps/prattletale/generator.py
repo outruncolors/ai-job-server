@@ -126,16 +126,28 @@ def build_context(conversation: dict, character: dict, transcript: dict) -> dict
 
 # ---- request shape ---------------------------------------------------------
 
-def build_turn_request(context_vars: dict[str, str], llm: ChainLLMConfig) -> ChainJobRequest:
-    """Build the ``[turn, guard]`` chain. The turn step's prompt comes from Prompt
-    Pal with the context vars substituted; the guard step (if the prompt has one)
-    is a second ``llm`` step over ``{{previous}}`` whose output becomes
-    ``final_output.txt``.
+def build_turn_request(
+    context_vars: dict[str, str], llm: ChainLLMConfig, *, variety: bool = True
+) -> ChainJobRequest:
+    """Build the ``turn`` -> (``variety``) -> ``guard`` chain. Each step's prompt
+    comes from Prompt Pal with the context vars substituted; the variety and guard
+    steps run over ``{{previous}}`` (the prior step's output), and the last step's
+    output becomes ``final_output.txt``.
+
+    The optional **variety** pass (anti-monotony) sits between the draft and the
+    format guard so the guard still has the last word on format. It is skipped
+    when ``variety`` is False or the ``(prattletale, variety)`` prompt is empty.
     """
     steps = [_llm_step(1, "turn", "Turn", get_text("prattletale", "turn", variables=context_vars))]
+    number = 2
+    if variety:
+        variety_prompt = get_text("prattletale", "variety", variables=context_vars)
+        if variety_prompt.strip():
+            steps.append(_llm_step(number, "variety", "Variety", variety_prompt))
+            number += 1
     guard_prompt = get_guard("prattletale", "turn")
     if guard_prompt:
-        steps.append(_llm_step(2, "guard", "Guard", guard_prompt))
+        steps.append(_llm_step(number, "guard", "Guard", guard_prompt))
     return ChainJobRequest(
         title="Prattletale turn",
         input=context_vars.get("transcript", ""),
@@ -156,6 +168,7 @@ async def run_model_turn(
     llm: Optional[ChainLLMConfig] = None,
     *,
     replace_turn_id: Optional[str] = None,
+    synthesize: bool = True,
 ) -> tuple[dict, str]:
     """Run the full pipeline for ``conversation_id`` and persist a model turn.
 
@@ -197,7 +210,8 @@ async def run_model_turn(
             )
         resolved = _resolve_llm(llm)
         context_vars = build_context(conversation, character, transcript)
-        request = build_turn_request(context_vars, resolved)
+        variety = bool((conversation.get("config") or {}).get("variety_pass_enabled", True))
+        request = build_turn_request(context_vars, resolved, variety=variety)
 
         status = create_job(JOB_TYPE, request.model_dump(), request.input)
         job_id = status["job_id"]
@@ -218,15 +232,19 @@ async def run_model_turn(
 
         # Voice is additive and best-effort: the text turn is already committed,
         # so a synth failure degrades to text instead of failing the reply.
+        # The live chat path passes synthesize=False and instead synthesizes each
+        # message lazily (per the per-item audio endpoint) so the reply isn't
+        # blocked on every clip; eager synth stays available for other callers.
         voice_error: Optional[str] = None
-        try:
-            audio_map = await synthesize_turn(conversation, character, turn)
-            if audio_map:
-                updated = store.apply_audio(conversation_id, turn["id"], audio_map)
-                if updated is not None:
-                    turn = updated
-        except Exception as exc:  # noqa: BLE001 — never let voice sink the reply
-            voice_error = str(exc)
+        if synthesize:
+            try:
+                audio_map = await synthesize_turn(conversation, character, turn)
+                if audio_map:
+                    updated = store.apply_audio(conversation_id, turn["id"], audio_map)
+                    if updated is not None:
+                        turn = updated
+            except Exception as exc:  # noqa: BLE001 — never let voice sink the reply
+                voice_error = str(exc)
 
         store.write_trace(conversation_id, turn["id"], {
             "job_id": job_id,

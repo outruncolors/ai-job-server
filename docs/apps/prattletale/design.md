@@ -154,10 +154,16 @@ independently testable stages.
    Isolating this function means the later token-budget change (window unit is currently *turns*,
    not tokens) touches nothing else.
 
-2. **Chain call** — one `execute_chain_job` with `steps=[turn, guard]`. The prompt step + the
-   narrative-editor guard step collapse into a single chain; the **guard's** output becomes
-   `final_output.txt`. Scaffold the job with `create_job("prattletale_turn", request.model_dump(),
-   input)` + `find_job_dir`, then `await execute_chain_job(job_id, job_dir, request)`.
+2. **Chain call** — one `execute_chain_job` with `steps=[turn, (variety), guard]`. The prompt step,
+   the optional **variety** pass, and the narrative-editor guard collapse into a single chain; the
+   **last step's** output becomes `final_output.txt`. Scaffold the job with
+   `create_job("prattletale_turn", request.model_dump(), input)` + `find_job_dir`, then
+   `await execute_chain_job(job_id, job_dir, request)`. The **variety** step (gated by
+   `config.variety_pass_enabled`, default on) sits between the draft and the guard: it is given the
+   recent transcript + the drafted reply (`{{previous}}`) and rewrites the draft only when it
+   repeats the structure/opening/length/move of the character's recent messages — the primary lever
+   against conversations getting monotonous. It keeps the tagged-line format, so the guard + parser
+   downstream are unchanged.
 
 3. **`parse_items(raw) -> list[dict]`** — **tagged-line format, not JSON.** The model emits one
    tagged line per bubble:
@@ -168,7 +174,9 @@ independently testable stages.
    Tag→type map: `say`→`dialogue`, `do`→`action`, `narration`→`narration`, `feel`→
    `narration_emotion`. Parser: fence-strip, split on newlines, regex `^\s*\[(\w+)\]\s*(.+)$`; an
    untagged line **coalesces into the previous item's text** (a lone untagged line defaults to
-   `dialogue`); an empty result raises `GenerationError`.
+   `dialogue`); **emoji are stripped deterministically** (`_clean_text`/`_EMOJI_RE`) and an item
+   left empty by the scrub is dropped; an empty result raises `GenerationError`. (The prompt + guard
+   also forbid emoji, but the parser scrub guarantees it regardless of the model.)
 
    *Why not JSON?* Hoodat uses JSON because it assembles a fixed-schema record and can afford an
    assemble-only retry. A chat turn is an **open-ended ordered sequence of short strings** where
@@ -183,9 +191,10 @@ independently testable stages.
 ### The narrative editor is a guard
 
 Register the `prattletale/turn` prompt with a Prompt Pal **guard** (Hoodat's `SPOKEN_ONLY_GUARD`
-is the precedent). The guard runs as the chain's second `llm` step over `{{previous}}` and does
-**format hygiene only**: ensure every line is tagged, strip leaked internal monologue / meta
-("As an AI", "Here's my response:"), drop OOC commentary. Keep the *format instruction* in the
+is the precedent). The guard runs as the chain's **final** `llm` step over `{{previous}}` and does
+**format hygiene only**: ensure every line is tagged, strip emoji/markdown and leaked internal
+monologue / meta ("As an AI", "Here's my response:"), drop OOC commentary. Keep the *format
+instruction* in the
 `turn` prompt; the guard must **not merge** multiple bubbles into one. This is why parsing stays
 trivial and the editor is tunable in the Prompt Pal UI with no extra job dir.
 
@@ -220,15 +229,30 @@ Prefix `/v1/apps/prattletale`:
 - `POST /conversations/{id}/turns` — body `{items: [{type, text}, ...]}`; appends the user turn,
   runs the model turn, returns `{user_turn, model_turn}` (model_turn may be a `system_error` turn).
 - `POST /conversations/{id}/turns/{turn_id}/retry` — re-run a failed/model turn; replaces it.
+- `POST /conversations/{id}/turns/{turn_id}/items/{item_id}/audio` — synthesize (or return) one
+  model item's clip: `{audio: {path, duration_ms, voice_preset_id} | null}`. Idempotent (reuses an
+  existing wav); `null` when the item isn't spoken. Drives the client's per-message voice playback.
 
-## Voice + timing (SP6 summary; full detail in the SP6 prompt)
+## Voice + timing
 
 Activate `config.voice_enabled` / `typing_timing_enabled`. Synthesize model **`dialogue`** items
 with the counterpart's Hoodat voice preset and model **`narration`/`narration_emotion`** with an
 app-level **narrator** voice (never synthesize user-authored text). Store `media/<item>.wav` +
-`duration_ms` on the item's `audio`. Derive a per-item reveal cadence from text length + clip
-duration + jitter. Gate synthesis on `requires_capability("voice")`; when voice is off or the
-capability is unavailable, fall back cleanly to text.
+`duration_ms` on the item's `audio`. Gate synthesis on `requires_capability("voice")`; when voice
+is off or the capability is unavailable, fall back cleanly to text.
+
+**Synthesis is per-message, not per-turn.** The turn POST computes the whole turn (the
+`turn → variety → guard` chain) and returns its text immediately (`run_model_turn(synthesize=False)`).
+The client then reveals the messages one at a time. A **background producer** synthesizes the
+turn's clips in order, one at a time (via the per-item `.../audio` endpoint), so upcoming messages
+are usually ready ahead of the playhead; the reveal loop shows each message's "..." indicator and
+**awaits that message's clip** — usually already produced (brief dots), else the dots stay up until
+it's ready — then swaps the dots for the bubble and plays the clip with a left→right progress bar
+across the read-aloud duration (the clip length, else a text-length reading estimate when there's
+no audio). Synthesis stays a single job at a time (the producer serializes, and the loop shares its
+in-flight promise rather than firing its own), and the first message plays as soon as clip 0 is
+ready — never waiting on the whole reply to be voiced. The eager `synthesize_turn` helper (whole
+turn in one await) remains for non-streaming callers.
 
 ## Risks / open questions (non-blocking)
 

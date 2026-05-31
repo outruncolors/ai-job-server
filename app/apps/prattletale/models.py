@@ -100,6 +100,9 @@ class ConversationConfig(BaseModel):
     context_window_turns: int = 12
     voice_enabled: bool = False
     typing_timing_enabled: bool = False
+    # When on, a middle "variety" LLM pass rewrites a drafted reply that repeats
+    # the structure of recent messages (anti-monotony). Default on.
+    variety_pass_enabled: bool = True
 
 
 class Conversation(BaseModel):

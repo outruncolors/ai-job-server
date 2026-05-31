@@ -158,3 +158,86 @@ async def test_synth_failure_leaves_committed_text_turn(monkeypatch):
     assert all(i["audio"] is None for i in turn["items"])
     media = store.media_dir(conv_id)
     assert not media.exists() or not any(media.iterdir())
+
+
+# ---- lazy / per-message synthesis ------------------------------------------
+
+async def test_synthesize_false_commits_text_only(monkeypatch):
+    """The live chat path (synthesize=False): the turn commits as text with no
+    audio and no media files — clips are produced per message afterward."""
+    _set_caps(monkeypatch, {"voice"})
+    _stub_synth(monkeypatch)
+    settings_store.update_settings({"narrator_voice_preset_id": _NARRATOR_VOICE})
+    conv_id = _seed({"voice_enabled": True})
+
+    turn, _ = await generator.run_model_turn(conv_id, synthesize=False)
+    assert all(i["audio"] is None for i in turn["items"])
+    assert not store.media_dir(conv_id).exists()
+
+
+async def test_synthesize_item_is_per_type_and_idempotent(monkeypatch):
+    _set_caps(monkeypatch, {"voice"})
+    calls = []
+
+    async def synth(text, preset_id, out_path):
+        calls.append(out_path.name)
+        _write_stub_wav(out_path)
+    monkeypatch.setattr(voice, "_synth_to_wav", synth)
+    settings_store.update_settings({"narrator_voice_preset_id": _NARRATOR_VOICE})
+
+    conv_id = _seed({"voice_enabled": True})
+    turn, _ = await generator.run_model_turn(conv_id, synthesize=False)
+    conv = store.get_conversation(conv_id)
+    by_type = {i["type"]: i for i in turn["items"]}
+
+    # dialogue -> counterpart voice; narration -> narrator; action -> not spoken
+    dia = await voice.synthesize_item(conv, dict(_CHARACTER), by_type["dialogue"])
+    nar = await voice.synthesize_item(conv, dict(_CHARACTER), by_type["narration"])
+    act = await voice.synthesize_item(conv, dict(_CHARACTER), by_type["action"])
+    assert dia["voice_preset_id"] == _CP_VOICE and dia["duration_ms"] > 0
+    assert nar["voice_preset_id"] == _NARRATOR_VOICE
+    assert act is None
+
+    # idempotent: a second call reuses the existing wav (no extra synth)
+    n = len(calls)
+    again = await voice.synthesize_item(conv, dict(_CHARACTER), by_type["dialogue"])
+    assert again["path"] == dia["path"]
+    assert len(calls) == n
+
+
+async def test_item_audio_endpoint_synthesizes_and_persists(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.apps.prattletale import router as router_module
+    from app.main import app
+
+    _set_caps(monkeypatch, {"voice"})
+    _stub_synth(monkeypatch)
+    monkeypatch.setattr(router_module, "get_character", lambda cid: dict(_CHARACTER))
+    settings_store.update_settings({"narrator_voice_preset_id": _NARRATOR_VOICE})
+
+    conv_id = _seed({"voice_enabled": True})
+    turn, _ = await generator.run_model_turn(conv_id, synthesize=False)
+    dialogue = next(i for i in turn["items"] if i["type"] == "dialogue")
+    action = next(i for i in turn["items"] if i["type"] == "action")
+
+    client = TestClient(app)
+    base = f"/v1/apps/prattletale/conversations/{conv_id}/turns/{turn['id']}/items"
+
+    # a spoken item -> audio synthesized + persisted into the transcript
+    r = client.post(f"{base}/{dialogue['id']}/audio")
+    assert r.status_code == 200, r.text
+    audio = r.json()["audio"]
+    assert audio["voice_preset_id"] == _CP_VOICE and audio["duration_ms"] > 0
+    persisted = next(i for i in store.get_transcript(conv_id)["turns"][-1]["items"]
+                     if i["id"] == dialogue["id"])
+    assert persisted["audio"]["path"] == audio["path"]
+
+    # a non-spoken item -> null (degrades to text), no media file
+    r = client.post(f"{base}/{action['id']}/audio")
+    assert r.status_code == 200
+    assert r.json()["audio"] is None
+    assert not (store.media_dir(conv_id) / f"{action['id']}.wav").exists()
+
+    # missing item -> 404
+    assert client.post(f"{base}/t9999-i99/audio").status_code == 404

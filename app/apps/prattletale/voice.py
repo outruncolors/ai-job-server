@@ -92,38 +92,56 @@ async def _synth_to_wav(text: str, preset_id: str, out_path: Path) -> None:
     )
 
 
-async def synthesize_turn(conversation: dict, character: dict, turn: dict) -> dict:
-    """Synthesize the spoken model items of ``turn`` into the conversation's
-    ``media/`` dir.
+async def synthesize_item(conversation: dict, character: dict, item: dict) -> Optional[dict]:
+    """Synthesize a single spoken model item into the conversation's ``media/`` dir.
 
-    Returns ``{item_id: {path, duration_ms, voice_preset_id}}`` for the items that
-    received audio (empty dict when voice is inactive or nothing was spoken).
-    Per-item failures are swallowed so one bad clip can't sink the rest — that
-    item just stays text.
+    Returns ``{path, duration_ms, voice_preset_id}`` or None when the item isn't
+    spoken (voice inactive, wrong type, no preset, empty text) or synthesis fails.
+    **Idempotent**: if the wav already exists it is reused (its duration re-read),
+    so the per-message lazy path can call this repeatedly without re-synthesizing.
     """
-    if turn.get("author") != Author.model.value or not voice_active(conversation):
-        return {}
+    if not voice_active(conversation):
+        return None
+    preset_id = _preset_for_item(item, character)
+    text = (item.get("text") or "").strip()
+    if not preset_id or not text:
+        return None
 
-    out_dir = store.media_dir(conversation["id"])
-    audio_map: dict = {}
-    for item in turn.get("items") or []:
-        preset_id = _preset_for_item(item, character)
-        text = (item.get("text") or "").strip()
-        if not preset_id or not text:
-            continue
-        out_path = out_dir / f"{item['id']}.wav"
+    out_path = store.media_dir(conversation["id"]) / f"{item['id']}.wav"
+    if not out_path.exists():
         try:
             await _synth_to_wav(text, preset_id, out_path)
-            duration_ms = _wav_duration_ms(out_path.read_bytes())
         except Exception:  # noqa: BLE001 — best-effort; leave the item text-only
             if out_path.exists():
                 out_path.unlink()
-            continue
-        audio_map[item["id"]] = {
-            "path": f"media/{item['id']}.wav",
-            "duration_ms": duration_ms,
-            "voice_preset_id": preset_id,
-        }
+            return None
+    try:
+        duration_ms = _wav_duration_ms(out_path.read_bytes())
+    except Exception:  # noqa: BLE001 — a wav we can't read is unusable
+        return None
+    return {
+        "path": f"media/{item['id']}.wav",
+        "duration_ms": duration_ms,
+        "voice_preset_id": preset_id,
+    }
+
+
+async def synthesize_turn(conversation: dict, character: dict, turn: dict) -> dict:
+    """Synthesize **all** spoken model items of ``turn`` up front (the eager path).
+
+    Returns ``{item_id: {path, duration_ms, voice_preset_id}}`` for the items that
+    received audio (empty dict when voice is inactive or nothing was spoken). The
+    live chat path drives per-message synthesis via :func:`synthesize_item`
+    instead, so the reply isn't blocked on every clip; this stays for callers that
+    want a fully-voiced turn in one await.
+    """
+    if turn.get("author") != Author.model.value or not voice_active(conversation):
+        return {}
+    audio_map: dict = {}
+    for item in turn.get("items") or []:
+        audio = await synthesize_item(conversation, character, item)
+        if audio:
+            audio_map[item["id"]] = audio
     return audio_map
 
 

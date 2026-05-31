@@ -53,6 +53,23 @@ def test_get_guard_returns_hygiene_pass():
     # The guard runs over the first step's output via the chain token.
     assert "{{previous}}" in guard
     assert "FORMAT HYGIENE" in guard
+    # The guard also scrubs emoji (belt-and-suspenders with the parser).
+    assert "emoji" in guard.lower()
+
+
+def test_variety_prompt_seeds_and_composes_with_transcript():
+    registry.seed_registered()
+    entry = store.get_by_app_key("prattletale", "variety")
+    assert entry is not None
+
+    text = service.get_text(
+        "prattletale", "variety",
+        variables={"character": "Name: Mara", "transcript": "[Mara] same opening again"},
+    )
+    # The recent conversation is baked in; the draft token is left for the executor.
+    assert "[Mara] same opening again" in text
+    assert "{{previous}}" in text
+    assert "{{var.transcript}}" not in text
 
 
 # ---- parser ----------------------------------------------------------------
@@ -110,3 +127,29 @@ def test_unknown_tag_coalesces_into_previous():
 def test_empty_or_whitespace_raises(raw):
     with pytest.raises(GenerationError):
         parse_items(raw)
+
+
+# ---- emoji scrub -----------------------------------------------------------
+
+def test_emoji_are_stripped_from_items():
+    raw = "[say] hey there 😊👋\n[narration] she waves 🎉"
+    items = parse_items(raw)
+    assert items[0]["text"] == "hey there"
+    assert items[1]["text"] == "she waves"
+
+
+def test_emoji_with_zwj_and_skin_tone_are_stripped():
+    raw = "[say] family time 👨‍👩‍👧 and a thumbs up 👍🏽"
+    items = parse_items(raw)
+    assert items[0]["text"] == "family time and a thumbs up"
+
+
+def test_item_emptied_by_emoji_scrub_is_dropped():
+    raw = "[say] 🙂\n[say] still here"
+    items = parse_items(raw)
+    assert [i["text"] for i in items] == ["still here"]
+
+
+def test_all_emoji_output_raises():
+    with pytest.raises(GenerationError):
+        parse_items("[say] 😀😀\n[say] 🎉")

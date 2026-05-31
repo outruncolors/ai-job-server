@@ -23,7 +23,7 @@ def _isolate(monkeypatch, tmp_path):
     monkeypatch.setattr(store, "CONVERSATIONS_DIR", tmp_path / "conversations")
     monkeypatch.setattr(router_module, "get_character", lambda cid: dict(_CHARACTER))
 
-    async def fake_model_turn(conversation_id, llm=None, *, replace_turn_id=None):
+    async def fake_model_turn(conversation_id, llm=None, *, replace_turn_id=None, synthesize=True):
         items = [
             {"type": "narration", "text": "She glances up."},
             {"type": "dialogue", "text": "Hey."},

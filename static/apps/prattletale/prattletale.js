@@ -185,15 +185,21 @@
     const cfg = (_current && _current.conversation.config) || {};
     $('pt-voice-toggle').classList.toggle('on', !!cfg.voice_enabled);
     $('pt-timing-toggle').classList.toggle('on', !!cfg.typing_timing_enabled);
+    // variety defaults on, so treat a missing flag as enabled
+    $('pt-variety-toggle').classList.toggle('on', cfg.variety_pass_enabled !== false);
   }
+
+  // Config flags that default to ON when absent (so the first click turns them off).
+  const CONFIG_DEFAULT_ON = { variety_pass_enabled: true };
 
   async function toggleConfig(key) {
     if (!_current) return;
     const cfg = _current.conversation.config || {};
+    const current = cfg[key] === undefined ? !!CONFIG_DEFAULT_ON[key] : !!cfg[key];
     try {
       const updated = await api(
         `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}`,
-        'PATCH', { [key]: !cfg[key] });
+        'PATCH', { [key]: !current });
       if (updated) _current.conversation = updated;
       renderToggles();
     } catch (_) { /* leave state as-is on failure */ }
@@ -278,9 +284,14 @@
       </div>`;
     }
     const url = mediaUrl(item);
-    const play = url
-      ? `<button type="button" class="pt-play" data-url="${_escHtml(url)}" title="Play audio" aria-label="Play audio">🔊</button>`
-      : '';
+    // Show a play button when audio exists OR the item is voiceable (clip is
+    // synthesized lazily on click). data-url is filled once the clip is known.
+    let play = '';
+    if (url || isVoiceable(item, turn)) {
+      const urlAttr = url ? ` data-url="${_escHtml(url)}"` : '';
+      play = `<button type="button" class="pt-play" data-turn="${_escHtml(turn.id)}"` +
+        ` data-item="${_escHtml(item.id)}"${urlAttr} title="Play audio" aria-label="Play audio">🔊</button>`;
+    }
     return `<div class="pt-bubble pt-bubble--${_escHtml(type)}">${_escHtml(item.text || '')}${play}</div>`;
   }
 
@@ -291,11 +302,52 @@
 
   // ---------- audio + reveal cadence ----------
 
-  // Server URL for an item's generated wav (item.audio.path is "media/<file>").
-  function mediaUrl(item) {
-    if (!item || !item.audio || !item.audio.path) return null;
-    const file = String(item.audio.path).split('/').pop();
+  // Server URL for a generated wav path ("media/<file>").
+  function mediaUrlFromPath(path) {
+    const file = String(path).split('/').pop();
     return `/v1/apps/prattletale/conversations/${encodeURIComponent(_current.conversation.id)}/media/${encodeURIComponent(file)}`;
+  }
+  function mediaUrl(item) {
+    return (item && item.audio && item.audio.path) ? mediaUrlFromPath(item.audio.path) : null;
+  }
+
+  function convVoiceOn() {
+    return !!(_current && _current.conversation.config && _current.conversation.config.voice_enabled);
+  }
+  // Items the server might voice: model dialogue + narration (audio is produced
+  // lazily, so this is what decides whether to show a play button before a clip
+  // exists). Action / system_error / user items are never spoken.
+  function isVoiceable(item, turn) {
+    return convVoiceOn() && turn && turn.author === 'model'
+      && ['dialogue', 'narration', 'narration_emotion'].includes(item.type);
+  }
+
+  // POST the per-item synth endpoint; returns the audio descriptor or null. The
+  // endpoint is idempotent (reuses an existing wav), so re-calling is cheap.
+  async function fetchItemAudio(turnId, itemId) {
+    try {
+      const res = await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}` +
+        `/turns/${encodeURIComponent(turnId)}/items/${encodeURIComponent(itemId)}/audio`, 'POST');
+      return (res && res.audio) || null;
+    } catch (_) { return null; }
+  }
+
+  // Resolve an item's audio, caching on the item so it's synthesized at most once.
+  // The in-flight promise is shared (`__audioPromise`) so the background producer
+  // and the reveal loop asking for the same clip don't both fire a synth. null
+  // when not spoken / failed.
+  function ensureAudio(turnId, item) {
+    if (item.audio && item.audio.path) return Promise.resolve(item.audio);
+    if (item.__noAudio || !convVoiceOn()) return Promise.resolve(null);
+    if (!item.__audioPromise) {
+      item.__audioPromise = fetchItemAudio(turnId, item.id).then((audio) => {
+        if (audio && audio.path) { item.audio = audio; return audio; }
+        item.__noAudio = true;
+        return null;
+      });
+    }
+    return item.__audioPromise;
   }
 
   let _activeAudio = null;
@@ -319,7 +371,19 @@
     $('pt-thread').querySelectorAll('.pt-play').forEach((btn) => {
       if (btn.dataset.wired) return;
       btn.dataset.wired = '1';
-      btn.addEventListener('click', () => playAudioUrl(btn.dataset.url));
+      btn.addEventListener('click', async () => {
+        let url = btn.dataset.url;
+        if (!url) {
+          // lazily synthesize this clip on first play
+          btn.disabled = true;
+          const audio = await fetchItemAudio(btn.dataset.turn, btn.dataset.item);
+          btn.disabled = false;
+          if (!audio || !audio.path) { btn.style.display = 'none'; return; }
+          url = mediaUrlFromPath(audio.path);
+          btn.dataset.url = url;
+        }
+        playAudioUrl(url);
+      });
     });
   }
 
@@ -331,9 +395,41 @@
     return Math.max(600, Math.min(4500, n * 28)) + Math.floor(Math.random() * 350);
   }
 
-  // Reveal a fresh model turn. With typing timing on (and not an error turn),
-  // stream bubbles one at a time: typing dots -> bubble -> audio -> beat.
-  // Otherwise render it all at once. Bails cleanly if the user navigates away.
+  // Animate a left->right progress bar across a just-revealed bubble for `ms`,
+  // then resolve. This is the visible dwell before the next message appears
+  // (matched to the audio clip length when there's audio). Resolves early if the
+  // user navigates away.
+  function runProgress(bubbleEl, ms, stillHere) {
+    return new Promise((resolve) => {
+      const bar = document.createElement('div');
+      bar.className = 'pt-progress';
+      const fill = document.createElement('div');
+      fill.className = 'pt-progress-fill';
+      bar.appendChild(fill);
+      bubbleEl.appendChild(bar);
+      // two frames: let the 0%-width fill paint, then transition it to 100%.
+      requestAnimationFrame(() => {
+        fill.style.transition = `width ${ms}ms linear`;
+        requestAnimationFrame(() => { fill.style.width = '100%'; });
+      });
+      setTimeout(() => {
+        bar.remove();
+        resolve();
+      }, ms);
+    });
+  }
+
+  // Minimum time the typing indicator stays up so a fast/cached synth still reads
+  // as "she's composing" rather than flashing.
+  const _MIN_TYPING_MS = 400;
+
+  // Reveal a fresh model turn message-by-message (timing on, non-error turn). For
+  // each message: show the "..." typing indicator, and *while it shows* generate
+  // that message's audio (or, with no voice, wait a typing beat); then swap the
+  // dots for the bubble and play the clip with a left->right progress bar across
+  // the read-aloud duration. Strictly sequential — the next "..." doesn't start
+  // until the current message finishes. Otherwise render it all at once. Bails if
+  // the user navigates away.
   async function revealModelTurn(turn) {
     const conv = _current.conversation;
     const timing = conv.config && conv.config.typing_timing_enabled;
@@ -353,22 +449,63 @@
     const stack = el.querySelector('.pt-stack');
 
     const stillHere = () => _current && _current.conversation.id === convId;
-    for (const item of (turn.items || [])) {
+    const items = turn.items || [];
+
+    // Background producer: synthesize clips in order, one at a time, so an
+    // upcoming message is usually ready by the time we reveal it (its "..." then
+    // just covers the playback gap, not a full synth). Sequential `await` keeps
+    // it to a single synth at once; ensureAudio dedupes with the loop below, so
+    // each clip is synthesized exactly once whoever asks first.
+    (async () => {
+      for (const it of items) {
+        if (!stillHere()) return;
+        if (isVoiceable(it, turn)) {
+          try { await ensureAudio(turn.id, it); } catch (_) { /* best-effort */ }
+        }
+      }
+    })();
+
+    for (const item of items) {
       if (!stillHere()) return;
+
+      // 1) "..." typing indicator
       const dots = document.createElement('div');
       dots.className = 'pt-bubble pt-bubble--dialogue pt-typing';
       dots.innerHTML = '<span></span><span></span><span></span>';
       stack.appendChild(dots);
       scrollToBottom();
-      await sleep(typingMs(item));
-      if (!stillHere()) { return; }
+
+      // 2) generate this message's audio while the dots show (voiceable items),
+      //    else just hold the dots for a typing beat (no-voice / action items)
+      let audio = null;
+      if (isVoiceable(item, turn)) {
+        const t0 = Date.now();
+        audio = await ensureAudio(turn.id, item);
+        const elapsed = Date.now() - t0;
+        if (elapsed < _MIN_TYPING_MS) await sleep(_MIN_TYPING_MS - elapsed);
+      } else {
+        await sleep(typingMs(item));
+      }
+      if (!stillHere()) { dots.remove(); return; }
+
+      // 3) swap dots -> message, then play the clip with the reveal progress bar
       dots.remove();
       stack.insertAdjacentHTML('beforeend', bubbleHtml(item, turn));
       wirePlay();
+      const bubbleEl = stack.lastElementChild;
       scrollToBottom();
-      const url = mediaUrl(item);
-      if (url) await playAudioUrl(url);
-      await sleep(180);
+
+      let url = null;
+      if (audio && audio.path) {
+        url = mediaUrlFromPath(audio.path);
+        const btn = bubbleEl.querySelector('.pt-play');
+        if (btn) btn.dataset.url = url;
+      }
+      const dwell = (audio && audio.duration_ms) || typingMs(item);
+      const audioDone = url ? playAudioUrl(url) : null;
+      await runProgress(bubbleEl, dwell, stillHere);
+      if (audioDone) await audioDone;  // don't cut a clip off if it ran long
+      if (!stillHere()) return;
     }
   }
 
@@ -530,24 +667,31 @@
     _sending = true;
     setComposerEnabled(false);
 
-    // optimistic: drop the staged items so the box is clean, show the user turn
-    // only after the server echoes it back (keeps ids authoritative).
+    // clear the composer and show the user's message right away — the POST runs
+    // the model turn synchronously and can take a while, so the user shouldn't
+    // wait on the network to see what they just sent. The optimistic turn is
+    // visually identical to the server echo, so we don't re-render it on success.
     _draft = [];
     _editing = -1;
     renderDraft();
 
     const id = _current.conversation.id;
+    const optimisticEl = appendUserTurnOptimistic(items);
     const typingEl = showTyping();
     try {
       const res = await api(
         `${APP}/conversations/${encodeURIComponent(id)}/turns`, 'POST', { items });
       typingEl.remove();
       _current.transcript.turns.push(res.user_turn, res.model_turn);
-      appendTurn(res.user_turn);
       await revealModelTurn(res.model_turn);
     } catch (err) {
+      // hard failure (network / 5xx): undo the optimistic turn and restore the
+      // draft so the user can resend. (Model-side failures come back as a 200
+      // system_error turn and flow through the success path instead.)
       typingEl.remove();
-      // surface the failure inline without faking a turn
+      optimisticEl.remove();
+      _draft = items;
+      renderDraft();
       const thread = $('pt-thread');
       const div = document.createElement('div');
       div.className = 'pt-empty pt-send-error';
@@ -568,6 +712,17 @@
     thread.insertAdjacentHTML('beforeend', turnHtml(turn));
     wireRetry();
     wirePlay();
+  }
+
+  // Render the user's turn immediately (before the server echoes ids back) and
+  // return the element so a hard send failure can roll it back.
+  function appendUserTurnOptimistic(items) {
+    const thread = $('pt-thread');
+    const empty = thread.querySelector('.pt-thread-empty');
+    if (empty) empty.remove();
+    thread.insertAdjacentHTML('beforeend', turnHtml({ id: '__pending__', author: 'user', items }));
+    scrollToBottom();
+    return thread.lastElementChild;
   }
 
   function showTyping() {
@@ -729,6 +884,7 @@
     $('pt-delete').addEventListener('click', deleteConversation);
     $('pt-voice-toggle').addEventListener('click', () => toggleConfig('voice_enabled'));
     $('pt-timing-toggle').addEventListener('click', () => toggleConfig('typing_timing_enabled'));
+    $('pt-variety-toggle').addEventListener('click', () => toggleConfig('variety_pass_enabled'));
     $('pt-mode').addEventListener('click', () => cycleMode(1));
     $('pt-send').addEventListener('click', submitOrStack);
 

@@ -8,14 +8,17 @@ import pytest
 
 from app.apps.prattletale import generator, store
 from app.chain.models import ChainLLMConfig
+from app.prompt_pal import store as pp_store
 
 _CHARACTER = {"id": "mara-okafor", "name": "Mara", "summary": "a tired diner regular"}
 
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch, tmp_path):
-    """Conversations under tmp; default LLM + counterpart stubbed."""
+    """Conversations under tmp; default LLM + counterpart stubbed. Prompt Pal store
+    points at an empty tmp dir so prompt resolution uses the in-code defaults."""
     monkeypatch.setattr(store, "CONVERSATIONS_DIR", tmp_path / "conversations")
+    monkeypatch.setattr(pp_store, "PROMPT_PAL_DIR", tmp_path / "prompt_pal")
     monkeypatch.setattr(
         generator, "get_default_as_chain_llm_config",
         lambda: ChainLLMConfig(api_base="http://x", model="m"),
@@ -150,3 +153,23 @@ def test_build_context_windows_to_recent_turns():
     conversation = {"config": {"context_window_turns": 2}}
     ctx = generator.build_context(conversation, _CHARACTER, {"turns": turns})
     assert ctx["transcript"].splitlines() == ["[User] 4", "[User] 5"]
+
+
+# ---- chain shape: variety pass ---------------------------------------------
+
+def _ctx() -> dict:
+    return {"character": "c", "scenario": "s", "role_instructions": "r",
+            "user_persona": "p", "transcript": "[User] hi"}
+
+
+def test_build_turn_request_includes_variety_step_by_default():
+    req = generator.build_turn_request(_ctx(), ChainLLMConfig(api_base="http://x", model="m"))
+    assert [s.id for s in req.steps] == ["turn", "variety", "guard"]
+
+
+def test_build_turn_request_skips_variety_when_disabled():
+    req = generator.build_turn_request(
+        _ctx(), ChainLLMConfig(api_base="http://x", model="m"), variety=False
+    )
+    assert [s.id for s in req.steps] == ["turn", "guard"]
+    assert [s.number for s in req.steps] == [1, 2]  # numbering stays contiguous

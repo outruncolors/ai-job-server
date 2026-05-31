@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from ..hoodat.characters_store import get_character
-from . import settings_store, store
+from . import settings_store, store, voice
 from .generator import run_model_turn
 from .models import ConversationConfig, DeviceUser
 
@@ -43,6 +43,7 @@ class ConfigPatch(BaseModel):
 
     voice_enabled: Optional[bool] = None
     typing_timing_enabled: Optional[bool] = None
+    variety_pass_enabled: Optional[bool] = None
 
 
 class SettingsPatch(BaseModel):
@@ -133,7 +134,10 @@ async def create_turn(conversation_id: str, body: TurnCreate):
     )
     if user_turn is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    model_turn, _ = await run_model_turn(conversation_id)
+    # Don't synthesize here: the response returns text immediately and the client
+    # synthesizes each message lazily (POST .../items/{item_id}/audio) so playback
+    # of message 1 isn't blocked on synthesizing the whole reply.
+    model_turn, _ = await run_model_turn(conversation_id, synthesize=False)
     return {"user_turn": user_turn, "model_turn": model_turn}
 
 
@@ -148,5 +152,36 @@ async def retry_turn(conversation_id: str, turn_id: str):
     last = turns[-1]
     if last.get("id") != turn_id or last.get("author") != "model":
         raise HTTPException(status_code=409, detail="Only the latest model turn can be retried")
-    model_turn, _ = await run_model_turn(conversation_id, replace_turn_id=turn_id)
+    model_turn, _ = await run_model_turn(conversation_id, replace_turn_id=turn_id, synthesize=False)
     return model_turn
+
+
+@router.post("/conversations/{conversation_id}/turns/{turn_id}/items/{item_id}/audio")
+async def synthesize_item_audio(conversation_id: str, turn_id: str, item_id: str):
+    """Synthesize (or return the already-synthesized) audio for one model item.
+
+    Drives the client's per-message voice playback: the chat view calls this as
+    it reveals each bubble, so synthesis overlaps playback instead of blocking the
+    whole turn. Idempotent. Returns ``{"audio": {path, duration_ms,
+    voice_preset_id} | null}`` — null when the item isn't spoken (voice off, wrong
+    type, no preset, synth failure), which the client degrades to text.
+    """
+    conversation = store.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    transcript = store.get_transcript(conversation_id) or {}
+    turn = next((t for t in transcript.get("turns", []) if t.get("id") == turn_id), None)
+    if turn is None:
+        raise HTTPException(status_code=404, detail="Turn not found")
+    item = next((it for it in (turn.get("items") or []) if it.get("id") == item_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if turn.get("author") != "model":
+        return {"audio": None}  # user-authored text is never synthesized
+    character = get_character(conversation["counterpart_character_id"])
+    if character is None:
+        return {"audio": None}
+    audio = await voice.synthesize_item(conversation, character, item)
+    if audio:
+        store.apply_audio(conversation_id, turn_id, {item_id: audio})
+    return {"audio": audio}
