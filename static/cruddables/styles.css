@@ -1,3 +1,8 @@
+/* Single-column document page (not the two-panel app layout): undo
+   components.css's full-height overflow:hidden body and clear the fixed #topnav. */
+html, body { height: auto; overflow: auto; }
+body { padding-top: 44px; }
+
 .page { max-width: 1000px; margin: 0 auto; padding: 16px; }
 .page-head h1 { margin: 0 0 4px; }
 .page-head .sub { color: var(--muted, #9aa); margin: 0 0 16px; max-width: 80ch; }

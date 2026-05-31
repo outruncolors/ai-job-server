@@ -1,0 +1,28 @@
+{
+  "id": "human_body_types",
+  "name": "Human Body Types",
+  "description": "One wildcard of 8 equally-weighted human body-type descriptions.",
+  "tags": ["Pack", "body-types"],
+  "items": [
+    {
+      "schema_version": 1,
+      "type": "wildcard",
+      "id": "body_type_pack_human_body_types",
+      "name": "Body Type",
+      "description": "Eight human body types, equal distribution.",
+      "tags": ["Pack", "body-types"],
+      "data": {
+        "entries": [
+          { "text": "slim, slender build with a lean frame, narrow shoulders, and little visible muscle or fat" },
+          { "text": "athletic, toned physique with defined muscles, a flat stomach, and balanced, fit proportions" },
+          { "text": "curvy hourglass figure with a full bust and hips and a clearly defined narrow waist" },
+          { "text": "muscular, powerfully built body with broad shoulders, a thick chest, and well-developed muscles" },
+          { "text": "petite, small-framed build with short stature and delicate, fine-boned proportions" },
+          { "text": "plus-size, full-figured body with soft rounded curves and a fuller, heavier silhouette" },
+          { "text": "lanky build, tall and lean with long limbs, a slight frame, and an elongated silhouette" },
+          { "text": "stocky, stout build with a broad, solid frame, short limbs, and a thick midsection" }
+        ]
+      }
+    }
+  ]
+}

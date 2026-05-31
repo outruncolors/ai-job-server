@@ -40,6 +40,33 @@ def _wc_item(item_id, name, entries):
     }
 
 
+def test_http_routes_list_get_apply(isolated_packs):
+    """Lock the HTTP URL contract the frontend calls (api() prepends /v1):
+    GET /v1/packs/packs, GET /v1/packs/<type>/<id>, POST /v1/packs/<type>/<id>/apply.
+    Regression guard for the apply 405 (route path had an extra /packs/ segment)."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    _write_pack(isolated_packs["builtin"], "wildcard", "p1",
+                [_wc_item("c_pack_p1", "Colors", [{"text": "red"}])])
+    client = TestClient(app)
+
+    listed = client.get("/v1/packs/packs")
+    assert listed.status_code == 200
+    assert any(p["id"] == "p1" for p in listed.json()["packs"])
+
+    got = client.get("/v1/packs/wildcard/p1")
+    assert got.status_code == 200 and got.json()["id"] == "p1"
+
+    applied = client.post("/v1/packs/wildcard/p1/apply")
+    assert applied.status_code == 200          # was 405 (fell through to StaticFiles)
+    assert applied.json()["created"] == 1
+    assert wildcards.get_wildcard("c_pack_p1") is not None
+
+    assert client.get("/v1/packs/wildcard/nope").status_code == 404
+
+
 def test_list_and_get(isolated_packs):
     _write_pack(
         isolated_packs["builtin"], "wildcard", "p1",
