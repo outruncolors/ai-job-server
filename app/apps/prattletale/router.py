@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Body, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -23,6 +23,7 @@ from ..hoodat.characters_store import get_character
 from . import settings_store, store, voice
 from .generator import run_model_turn
 from .models import ConversationConfig, DeviceUser
+from .plugins import registry as plugin_registry
 
 router = APIRouter(prefix="/v1/apps/prattletale", tags=["prattletale"])
 
@@ -45,6 +46,7 @@ class ConfigPatch(BaseModel):
     voice_enabled: Optional[bool] = None
     typing_timing_enabled: Optional[bool] = None
     variety_pass_enabled: Optional[bool] = None
+    enabled_plugins: Optional[list[str]] = None
 
 
 class ConversationUpdate(ConfigPatch):
@@ -238,6 +240,45 @@ async def synthesize_item_audio(conversation_id: str, turn_id: str, item_id: str
     if audio:
         store.apply_audio(conversation_id, turn_id, {item_id: audio})
     return {"audio": audio}
+
+
+# --- plugins ---------------------------------------------------------------
+
+@router.get("/plugins")
+def list_plugins():
+    """List every registered plugin's manifest (the JSON-safe subset). The
+    frontend loader uses this to inject enabled plugins' assets and to render the
+    config dialog's Plugins toggle list."""
+    return {"plugins": [p.manifest() for p in plugin_registry.list_plugins()]}
+
+
+@router.post("/conversations/{conversation_id}/plugins/{plugin_id}/actions/{action}")
+async def dispatch_plugin_action(
+    conversation_id: str, plugin_id: str, action: str, params: dict = Body(default_factory=dict)
+):
+    """Run a plugin action and return its result dict.
+
+    404 when the conversation, plugin, or action is missing; 409 when the plugin
+    is not enabled for this conversation; otherwise the action's own errors map to
+    4xx/5xx (a :class:`ValueError` from validation → 422). The action does its own
+    work and returns whatever the frontend renders.
+    """
+    conversation = store.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    plugin = plugin_registry.get_plugin(plugin_id)
+    if plugin is None:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    run = plugin.get_action(action)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Action not found")
+    enabled = (conversation.get("config") or {}).get("enabled_plugins") or []
+    if plugin_id not in enabled:
+        raise HTTPException(status_code=409, detail="Plugin not enabled for this conversation")
+    try:
+        return await run(conversation_id, params or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 # --- transcript editing (edit / hide / delete) -----------------------------

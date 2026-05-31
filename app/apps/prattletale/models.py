@@ -103,6 +103,11 @@ class ConversationConfig(BaseModel):
     # When on, a middle "variety" LLM pass rewrites a drafted reply that repeats
     # the structure of recent messages (anti-monotony). Default on.
     variety_pass_enabled: bool = True
+    # Plugin ids enabled for this conversation. A plugin's composer mode/panel and
+    # actions are only available when its id is listed here. New conversations
+    # start with each plugin whose ``default_enabled`` is true (seeded by the
+    # frontend on creation); the router gates action dispatch on membership.
+    enabled_plugins: list[str] = Field(default_factory=list)
 
 
 class Conversation(BaseModel):

@@ -212,6 +212,14 @@ async def lifespan(app: FastAPI):
         seed_message_style_wildcard()
     except Exception as exc:
         print(f"prattletale wildcard seeding skipped: {exc}")
+    # Import Prattletale plugin packages (so their register() runs) and seed each
+    # plugin's Prompt Pal entries. Seed-if-absent, best-effort. Beside the Prompt
+    # Pal + wildcard seeding above so a plugin's prompts are editable in the UI.
+    try:
+        from .apps.prattletale.plugins.registry import seed_plugins
+        seed_plugins()
+    except Exception as exc:
+        print(f"prattletale plugin seeding skipped: {exc}")
     queue = get_job_queue()
     await queue.start()
     for entry in recover_interrupted_jobs(_jobs_module.JOBS_BASE):

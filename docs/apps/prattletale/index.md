@@ -20,6 +20,10 @@ on Hoodat for every non-user character (sheet, avatar, voice); Hoodat stays app-
   view of the `turn → variety → guard` pipeline.
 - **[Phase 2 session prompts](phase2-prompts/README.md)** — copy-paste session-starters for the
   config / dev-tools sub-phases.
+- **[Phase 3 — Plugins (Summarizer) build plan](phase3-plugins-build-plan.md)** — a hook-based plugin
+  system (registry + manifest + action dispatch + per-conversation enable + frontend loader) with
+  **Summarizer** as the first plugin: a 📋 Summarize composer mode with a slide-up panel
+  (Keep/Purge · detail level · focus) that map-reduces the history into one summary bubble.
 
 ## Status
 
