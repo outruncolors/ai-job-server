@@ -13,13 +13,16 @@ models, and ``404`` for missing resources.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from ..hoodat.characters_store import get_character
-from . import store
+from . import settings_store, store
 from .generator import run_model_turn
-from .models import DeviceUser
+from .models import ConversationConfig, DeviceUser
 
 router = APIRouter(prefix="/v1/apps/prattletale", tags=["prattletale"])
 
@@ -32,6 +35,18 @@ class ConversationCreate(BaseModel):
     device_user: DeviceUser = Field(default_factory=DeviceUser)
     scenario: str = ""
     role_instructions: str = ""
+    config: ConversationConfig = Field(default_factory=ConversationConfig)
+
+
+class ConfigPatch(BaseModel):
+    """Partial conversation ``config`` update (toggles). Unset fields are left alone."""
+
+    voice_enabled: Optional[bool] = None
+    typing_timing_enabled: Optional[bool] = None
+
+
+class SettingsPatch(BaseModel):
+    narrator_voice_preset_id: Optional[str] = None
 
 
 class TurnItemIn(BaseModel):
@@ -65,11 +80,48 @@ def get_conversation(conversation_id: str):
     return {"conversation": conversation, "transcript": store.get_transcript(conversation_id)}
 
 
+@router.patch("/conversations/{conversation_id}")
+def update_conversation_config(conversation_id: str, body: ConfigPatch):
+    """Toggle the conversation's ``config`` flags (voice / typing timing) in place."""
+    conversation = store.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    config = dict(conversation.get("config") or {})
+    config.update(body.model_dump(exclude_none=True))
+    return store.update_conversation(conversation_id, {"config": config})
+
+
 @router.delete("/conversations/{conversation_id}", status_code=204)
 def delete_conversation(conversation_id: str):
     if not store.delete_conversation(conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found")
     return Response(status_code=204)
+
+
+@router.get("/conversations/{conversation_id}/media/{filename}")
+def get_media(conversation_id: str, filename: str):
+    """Serve a generated audio file. ``filename`` must be a bare basename."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    path = store.media_file(conversation_id, filename)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Media not found")
+    return FileResponse(path, media_type="audio/wav")
+
+
+# --- app-level settings (narrator voice) -----------------------------------
+
+@router.get("/settings")
+def get_settings():
+    return settings_store.get_settings()
+
+
+@router.put("/settings")
+def put_settings(body: SettingsPatch):
+    try:
+        return settings_store.update_settings(body.model_dump())
+    except settings_store.SettingsError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 # --- turns -----------------------------------------------------------------

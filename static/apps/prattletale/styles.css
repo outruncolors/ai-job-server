@@ -83,6 +83,9 @@ button:disabled { opacity: 0.5; cursor: default; }
   font-size: 1.1rem; display: flex; align-items: center; justify-content: center;
 }
 .pt-icon-btn.pt-danger:hover { background: var(--color-danger-bg); border-color: var(--color-danger); }
+/* config toggles in the chat header — dim when off, accent when on */
+.pt-toggle { opacity: 0.45; filter: grayscale(1); }
+.pt-toggle.on { opacity: 1; filter: none; border-color: var(--color-accent); color: var(--color-accent); }
 
 /* ===== thread ===== */
 #pt-thread {
@@ -144,6 +147,15 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .pt-retry:hover { opacity: 0.85; background: var(--color-danger); }
 
+/* inline audio play button on bubbles with synthesized speech */
+.pt-play {
+  background: transparent; border: none; padding: 0 0 0 6px; margin-left: 2px;
+  font-size: 0.85rem; line-height: 1; cursor: pointer; vertical-align: baseline;
+  opacity: 0.7;
+}
+.pt-play:hover { opacity: 1; background: transparent; }
+.pt-turn--user .pt-play { color: inherit; }
+
 /* typing indicator */
 .pt-typing { display: inline-flex; gap: 4px; align-items: center; padding: 12px 14px; }
 .pt-typing span {
@@ -188,8 +200,10 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .pt-compose-row { display: flex; align-items: flex-end; gap: var(--gap-sm); }
 .pt-mode-btn {
-  flex: 0 0 auto; background: var(--color-bg-raised); color: var(--color-text);
+  flex: 0 0 7.5rem; width: 7.5rem; box-sizing: border-box; text-align: center;
+  background: var(--color-bg-raised); color: var(--color-text);
   border: 1px solid var(--color-border-hi); white-space: nowrap; align-self: stretch;
+  overflow: hidden; text-overflow: ellipsis;
 }
 #pt-input { flex: 1; min-height: var(--touch-min); max-height: 140px; overflow-y: auto; }
 .pt-compose-row button:not(.pt-mode-btn) { flex: 0 0 auto; align-self: stretch; }
@@ -211,6 +225,10 @@ dialog label {
 dialog input, dialog textarea, dialog select { width: 100%; box-sizing: border-box; }
 .dlg-actions { display: flex; justify-content: flex-end; gap: var(--gap-sm); margin-top: var(--gap-sm); }
 .msg { color: var(--color-text-muted); font-size: var(--font-size-sm); min-height: 1.2em; }
+/* create-form voice/timing toggles — inline, not the column-stacked dialog label */
+.pt-create-toggles { display: flex; gap: var(--gap-lg); margin-bottom: var(--gap-md); }
+.pt-check { flex-direction: row !important; align-items: center; gap: 6px; margin: 0 !important; cursor: pointer; }
+.pt-check input { width: auto; }
 
 @media (max-width: 560px) {
   .pt-stack { max-width: 82%; }

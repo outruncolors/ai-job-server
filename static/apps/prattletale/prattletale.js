@@ -178,6 +178,64 @@
     fillAvatar($('pt-chat-avatar'), name, cp && cp.avatar_path, conv.counterpart_character_id);
     $('pt-chat-name').textContent = name;
     $('pt-chat-sub').textContent = conv.title && conv.title !== name ? conv.title : (conv.scenario || '');
+    renderToggles();
+  }
+
+  function renderToggles() {
+    const cfg = (_current && _current.conversation.config) || {};
+    $('pt-voice-toggle').classList.toggle('on', !!cfg.voice_enabled);
+    $('pt-timing-toggle').classList.toggle('on', !!cfg.typing_timing_enabled);
+  }
+
+  async function toggleConfig(key) {
+    if (!_current) return;
+    const cfg = _current.conversation.config || {};
+    try {
+      const updated = await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}`,
+        'PATCH', { [key]: !cfg[key] });
+      if (updated) _current.conversation = updated;
+      renderToggles();
+    } catch (_) { /* leave state as-is on failure */ }
+  }
+
+  // ---------- app settings (narrator voice) ----------
+
+  async function openSettings() {
+    const sel = $('pt-settings-narrator');
+    const msg = $('pt-settings-msg');
+    msg.textContent = '';
+    sel.innerHTML = '<option value="">Loading…</option>';
+    $('pt-settings-dialog').showModal();
+    try {
+      const [presets, settings] = await Promise.all([
+        api('/voice-presets'),
+        api(`${APP}/settings`),
+      ]);
+      const list = Array.isArray(presets) ? presets : (presets.presets || []);
+      sel.innerHTML = '<option value="">(none — narration stays text)</option>' +
+        list.map((p) => `<option value="${_escHtml(p.id)}">${_escHtml(p.name || p.id)}</option>`).join('');
+      sel.value = settings.narrator_voice_preset_id || '';
+    } catch (err) {
+      sel.innerHTML = '<option value="">(none)</option>';
+      msg.textContent = 'Could not load voice presets: ' + err.message;
+    }
+  }
+
+  async function saveSettings() {
+    const btn = $('pt-settings-save');
+    const msg = $('pt-settings-msg');
+    btn.disabled = true;
+    msg.textContent = 'Saving…';
+    try {
+      await api(`${APP}/settings`, 'PUT',
+        { narrator_voice_preset_id: $('pt-settings-narrator').value || null });
+      $('pt-settings-dialog').close();
+    } catch (err) {
+      msg.textContent = 'Save failed: ' + err.message;
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   function renderThread() {
@@ -189,6 +247,7 @@
     }
     thread.innerHTML = turns.map(turnHtml).join('');
     wireRetry();
+    wirePlay();
     scrollToBottom();
   }
 
@@ -218,12 +277,99 @@
         <button type="button" class="pt-retry" data-turn="${_escHtml(turn.id)}">↻ Retry</button>
       </div>`;
     }
-    return `<div class="pt-bubble pt-bubble--${_escHtml(type)}">${_escHtml(item.text || '')}</div>`;
+    const url = mediaUrl(item);
+    const play = url
+      ? `<button type="button" class="pt-play" data-url="${_escHtml(url)}" title="Play audio" aria-label="Play audio">🔊</button>`
+      : '';
+    return `<div class="pt-bubble pt-bubble--${_escHtml(type)}">${_escHtml(item.text || '')}${play}</div>`;
   }
 
   function scrollToBottom() {
     const thread = $('pt-thread');
     thread.scrollTop = thread.scrollHeight;
+  }
+
+  // ---------- audio + reveal cadence ----------
+
+  // Server URL for an item's generated wav (item.audio.path is "media/<file>").
+  function mediaUrl(item) {
+    if (!item || !item.audio || !item.audio.path) return null;
+    const file = String(item.audio.path).split('/').pop();
+    return `/v1/apps/prattletale/conversations/${encodeURIComponent(_current.conversation.id)}/media/${encodeURIComponent(file)}`;
+  }
+
+  let _activeAudio = null;
+  // Play a clip; resolves when it ends/errors so the reveal cadence can await it.
+  function playAudioUrl(url) {
+    return new Promise((resolve) => {
+      try {
+        if (_activeAudio) { _activeAudio.pause(); _activeAudio = null; }
+        const a = new Audio(url);
+        _activeAudio = a;
+        const done = () => { if (_activeAudio === a) _activeAudio = null; resolve(); };
+        a.addEventListener('ended', done);
+        a.addEventListener('error', done);
+        const p = a.play();
+        if (p && p.catch) p.catch(done);
+      } catch (_) { resolve(); }
+    });
+  }
+
+  function wirePlay() {
+    $('pt-thread').querySelectorAll('.pt-play').forEach((btn) => {
+      if (btn.dataset.wired) return;
+      btn.dataset.wired = '1';
+      btn.addEventListener('click', () => playAudioUrl(btn.dataset.url));
+    });
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Per-item typing duration from text length (+ jitter); mirrors voice.py.
+  function typingMs(item) {
+    const n = (item.text || '').trim().length;
+    return Math.max(600, Math.min(4500, n * 28)) + Math.floor(Math.random() * 350);
+  }
+
+  // Reveal a fresh model turn. With typing timing on (and not an error turn),
+  // stream bubbles one at a time: typing dots -> bubble -> audio -> beat.
+  // Otherwise render it all at once. Bails cleanly if the user navigates away.
+  async function revealModelTurn(turn) {
+    const conv = _current.conversation;
+    const timing = conv.config && conv.config.typing_timing_enabled;
+    const isErr = (turn.items || []).some((i) => i.type === 'system_error');
+    if (!timing || isErr) { appendTurn(turn); scrollToBottom(); return; }
+
+    const convId = conv.id;
+    const thread = $('pt-thread');
+    const empty = thread.querySelector('.pt-thread-empty');
+    if (empty) empty.remove();
+    const cp = counterpartOf(conv);
+    const av = avatarHtml(cp ? cp.name : 'Character', cp && cp.avatar_path, conv.counterpart_character_id, 'pt-av pt-av-sm');
+    const el = document.createElement('div');
+    el.className = 'pt-turn pt-turn--model';
+    el.innerHTML = `${av}<div class="pt-stack"></div>`;
+    thread.appendChild(el);
+    const stack = el.querySelector('.pt-stack');
+
+    const stillHere = () => _current && _current.conversation.id === convId;
+    for (const item of (turn.items || [])) {
+      if (!stillHere()) return;
+      const dots = document.createElement('div');
+      dots.className = 'pt-bubble pt-bubble--dialogue pt-typing';
+      dots.innerHTML = '<span></span><span></span><span></span>';
+      stack.appendChild(dots);
+      scrollToBottom();
+      await sleep(typingMs(item));
+      if (!stillHere()) { return; }
+      dots.remove();
+      stack.insertAdjacentHTML('beforeend', bubbleHtml(item, turn));
+      wirePlay();
+      scrollToBottom();
+      const url = mediaUrl(item);
+      if (url) await playAudioUrl(url);
+      await sleep(180);
+    }
   }
 
   // ---------- composer ----------
@@ -398,9 +544,7 @@
       typingEl.remove();
       _current.transcript.turns.push(res.user_turn, res.model_turn);
       appendTurn(res.user_turn);
-      appendTurn(res.model_turn);
-      wireRetry();
-      scrollToBottom();
+      await revealModelTurn(res.model_turn);
     } catch (err) {
       typingEl.remove();
       // surface the failure inline without faking a turn
@@ -422,6 +566,8 @@
     const empty = thread.querySelector('.pt-thread-empty');
     if (empty) empty.remove();
     thread.insertAdjacentHTML('beforeend', turnHtml(turn));
+    wireRetry();
+    wirePlay();
   }
 
   function showTyping() {
@@ -477,6 +623,7 @@
       if (turnEl) {
         turnEl.outerHTML = turnHtml(newTurn);
         wireRetry();
+        wirePlay();
       } else {
         renderThread();
       }
@@ -524,6 +671,8 @@
     $('pt-create-role').value = '';
     $('pt-create-username').value = 'You';
     $('pt-create-persona').value = '';
+    $('pt-create-voice').checked = false;
+    $('pt-create-timing').checked = false;
     $('pt-create-msg').textContent = '';
     $('pt-create-submit').disabled = false;
     $('pt-create-dialog').showModal();
@@ -546,6 +695,10 @@
         device_user: {
           display_name: $('pt-create-username').value.trim() || 'You',
           persona: $('pt-create-persona').value,
+        },
+        config: {
+          voice_enabled: $('pt-create-voice').checked,
+          typing_timing_enabled: $('pt-create-timing').checked,
         },
       });
       $('pt-create-dialog').close();
@@ -574,8 +727,15 @@
 
     $('pt-back').addEventListener('click', goList);
     $('pt-delete').addEventListener('click', deleteConversation);
+    $('pt-voice-toggle').addEventListener('click', () => toggleConfig('voice_enabled'));
+    $('pt-timing-toggle').addEventListener('click', () => toggleConfig('typing_timing_enabled'));
     $('pt-mode').addEventListener('click', () => cycleMode(1));
     $('pt-send').addEventListener('click', submitOrStack);
+
+    $('pt-settings').addEventListener('click', openSettings);
+    $('pt-settings-close').addEventListener('click', () => $('pt-settings-dialog').close());
+    $('pt-settings-cancel').addEventListener('click', () => $('pt-settings-dialog').close());
+    $('pt-settings-save').addEventListener('click', saveSettings);
 
     const inp = $('pt-input');
     inp.addEventListener('input', () => { autoGrow(); updateSendBtn(); });
@@ -593,6 +753,9 @@
   //   Esc          clear all staged bubbles (and the box)
   function onComposerKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitOrStack(); return; }
+    // Tab always switches type (forward; Shift+Tab back) — it types no character,
+    // so unlike A/D it works mid-message too.
+    if (e.key === 'Tab') { e.preventDefault(); cycleMode(e.shiftKey ? -1 : 1); return; }
     if (e.key === 'Escape') {
       if (_draft.length || $('pt-input').value) {
         e.preventDefault();

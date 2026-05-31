@@ -59,6 +59,17 @@ def _trace_path(conversation_id: str, turn_id: str) -> Path:
     return _dir_for(conversation_id) / "traces" / f"{turn_id}.json"
 
 
+def media_dir(conversation_id: str) -> Path:
+    """The conversation's ``media/`` folder (generated audio). May not exist yet."""
+    return _dir_for(conversation_id) / "media"
+
+
+def media_file(conversation_id: str, filename: str) -> Path:
+    """Path to a single media file. ``filename`` is the bare basename (the router
+    rejects separators), so this can't escape the conversation folder."""
+    return media_dir(conversation_id) / filename
+
+
 def _atomic_write(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -290,6 +301,26 @@ def replace_turn(
             _atomic_write(_transcript_path(conversation_id), transcript)
             _touch_conversation(conversation_id)
             return replacement.model_dump(mode="json")
+    return None
+
+
+def apply_audio(conversation_id: str, turn_id: str, audio_by_item_id: dict) -> Optional[dict]:
+    """Set ``audio`` on items of an existing turn **in place** (ids/text unchanged).
+
+    Used by the voice stage: the model turn is committed text-first (so a synth
+    failure can't lose the reply), then audio is attached once the wavs exist.
+    Returns the updated turn, or None if the conversation/turn is missing.
+    """
+    transcript = _read_transcript(conversation_id)
+    if transcript is None:
+        return None
+    for turn in transcript.get("turns", []):
+        if turn.get("id") == turn_id:
+            for item in turn.get("items", []):
+                if item.get("id") in audio_by_item_id:
+                    item["audio"] = audio_by_item_id[item["id"]]
+            _atomic_write(_transcript_path(conversation_id), transcript)
+            return turn
     return None
 
 

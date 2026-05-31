@@ -32,6 +32,7 @@ from ..hoodat.characters_store import get_character
 from ..hoodat.prompts import render_character_context
 from . import store
 from .models import Author, ItemType
+from .voice import reveal_schedule, synthesize_turn
 
 JOB_TYPE = "prattletale_turn"
 
@@ -214,11 +215,26 @@ async def run_model_turn(
             turn = store.append_model_turn(conversation_id, items, job_id=job_id)
         if turn is None:  # pragma: no cover — transcript/turn checked above
             raise GenerationError("transcript disappeared while persisting model turn")
+
+        # Voice is additive and best-effort: the text turn is already committed,
+        # so a synth failure degrades to text instead of failing the reply.
+        voice_error: Optional[str] = None
+        try:
+            audio_map = await synthesize_turn(conversation, character, turn)
+            if audio_map:
+                updated = store.apply_audio(conversation_id, turn["id"], audio_map)
+                if updated is not None:
+                    turn = updated
+        except Exception as exc:  # noqa: BLE001 — never let voice sink the reply
+            voice_error = str(exc)
+
         store.write_trace(conversation_id, turn["id"], {
             "job_id": job_id,
             "context_input": context_vars,
             "raw_final_output": raw,
             "parsed_items": items,
+            "reveal_schedule": reveal_schedule(turn),
+            "voice_error": voice_error,
             "error": None,
         })
         return turn, job_id
