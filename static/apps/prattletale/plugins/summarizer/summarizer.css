@@ -1,13 +1,11 @@
-/* Summarizer plugin styling — the slide-up form (in #pt-plugin-panel) and the
-   summary card bubble. The slide/bounce animation itself lives in the core
-   styles.css (the .pt-plugin-panel / .pt-panel-open hooks). */
+/* Summarizer plugin styling — the slide-up options (in #pt-plugin-panel) and the
+   summary card bubble. The options panel holds only Keep/Purge + detail; the
+   focus is the composer input and Go is the composer button. The slide/bounce
+   animation lives in the core styles.css (.pt-plugin-panel / .pt-panel-open). */
 
 .pt-summarizer {
   display: flex; flex-direction: column; gap: var(--gap-sm);
-  padding: var(--gap-sm) 2px var(--gap-xs);
-}
-.pt-sum-head {
-  font-size: var(--font-size-sm); color: var(--color-text); font-weight: 600;
+  padding: var(--gap-xs) 2px;
 }
 .pt-sum-row {
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--gap-md);
@@ -21,13 +19,6 @@
   font-size: var(--font-size-sm); color: var(--color-text);
 }
 .pt-sum-opt small { color: var(--color-text-dim); font-size: var(--font-size-micro); }
-.pt-sum-focus {
-  display: flex; flex-direction: column; gap: 4px;
-  font-size: var(--font-size-xs); color: var(--color-text-dim);
-}
-.pt-sum-focus small { text-transform: none; letter-spacing: 0; }
-.pt-sum-focus-input { resize: vertical; min-height: 2.4rem; }
-.pt-sum-actions { display: flex; justify-content: flex-end; gap: var(--gap-sm); }
 .pt-sum-msg { font-size: var(--font-size-sm); color: var(--color-text-dim); }
 .pt-sum-err { color: var(--color-danger); }
 

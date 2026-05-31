@@ -29,6 +29,8 @@
   let _modeIdx = 0;
   let _editing = -1;       // index of the staged row being inline-edited, or -1
   let _sending = false;
+  let _savedTextInput = '';   // in-progress composer text, stashed while a plugin mode reuses the input
+  let _lastTextModeIdx = 0;   // most recent non-plugin mode (where Go returns to)
 
   // ---------- helpers ----------
 
@@ -622,6 +624,12 @@
     _draft = [];
     _modeIdx = 0;
     _editing = -1;
+    _savedTextInput = '';
+    _lastTextModeIdx = 0;
+    // Force the plugin panel closed (a stale one from a previous chat shouldn't leak).
+    _panelMode = null;
+    $('pt-composer').classList.remove('pt-panel-open');
+    $('pt-plugin-panel').innerHTML = '';
     $('pt-input').value = '';
     autoGrow();
     renderMode();
@@ -630,15 +638,33 @@
 
   function renderMode() {
     const mode = MODES[_modeIdx] || BASE_MODES[0];
-    $('pt-mode').textContent = mode.label;
-    // A plugin mode opens its slide-up panel in place of the text input.
+    const input = $('pt-input');
     const panel = window.PtPlugins ? PtPlugins.panel(mode.type) : null;
-    if (panel) {
+    $('pt-mode').textContent = mode.label;
+
+    const wasPanel = _panelMode !== null;
+    if (panel && _panelMode !== mode.type) {
+      // Entering a plugin mode: stash the in-progress bubble text and reuse the
+      // composer input as the mode's free-text field (the panel slides up above
+      // holding just its options). The staged draft is left untouched.
+      if (!wasPanel) _savedTextInput = input.value;
+      input.value = '';
+      input.placeholder = panel.placeholder || 'Add focus… (optional)';
       openPluginPanel(mode.type, panel);
-    } else {
+    } else if (!panel && wasPanel) {
+      // Leaving a plugin mode back to text: restore the stashed in-progress text.
       closePluginPanel();
-      $('pt-input').placeholder = PLACEHOLDERS[mode.type] || 'Message…';
+      input.value = _savedTextInput;
+      input.placeholder = PLACEHOLDERS[mode.type] || 'Message…';
+      _lastTextModeIdx = _modeIdx;
+    } else if (!panel) {
+      // Staying in a text mode (no plugin panel).
+      _lastTextModeIdx = _modeIdx;
+      input.placeholder = PLACEHOLDERS[mode.type] || 'Message…';
     }
+    // (staying in the same panel mode: leave the input + panel as-is so a typed
+    // focus and the option selections persist.)
+    autoGrow();
     updateSendBtn();
   }
 
@@ -662,9 +688,27 @@
     // collapsed by max-height when closed, so it animates instead of snapping.
     $('pt-composer').classList.add('pt-panel-open');
     try {
-      panel.renderPanel(box, pluginCtx(panel.pluginId));
+      panel.render(box, pluginCtx(panel.pluginId));
     } catch (_) {
       box.innerHTML = '<div class="pt-empty">Plugin panel failed to load.</div>';
+    }
+  }
+
+  // Run the active plugin mode's action (the Go button / Enter). Independent of
+  // the staged draft — the pending bubbles survive a Go untouched. The plugin
+  // reads its own options from ctx.panelEl and the focus from ctx.primaryValue().
+  async function runPluginGo() {
+    const panel = window.PtPlugins && PtPlugins.panel(MODES[_modeIdx].type);
+    if (!panel || !panel.submit || _sending) return;
+    _sending = true;
+    setComposerEnabled(false);
+    try {
+      await panel.submit(pluginCtx(panel.pluginId));
+    } catch (_) {
+      /* the plugin surfaces its own error inline in the panel */
+    } finally {
+      _sending = false;
+      setComposerEnabled(true);
     }
   }
 
@@ -676,7 +720,7 @@
     $('pt-composer').classList.remove('pt-panel-open');
   }
 
-  // The context handed to a plugin's renderPanel: the conversation, the raw api(),
+  // The context handed to a plugin's render/submit: the conversation, the raw api(),
   // a bound action-invoker, result helpers, and a close() that returns to Say.
   function pluginCtx(pluginId) {
     const convId = _current.conversation.id;
@@ -690,7 +734,9 @@
       onResult: (res) => applyPluginResult(res),
       appendTurn: (turn) => { _current.transcript.turns.push(turn); appendTurn(turn); scrollToBottom(); },
       markHidden: (ids) => markItemsHidden(ids),
-      close: () => { _modeIdx = 0; renderMode(); },
+      close: () => { _modeIdx = _lastTextModeIdx; renderMode(); },
+      panelEl: $('pt-plugin-panel'),
+      primaryValue: () => $('pt-input').value.trim(),
     };
   }
 
@@ -722,8 +768,15 @@
   // The primary button doubles as Stack / Send: with text it stacks the bubble,
   // on an empty box it commits the chain. Disabled only when there's nothing to do.
   function updateSendBtn() {
-    const hasText = $('pt-input').value.trim().length > 0;
     const btn = $('pt-send');
+    if (_panelMode) {
+      // In a plugin mode the button runs the action; its free-text is optional.
+      const panel = window.PtPlugins && PtPlugins.panel(MODES[_modeIdx].type);
+      btn.textContent = (panel && panel.goLabel) || 'Go';
+      btn.disabled = _sending;
+      return;
+    }
+    const hasText = $('pt-input').value.trim().length > 0;
     btn.textContent = hasText ? 'Stack' : 'Send';
     btn.disabled = _sending || (!hasText && _draft.length === 0);
   }
@@ -829,8 +882,11 @@
     return true;
   }
 
-  // Enter / Send dispatch: text present -> stack; empty box -> commit the chain.
+  // Enter / Send dispatch. In a plugin mode the button is "Go" and runs the
+  // plugin's action (the staged draft is untouched). Otherwise: text present ->
+  // stack a bubble; empty box -> commit the chain.
   function submitOrStack() {
+    if (_panelMode) { runPluginGo(); return; }
     if ($('pt-input').value.trim()) stackItem();
     else send();
   }

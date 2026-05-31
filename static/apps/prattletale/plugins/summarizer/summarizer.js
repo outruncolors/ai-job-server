@@ -1,20 +1,23 @@
 /* Summarizer plugin frontend.
  *
- * Contributes a 📋 Summarize composer mode whose slide-up panel offers Keep/Purge,
- * a detail level, and an optional focus note, then invokes the backend `summarize`
- * action and renders the returned summary card (applying Purge in place). Loaded by
- * the core only when the plugin is enabled for the conversation. */
+ * Contributes a 📋 Summarize composer mode. Its slide-up panel holds only the
+ * options (Keep/Purge + detail level); the composer's main input is reused as the
+ * optional **focus** field, and the composer's Send button (relabeled **Go**)
+ * runs the summarize action — independent of any pending staged draft. Renders the
+ * returned summary card and applies Purge in place. Loaded by the core only when
+ * the plugin is enabled for the conversation. */
 (function () {
   if (!window.PtPlugins) return;
 
-  function renderPanel(container, ctx) {
+  // Render just the options into the slide-up panel (no focus field, no buttons —
+  // those live on the composer input + Go button).
+  function renderPanel(container, _ctx) {
     container.innerHTML = `
       <div class="pt-summarizer">
-        <div class="pt-sum-head">📋 Summarize the conversation so far</div>
         <div class="pt-sum-row">
           <span class="pt-sum-label">Mode</span>
           <label class="pt-sum-opt"><input type="radio" name="pt-sum-mode" value="keep" checked>
-            <span>Keep <small>recap added; originals stay in context</small></span></label>
+            <span>Keep <small>recap added; originals stay</small></span></label>
           <label class="pt-sum-opt"><input type="radio" name="pt-sum-mode" value="purge">
             <span>Purge <small>recap replaces the originals in context</small></span></label>
         </div>
@@ -24,40 +27,31 @@
           <label class="pt-sum-opt"><input type="radio" name="pt-sum-detail" value="standard" checked> Standard</label>
           <label class="pt-sum-opt"><input type="radio" name="pt-sum-detail" value="detailed"> Detailed</label>
         </div>
-        <label class="pt-sum-focus">Focus <small>(optional)</small>
-          <textarea class="pt-sum-focus-input" rows="2"
-            placeholder="What should the summary emphasize?"></textarea>
-        </label>
         <div class="pt-sum-msg" hidden></div>
-        <div class="pt-sum-actions">
-          <button type="button" class="pt-sum-cancel secondary">Cancel</button>
-          <button type="button" class="pt-sum-go">Summarize</button>
-        </div>
       </div>`;
+  }
 
-    const go = container.querySelector('.pt-sum-go');
-    const cancel = container.querySelector('.pt-sum-cancel');
-    const msg = container.querySelector('.pt-sum-msg');
-
-    cancel.addEventListener('click', () => ctx.close());
-
-    go.addEventListener('click', async () => {
-      const mode = container.querySelector('input[name="pt-sum-mode"]:checked').value;
-      const detail = container.querySelector('input[name="pt-sum-detail"]:checked').value;
-      const focus = container.querySelector('.pt-sum-focus-input').value.trim();
-      go.disabled = true; cancel.disabled = true;
-      msg.hidden = false; msg.className = 'pt-sum-msg'; msg.textContent = 'Summarizing… this may take a moment.';
-      try {
-        const res = await ctx.invokeAction('summarize', { mode, detail, focus });
-        ctx.onResult(res);   // append the summary card; apply Purge in place
-        ctx.close();         // back to a text mode (slides the panel down)
-      } catch (err) {
-        // Surface the failure inline in the panel — no chat error bubble.
-        msg.className = 'pt-sum-msg pt-sum-err';
-        msg.textContent = 'Summarize failed: ' + ((err && err.message) || err);
-        go.disabled = false; cancel.disabled = false;
-      }
-    });
+  // Run on Go: read the options from the panel + the focus from the composer
+  // input, invoke the action, render the result, then return to a text mode.
+  async function submitPanel(ctx) {
+    const box = ctx.panelEl;
+    const msg = box.querySelector('.pt-sum-msg');
+    const modeEl = box.querySelector('input[name="pt-sum-mode"]:checked');
+    const detailEl = box.querySelector('input[name="pt-sum-detail"]:checked');
+    if (!modeEl || !detailEl) return;
+    const mode = modeEl.value;
+    const detail = detailEl.value;
+    const focus = ctx.primaryValue();   // the composer input, reused as focus
+    if (msg) { msg.hidden = false; msg.className = 'pt-sum-msg'; msg.textContent = 'Summarizing… this may take a moment.'; }
+    try {
+      const res = await ctx.invokeAction('summarize', { mode, detail, focus });
+      ctx.onResult(res);   // append the summary card; apply Purge in place
+      ctx.close();         // back to the previous text mode (panel slides down)
+    } catch (err) {
+      // Surface the failure inline in the panel — no chat error bubble.
+      if (msg) { msg.className = 'pt-sum-msg pt-sum-err'; msg.textContent = 'Summarize failed: ' + ((err && err.message) || err); }
+      throw err;           // let the core re-enable the composer
+    }
   }
 
   // The `summary` bubble: a centered, full-width "📋 Summary" card. Keeps
@@ -73,8 +67,14 @@
 
   PtPlugins.register({
     id: 'summarizer',
-    composerModes: [{ type: 'summarize', label: '📋 Summarize' }],
+    composerModes: [{
+      type: 'summarize',
+      label: '📋 Summarize',
+      goLabel: 'Go',
+      placeholder: 'What should the summary emphasize? (optional)',
+    }],
     renderPanel: renderPanel,
+    submitPanel: submitPanel,
     bubble: { types: ['summary'], render: renderSummary },
   });
 })();
