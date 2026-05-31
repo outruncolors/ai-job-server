@@ -338,6 +338,26 @@ def apply_audio(conversation_id: str, turn_id: str, audio_by_item_id: dict) -> O
     return None
 
 
+def apply_sfx(conversation_id: str, turn_id: str, sfx_by_item_id: dict) -> Optional[dict]:
+    """Set the ``sfx`` descriptor on items of an existing turn in place.
+
+    Mirrors :func:`apply_audio` for the SFX plugin: the resolver runs after the
+    turn is committed and attaches one compact descriptor per resolved item.
+    Returns the updated turn, or None if the conversation/turn is missing.
+    """
+    transcript = _read_transcript(conversation_id)
+    if transcript is None:
+        return None
+    for turn in transcript.get("turns", []):
+        if turn.get("id") == turn_id:
+            for item in turn.get("items", []):
+                if item.get("id") in sfx_by_item_id:
+                    item["sfx"] = sfx_by_item_id[item["id"]]
+            _atomic_write(_transcript_path(conversation_id), transcript)
+            return turn
+    return None
+
+
 # --- in-place item / turn edits (Phase 2 SP1) ------------------------------
 
 def _find_turn(transcript: dict, turn_id: str) -> Optional[dict]:

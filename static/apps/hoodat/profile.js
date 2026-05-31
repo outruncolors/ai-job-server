@@ -817,6 +817,30 @@
     synth.title = caps.voice ? '' : 'Voice synthesis not available on this node';
   }
 
+  async function loadSfx() {
+    let identities = [];
+    try {
+      const r = await fetch('/v1/sfx/identities');
+      identities = r.ok ? ((await r.json()).identities || []) : [];
+    } catch (e) { identities = []; }
+    const sfx = (character.speaking_style || {}).sfx || {};
+    const sel = $('hd-sfx-identity');
+    const enable = $('hd-sfx-enabled');
+    sel.innerHTML = '<option value="">(none)</option>' + identities.map((it) => {
+      const cover = (it.packs && it.packs.length) ? '' : ' — no pack installed';
+      return `<option value="${_escHtml(it.value)}">${_escHtml(it.label)}${cover}</option>`;
+    }).join('');
+    sel.value = sfx.emotes_identity || '';
+    enable.checked = !!sfx.enabled;
+    const save = async () => {
+      const next = { emotes_identity: sel.value || null, enabled: enable.checked };
+      await api(`${APP}/characters/${charId}`, 'PUT', { speaking_style: { sfx: next } });
+      setLocal('speaking_style', 'sfx', next);
+    };
+    sel.addEventListener('change', save);
+    enable.addEventListener('change', save);
+  }
+
   // Synthesize `text` in the given voice preset and play it through `audio`.
   // Shared by the Speaking Style sample and the per-answer 🔊 button.
   async function playLine(text, audio, msg, presetId) {
@@ -1065,6 +1089,7 @@
     renderDialogue();
     renderQA();
     await loadVoice();
+    await loadSfx();
     switchTab(qs.get('tab') || 'identity');
   }
 

@@ -264,9 +264,12 @@ app.include_router(prompt_pal_router)
 
 from app.cruddables.router import router as cruddables_router  # noqa: E402
 from app.packs.router import router as packs_router  # noqa: E402
+from app.sfx.router import router as sfx_router  # noqa: E402
 
 app.include_router(cruddables_router)
 app.include_router(packs_router)
+# SFX is additive (like voice) — no capability gate.
+app.include_router(sfx_router)
 
 
 @app.get("/health", response_model=HealthResponse)

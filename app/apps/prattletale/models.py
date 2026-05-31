@@ -70,6 +70,10 @@ class Item(BaseModel):
     text: str
     status: ItemStatus = ItemStatus.committed
     audio: Optional[dict] = None
+    # Compact SFX after-cue descriptor (see app/sfx/resolver.py). Additive like
+    # ``audio``: absent until the SFX plugin resolves the item. status ∈
+    # {skipped, none, rejected, resolved, error}; only "resolved" carries a clip.
+    sfx: Optional[dict] = None
     hidden_from_context: bool = False
     created_at: str
 
@@ -110,6 +114,13 @@ class ConversationConfig(BaseModel):
     # start with each plugin whose ``default_enabled`` is true (seeded by the
     # frontend on creation); the router gates action dispatch on membership.
     enabled_plugins: list[str] = Field(default_factory=list)
+    # SFX plugin knobs. ``sfx_enabled`` gates emote after-cues; ``sfx_chance`` is
+    # the per-eligible-item probability (rolled before any LLM call); ``sfx_domains``
+    # lists the global SFX domains (e.g. ["lewd"]) live for this conversation — the
+    # NSFW/extra-catalog gate. Character Emotes need no domain entry.
+    sfx_enabled: bool = False
+    sfx_chance: float = 0.65
+    sfx_domains: list[str] = Field(default_factory=list)
 
 
 class Conversation(BaseModel):

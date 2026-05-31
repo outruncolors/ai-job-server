@@ -11,8 +11,10 @@
  *   - submitPanel(ctx) — run the action when Go is pressed (reads ctx.panelEl +
  *     ctx.primaryValue()). Independent of the composer's pending draft.
  *   - bubble: {types:[...], render(item, turn) -> html}  — how to render plugin item types
- * The core (prattletale.js) consults composerModes()/panel()/bubbleRenderer() — nothing
- * plugin-specific is hard-coded there. register() is idempotent (last spec per id wins). */
+ *   - onModelTurn(turn, ctx) — fired once when a freshly committed turn (user or
+ *     model) is rendered, so a plugin can resolve side content ASAP (e.g. SFX).
+ * The core (prattletale.js) consults composerModes()/panel()/bubbleRenderer()/turnHooks()
+ * — nothing plugin-specific is hard-coded there. register() is idempotent (last spec per id wins). */
 (function () {
   const _specs = {};            // id -> spec
   const _bubbleRenderers = {};  // item type -> {pluginId, render}
@@ -59,5 +61,17 @@
 
     // The {pluginId, renderPanel} for a composer mode type, or null.
     panel(modeType) { return _panels[modeType] || null; },
+
+    // [{pluginId, fn}] for enabled plugins exposing onModelTurn(turn, ctx). The
+    // core fires these when a freshly committed turn renders.
+    turnHooks(enabledIds) {
+      const ids = enabledIds || Object.keys(_specs);
+      const out = [];
+      ids.forEach((id) => {
+        const s = _specs[id];
+        if (s && typeof s.onModelTurn === 'function') out.push({ pluginId: id, fn: s.onModelTurn });
+      });
+      return out;
+    },
   };
 })();

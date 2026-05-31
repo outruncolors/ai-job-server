@@ -8,5 +8,6 @@ The middle nav group. These aren't job runners — they're building blocks the g
 - **[MCP](mcp.md)** — the tool registry that LLM steps can call (random integers, name generation, voice segment formatting).
 - **[Packs](packs.md)** — curated bundles of cruddables (the unified envelope format); browse + apply, export/extend, and `/add-pack`.
 - **[Prompt Pal](prompt-pal.md)** — the registry for apps' internal LLM prompts: register in code, edit/filter/deep-link in the UI, resolve with a store-wins-else-default fallback. Includes the reusable FieldControls hover affordance.
+- **[SFX](sfx.md)** — normalized sound-effect packs (identity emotes + global domains), an importer with pitch/formant variants, and a chooser/guard resolver. Consumed by the Prattletale SFX plugin; identities are selected on Hoodat characters.
 
 All are surfaced as standalone pages in the navbar, but every other domain on the site consumes them: chain steps reference contexts and tools, voice and chain prompts expand wildcards, ticks schedule sequence runs, and apps register their prompts in Prompt Pal.

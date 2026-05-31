@@ -374,21 +374,24 @@
       </div>`;
     }
     const url = mediaUrl(item);
+    const hasSfx = !!(item.sfx && item.sfx.status === 'resolved');
     // Show a play button when audio exists OR the item is voiceable (clip is
-    // synthesized lazily on click). data-url is filled once the clip is known.
+    // synthesized lazily on click) OR a resolved SFX after-cue is attached.
     let play = '';
-    if (url || isVoiceable(item, turn)) {
+    if (url || isVoiceable(item, turn) || hasSfx) {
       const urlAttr = url ? ` data-url="${_escHtml(url)}"` : '';
       play = `<button type="button" class="pt-play" data-turn="${_escHtml(turn.id)}"` +
         ` data-item="${_escHtml(item.id)}"${urlAttr} title="Play audio" aria-label="Play audio">🔊</button>`;
     }
+    // Subtle indicator that an emote sound effect will play after the item audio.
+    const sfxBadge = hasSfx ? '<span class="pt-sfx-badge" title="Sound effect attached">♪</span>' : '';
     // Hidden-from-context items still render (history) but styled as excluded,
     // with a clear "won't be sent to the model" tag (SP5).
     const hidden = item.hidden_from_context;
     const cls = `pt-bubble pt-bubble--${_escHtml(type)}${hidden ? ' pt-bubble--hidden' : ''}`;
     const tag = hidden ? '<span class="pt-hidden-tag" title="Hidden from context">🚫 hidden</span>' : '';
     return `<div class="${cls}" data-turn="${_escHtml(turn.id)}" data-item="${_escHtml(item.id)}">` +
-      `${_escHtml(item.text || '')}${play}${tag}</div>`;
+      `${_escHtml(item.text || '')}${play}${sfxBadge}${tag}</div>`;
   }
 
   function scrollToBottom() {
@@ -464,24 +467,85 @@
     });
   }
 
+  // ---------- SFX after-cues (sfx plugin) ----------
+
+  // Find a live turn / item object by ids (so playback reflects late-resolved SFX).
+  function findTurn(turnId) {
+    const turns = (_current && _current.transcript && _current.transcript.turns) || [];
+    return turns.find((t) => t.id === turnId) || null;
+  }
+  function findItem(turnId, itemId) {
+    const turn = findTurn(turnId);
+    return turn ? (turn.items || []).find((it) => it.id === itemId) || null : null;
+  }
+
+  // Served URL for a resolved SFX clip (path segments encoded; spaces are common).
+  function sfxUrl(item) {
+    const s = item && item.sfx;
+    if (!s || s.status !== 'resolved' || !s.path) return null;
+    return '/v1/sfx/file/' + String(s.path).split('/').map(encodeURIComponent).join('/');
+  }
+
+  // Play an item's normal audio then its SFX after-cue (the canonical order used
+  // by both live reveal and speaker-button replay). Either part may be absent.
+  async function playItemAudioSequence(item, audioUrl) {
+    if (audioUrl) await playAudioUrl(audioUrl);
+    const url = sfxUrl(item);
+    if (url) await playAudioUrl(url);
+  }
+
   function wirePlay() {
     $('pt-thread').querySelectorAll('.pt-play').forEach((btn) => {
       if (btn.dataset.wired) return;
       btn.dataset.wired = '1';
       btn.addEventListener('click', async () => {
         let url = btn.dataset.url;
-        if (!url) {
+        const item = findItem(btn.dataset.turn, btn.dataset.item);
+        const turn = findTurn(btn.dataset.turn);
+        if (!url && item && isVoiceable(item, turn)) {
           // lazily synthesize this clip on first play
           btn.disabled = true;
           const audio = await fetchItemAudio(btn.dataset.turn, btn.dataset.item);
           btn.disabled = false;
-          if (!audio || !audio.path) { btn.style.display = 'none'; return; }
-          url = mediaUrlFromPath(audio.path);
-          btn.dataset.url = url;
+          if (audio && audio.path) { url = mediaUrlFromPath(audio.path); btn.dataset.url = url; }
         }
-        playAudioUrl(url);
+        // Replay: normal audio (if any) then the SFX after-cue.
+        playItemAudioSequence(item, url || null);
       });
     });
+  }
+
+  // Fire each enabled plugin's onModelTurn hook for a freshly committed turn so it
+  // can resolve side content (SFX) ASAP. Best-effort and non-blocking.
+  function firePluginTurn(turn) {
+    if (!turn || !window.PtPlugins) return;
+    PtPlugins.turnHooks(enabledPluginIds()).forEach(({ pluginId, fn }) => {
+      try {
+        const r = fn(turn, pluginCtx(pluginId));
+        if (r && r.catch) r.catch(() => {});
+      } catch (_) { /* a plugin hook must never break turn rendering */ }
+    });
+  }
+
+  // Apply a resolved SFX descriptor to a live item + its rendered bubble: cache it
+  // on the item (so reveal/replay see it) and surface a play button + subtle badge.
+  function applyItemSfx(turnId, itemId, sfx) {
+    const item = findItem(turnId, itemId);
+    if (item) item.sfx = sfx;
+    if (!sfx || sfx.status !== 'resolved') return;
+    const bubble = $('pt-thread').querySelector(
+      `.pt-bubble[data-turn="${turnId}"][data-item="${itemId}"]`);
+    if (!bubble) return;
+    if (!bubble.querySelector('.pt-sfx-badge')) {
+      bubble.insertAdjacentHTML('beforeend',
+        '<span class="pt-sfx-badge" title="Sound effect attached">♪</span>');
+    }
+    if (!bubble.querySelector('.pt-play')) {
+      bubble.insertAdjacentHTML('beforeend',
+        `<button type="button" class="pt-play" data-turn="${turnId}" data-item="${itemId}"` +
+        ' title="Play audio" aria-label="Play audio">🔊</button>');
+      wirePlay();
+    }
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -604,6 +668,8 @@
       await runProgress(bubbleEl, dwell, stillHere);
       if (audioDone) await audioDone;  // don't cut a clip off if it ran long
       if (!stillHere()) return;
+      // Play the SFX after-cue if it has resolved by now (else it's replay-only).
+      if (sfxUrl(item)) { await playAudioUrl(sfxUrl(item)); if (!stillHere()) return; }
     }
     wireThreadControls();  // attach edit/hide/delete + trace once fully revealed
   }
@@ -734,6 +800,7 @@
       onResult: (res) => applyPluginResult(res),
       appendTurn: (turn) => { _current.transcript.turns.push(turn); appendTurn(turn); scrollToBottom(); },
       markHidden: (ids) => markItemsHidden(ids),
+      applySfx: (turnId, itemId, sfx) => applyItemSfx(turnId, itemId, sfx),
       close: () => { _modeIdx = _lastTextModeIdx; renderMode(); },
       panelEl: $('pt-plugin-panel'),
       primaryValue: () => $('pt-input').value.trim(),
@@ -919,6 +986,10 @@
       // real ids (the per-message edit/hide/delete controls target them).
       optimisticEl.outerHTML = turnHtml(res.user_turn);
       wireThreadControls();
+      // Kick off SFX resolution for both turns ASAP (plugins, best-effort). The
+      // user turn is already rendered; the model turn resolves during its reveal.
+      firePluginTurn(res.user_turn);
+      firePluginTurn(res.model_turn);
       await revealModelTurn(res.model_turn);
     } catch (err) {
       // hard failure (network / 5xx): undo the optimistic turn and restore the
@@ -1063,6 +1134,9 @@
     $('pt-config-voice').checked = !!cfg.voice_enabled;
     $('pt-config-timing').checked = !!cfg.typing_timing_enabled;
     $('pt-config-variety').checked = cfg.variety_pass_enabled !== false;
+    $('pt-config-sfx').checked = !!cfg.sfx_enabled;
+    $('pt-config-sfx-chance').value = cfg.sfx_chance != null ? cfg.sfx_chance : 0.65;
+    $('pt-config-sfx-lewd').checked = Array.isArray(cfg.sfx_domains) && cfg.sfx_domains.includes('lewd');
     renderPluginToggles();
     $('pt-config-msg').textContent = '';
     $('pt-config-save').disabled = false;
@@ -1094,11 +1168,17 @@
     const btn = $('pt-config-save');
     btn.disabled = true;
     msg.textContent = 'Saving…';
+    let sfxChance = parseFloat($('pt-config-sfx-chance').value);
+    if (!Number.isFinite(sfxChance)) sfxChance = 0.65;
+    sfxChance = Math.min(1, Math.max(0, sfxChance));
     const config = {
       context_window_turns: window,
       voice_enabled: $('pt-config-voice').checked,
       typing_timing_enabled: $('pt-config-timing').checked,
       variety_pass_enabled: $('pt-config-variety').checked,
+      sfx_enabled: $('pt-config-sfx').checked,
+      sfx_chance: sfxChance,
+      sfx_domains: $('pt-config-sfx-lewd').checked ? ['lewd'] : [],
     };
     const pluginChecks = document.querySelectorAll('.pt-plugin-check');
     if (pluginChecks.length) {

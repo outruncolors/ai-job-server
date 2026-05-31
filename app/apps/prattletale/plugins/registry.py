@@ -18,6 +18,7 @@ from .base import Plugin
 # _PROMPT_MODULES). Add a package here when a new plugin lands.
 _PLUGIN_MODULES = (
     "app.apps.prattletale.plugins.summarizer",
+    "app.apps.prattletale.plugins.sfx",
 )
 
 PLUGIN_REGISTRY: dict[str, Plugin] = {}

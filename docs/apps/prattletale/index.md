@@ -100,3 +100,18 @@ context and rendered as `[Summary so far] …`). **Keep** leaves the originals i
 "summarized") so the summary compresses the window — and re-summarizing folds the prior summary +
 new turns rather than the purged originals. A failed summarize surfaces inline in the panel (no chat
 error bubble).
+
+**Sound Effects** (default-on) attaches an optional emote **after-cue** to `action` / `narration`
+items (never `dialogue`). It's a thin frontend hook (`onModelTurn`) over the platform
+[SFX subsystem](../../tools/sfx.md): when a turn renders it calls the `resolve-turn` action, which
+for each eligible item rolls `config.sfx_chance` **before** any LLM call, then (on a pass) asks the
+platform resolver to pick one clip from the counterpart character's emote **identity**
+(set on Hoodat's **Audio** tab) plus any conversation-enabled global **domains** (`config.sfx_domains`,
+e.g. `lewd` for the NSFW gate), validates it with a guard, and persists a compact `sfx` descriptor on
+the item (`status` ∈ `skipped` / `none` / `rejected` / `resolved` / `error`; resolution traces append
+to the turn's `traces/<turn>.json` under `sfx`). Playback is additive and ordered: during reveal and
+on speaker-button replay the item's normal voice audio plays first, then the SFX cue
+(`playItemAudioSequence`). A cue that resolves after its bubble is revealed is replay-only and never
+interrupts later messages. The config dialog exposes **♪ Sound effects**, **🔞 NSFW SFX (lewd)**, and
+an **SFX chance** field. Plugin actions: `resolve-item`, `resolve-turn`, `reroll-item` (skips the
+chance roll and any prior final state), `clear-item`.

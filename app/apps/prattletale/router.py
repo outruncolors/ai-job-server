@@ -47,6 +47,9 @@ class ConfigPatch(BaseModel):
     typing_timing_enabled: Optional[bool] = None
     variety_pass_enabled: Optional[bool] = None
     enabled_plugins: Optional[list[str]] = None
+    sfx_enabled: Optional[bool] = None
+    sfx_chance: Optional[float] = None
+    sfx_domains: Optional[list[str]] = None
 
 
 class ConversationUpdate(ConfigPatch):

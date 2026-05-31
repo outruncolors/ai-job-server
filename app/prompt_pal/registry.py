@@ -22,6 +22,7 @@ _PROMPT_MODULES = (
     "app.apps.blaboratory.prompts",
     "app.apps.hoodat.prompts",
     "app.apps.prattletale.prompts",
+    "app.sfx.prompts",
 )
 
 

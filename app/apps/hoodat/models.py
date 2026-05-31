@@ -154,6 +154,9 @@ class SpeakingStyle(BaseModel):
     # Free-text sample lines that capture how the character talks; the more
     # present, the better subsequent generations match the voice (few-shot).
     dialogue_examples: list[str] = Field(default_factory=list)
+    # SFX/Emotes binding: {"emotes_identity": "<Identity value>", "enabled": bool}.
+    # Optional — absent on existing characters; not LLM-generatable (not in FIELD_SPECS).
+    sfx: Optional[dict] = None
 
 
 class Character(BaseModel):

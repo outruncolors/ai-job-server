@@ -28,7 +28,7 @@
     <button type="button" class="tab-btn" data-tab="personality">Personality</button>
     <button type="button" class="tab-btn" data-tab="background">Background</button>
     <button type="button" class="tab-btn" data-tab="experiences">Experiences</button>
-    <button type="button" class="tab-btn" data-tab="speaking_style">Speaking Style</button>
+    <button type="button" class="tab-btn" data-tab="speaking_style">Audio</button>
     <button type="button" class="tab-btn" data-tab="qa">Q&amp;A</button>
     <button type="button" class="tab-btn" data-tab="exports">Exports</button>
   </div>
@@ -56,6 +56,20 @@
             <span id="hd-voice-msg" role="status"></span>
           </div>
           <audio id="hd-voice-audio" controls hidden></audio>
+        </div>
+      </section>
+      <section class="hd-section">
+        <div class="hd-section-head"><h3 class="hd-section-title">SFX</h3></div>
+        <div class="hd-section-body">
+          <label class="hd-sfx-enable">
+            <input type="checkbox" id="hd-sfx-enabled"> Enable emote sound effects
+          </label>
+          <label class="hd-voice-preset">Emote identity
+            <select id="hd-sfx-identity"></select>
+          </label>
+          <p class="hd-field-hint">Picks the voice/age profile used for this character's emote
+            cues (sneeze, laugh, sigh…). <code>(lower)</code> / <code>(higher)</code> variants
+            are pitch-shifted.</p>
         </div>
       </section>
     </section>

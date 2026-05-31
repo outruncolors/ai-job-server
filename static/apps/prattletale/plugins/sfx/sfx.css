@@ -1,0 +1,10 @@
+/* SFX plugin — the subtle "sound effect attached" badge on a bubble. Kept
+   minimal so it doesn't compete with the speaker button. */
+.pt-sfx-badge {
+  margin-left: 6px;
+  opacity: 0.55;
+  font-size: var(--font-size-xs, 0.75rem);
+  cursor: default;
+  user-select: none;
+}
+.pt-bubble:hover .pt-sfx-badge { opacity: 0.85; }

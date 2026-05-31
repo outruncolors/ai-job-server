@@ -9,3 +9,5 @@ anyio==4.9.0
 psutil==7.2.2
 croniter==5.0.1
 sqlite-vec==0.1.9
+# SFX pitch/formant variants (PSOLA via bundled Praat; no system binary needed)
+praat-parselmouth==0.4.7
