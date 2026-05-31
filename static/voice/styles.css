@@ -1,9 +1,70 @@
 /* ── Panels ── */
+/* L1 nav stacks above a content area; the content area is either the two-panel
+   Voice view (a flex row) or the full-width SFX view. */
+#panels { flex-direction: column; }
+#voice-view  { display: flex; flex: 1; min-height: 0; }
 #panel-left  { flex: 1; padding: 24px 28px; }
 #panel-right { flex: 1; padding: 24px 28px; }
 
-/* ── Tabs container ── */
+/* ── L1 nav (Voice ↔ SFX) ── */
+#audio-l1-nav {
+  display: flex; gap: 2px; flex: 0 0 auto;
+  padding: 0 28px; border-bottom: 1px solid var(--color-border-mid);
+}
+.l1-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--color-text-muted); font: inherit; font-size: 0.82rem;
+  padding: 11px 16px; border-bottom: 2px solid transparent; margin: 0;
+}
+.l1-btn:hover  { color: #999; }
+.l1-btn.active { color: var(--color-text); border-bottom-color: var(--color-accent); }
+
+/* ── Tabs container (L2) ── */
 #voice-tabs { display: flex; gap: 2px; margin-bottom: 20px; border-bottom: 1px solid #1e1e1e; }
+
+/* ── SFX browser ── */
+#sfx-view { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 28px; }
+#sfx-controls { display: flex; flex-wrap: wrap; gap: var(--gap-md); align-items: flex-end; }
+.sfx-ctl { display: flex; flex-direction: column; gap: 3px; font-size: 0.7rem; color: var(--color-text-muted); }
+.sfx-ctl-grow { flex: 1 1 180px; }
+.sfx-ctl select, .sfx-ctl input { margin: 0; }
+#sfx-player { display: block; width: 100%; margin: 16px 0 4px; }
+.sfx-count { font-size: 0.72rem; color: var(--color-text-muted); margin-bottom: 10px; }
+.sfx-empty { color: var(--color-text-muted); font-size: 0.8rem; }
+
+#sfx-grid {
+  display: grid; gap: var(--gap-md);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.sfx-card {
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--color-bg-panel); border: 1px solid var(--color-border-mid);
+  border-radius: 8px; padding: 12px 14px;
+}
+.sfx-card:hover     { border-color: var(--color-border-hi); }
+.sfx-card.playing   { border-color: var(--color-accent); }
+.sfx-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sfx-card-cat {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--color-accent);
+}
+.sfx-card-dur  { font-size: 0.68rem; color: var(--color-text-muted); }
+.sfx-card-desc { font-size: 0.82rem; color: var(--color-text); word-break: break-word; }
+.sfx-card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.sfx-tag-chip {
+  font-size: 0.64rem; color: var(--color-text-sub);
+  background: var(--color-bg-raised); border: 1px solid var(--color-border-mid);
+  border-radius: 3px; padding: 1px 6px;
+}
+.sfx-play {
+  margin: 4px 0 0; padding: 5px 10px; font-size: 0.74rem; align-self: flex-start;
+}
+
+/* ── Mobile: stack the Voice two-panel view (panels themselves stack via
+   responsive.css; the new #voice-view wrapper needs to follow suit) ── */
+@media (max-width: 768px) {
+  #voice-view { flex-direction: column; }
+}
 
 /* ── Voice-specific ── */
 #voice-audio { margin-top: 14px; width: 100%; display: none; }

@@ -50,7 +50,17 @@
       }
     }
 
-    // ── Tabs ─────────────────────────────────────────────────────────
+    // ── L1 nav: Voice ↔ SFX ──────────────────────────────────────────
+    function switchL1(view) {
+      document.querySelectorAll('#audio-l1-nav .l1-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.l1 === view)
+      );
+      document.getElementById('voice-view').style.display = view === 'voice' ? '' : 'none';
+      document.getElementById('sfx-view').style.display   = view === 'sfx'   ? '' : 'none';
+      if (view === 'sfx') initSfxBrowser();
+    }
+
+    // ── L2 tabs (within Voice) ───────────────────────────────────────
     function switchTab(tab) {
       _activeTab = tab;
       document.querySelectorAll('#voice-tabs .tab-btn').forEach(b =>

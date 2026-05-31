@@ -14,10 +14,20 @@
 
   <div id="panels">
 
+    <!-- ── L1 nav: Voice ↔ SFX ── -->
+    <div id="audio-l1-nav">
+      <button class="l1-btn active" data-l1="voice" onclick="switchL1('voice')">Voice</button>
+      <button class="l1-btn"        data-l1="sfx"   onclick="switchL1('sfx')">SFX</button>
+    </div>
+
+    <!-- ════════════ Voice view ════════════ -->
+    <div id="voice-view">
+
     <!-- ── Left: Controls ── -->
     <div id="panel-left">
 
       <div id="recreate-notice" class="recreate-notice" style="display:none;"></div>
+      <!-- ── L2 nav: voice sub-tabs ── -->
       <div id="voice-tabs">
         <button class="tab-btn active" data-tab="design"  onclick="switchTab('design')">Design Voice</button>
         <button class="tab-btn"        data-tab="clone"   onclick="switchTab('clone')">Clone Voice</button>
@@ -324,6 +334,42 @@
 
     </div><!-- /panel-right -->
 
+    </div><!-- /voice-view -->
+
+    <!-- ════════════ SFX view ════════════ -->
+    <div id="sfx-view" style="display:none;">
+
+      <div id="sfx-controls">
+        <label class="sfx-ctl">Pack
+          <select id="sfx-pack"></select>
+        </label>
+        <label class="sfx-ctl">Profile
+          <select id="sfx-profile"></select>
+        </label>
+        <label class="sfx-ctl sfx-ctl-grow">Search
+          <input type="search" id="sfx-search" placeholder="description, id, tag…" autocomplete="off">
+        </label>
+        <label class="sfx-ctl">Category
+          <select id="sfx-category"><option value="">All</option></select>
+        </label>
+        <label class="sfx-ctl">Tag / domain
+          <select id="sfx-tag"><option value="">All</option></select>
+        </label>
+        <label class="sfx-ctl">Sort
+          <select id="sfx-sort">
+            <option value="name">Name</option>
+            <option value="category">Category</option>
+            <option value="duration">Duration</option>
+          </select>
+        </label>
+      </div>
+
+      <audio id="sfx-player" controls preload="none"></audio>
+      <div id="sfx-count" class="sfx-count"></div>
+      <div id="sfx-grid"></div>
+
+    </div><!-- /sfx-view -->
+
   </div>
 
   <script src="/js/nav.js"></script>
@@ -336,6 +382,7 @@
   <script src="/js/escape.js"></script>
   <script src="/js/poll.js"></script>
   <script src="/js/toast.js"></script>
+  <script src="sfx.js"></script>
   <script src="voice.js"></script>
   <script src="/js/nav-mobile.js"></script>
 </body>

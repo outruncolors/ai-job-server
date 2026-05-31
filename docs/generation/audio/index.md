@@ -1,8 +1,11 @@
 # Audio
 
-The Audio page (`/voice`) is the home for everything voice-related. It runs on **OmniVoice** (an ephemeral subprocess invoked per synthesis) and stores reusable voices on disk as **voice presets**.
+The Audio page (`/voice`) is the home for everything audio-related. A top-level **L1 nav** switches between two sections:
 
-Four tabs:
+- **Voice** — synthesis on **OmniVoice** (an ephemeral subprocess invoked per synthesis), storing reusable voices on disk as **voice presets**
+- **[SFX](sfx-browser.md)** — a read-only browser to scan and audition imported sound-effect / emote clips
+
+The **Voice** section has four sub-tabs (L2 nav):
 
 - **[Design Voice](design-voice.md)** — synthesize a sample from scratch by describing the speaker
 - **[Clone Voice](clone-voice.md)** — turn an existing WAV recording into a preset

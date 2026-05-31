@@ -6,6 +6,10 @@ A platform-level subsystem (`app/sfx/`) that turns vendor sound packs into one
 emote after-cue to `action`/`narration` items; Hoodat characters pick the emote
 **identity** that represents them.
 
+To scan and audition imported clips by hand, use the **SFX** section of the Audio
+page (`/voice`) — a read-only filter+sort grid; see the
+[SFX browser](../generation/audio/sfx-browser.md) guide.
+
 ## Pack model
 
 Every pack is normalized to `SFX_ROOT/normalized/<pack_id>/manifest.json` (env
