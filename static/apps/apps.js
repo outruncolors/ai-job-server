@@ -16,6 +16,13 @@
       blurb: 'Build characters from a prompt, regenerate any field, and export them at any detail.',
       glyph: '🧑',
     },
+    {
+      href: '/apps/prattletale/',
+      name: 'Prattletale',
+      tagline: 'iMessage-style roleplay chat.',
+      blurb: 'Text a Hoodat character; the model replies in a burst of short, typed bubbles.',
+      glyph: '💬',
+    },
   ];
 
   const esc = (s) => String(s)

@@ -64,6 +64,7 @@ from .llamacpp.embed_manager import get_embed_manager
 from .llamacpp.embed_router import router as llamacpp_embed_router
 from .apps.blaboratory.router import router as blaboratory_router
 from .apps.hoodat.router import router as hoodat_router
+from .apps.prattletale.router import router as prattletale_router
 from . import jobs as _jobs_module
 from .jobs import (
     build_jobs_zip,
@@ -243,6 +244,7 @@ app.include_router(mcp_router)
 app.include_router(embed_lab_router)
 app.include_router(blaboratory_router)
 app.include_router(hoodat_router)
+app.include_router(prattletale_router)
 app.include_router(prompt_pal_router)
 
 from app.cruddables.router import router as cruddables_router  # noqa: E402
