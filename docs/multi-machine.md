@@ -314,7 +314,7 @@ The `deploy-secondary.sh` script:
 
 1. Refuses to run if the working tree is dirty (override with `--force`).
 2. Runs `git push local master` to publish to the bare repo at `/srv/git/ai-job-server.git`.
-3. SSHes to the peer and runs `cd ~/ai-job-server && git pull && systemctl --user restart ai-job-server`, streaming output back.
+3. SSHes to the peer and runs `cd ~/ai-job-server && git pull && .venv/bin/pip install -q -r requirements.txt && systemctl --user restart ai-job-server`, streaming output back. The `pip install` keeps the peer's venv in sync with `requirements.txt` — without it, a `git pull` that introduces a new import (e.g. `numpy` via the SFX router) crashes the peer on boot.
 4. Waits 5s and probes `http://<peer>:8090/v1/server/health`, retrying for up to ~15s. Fails loudly if the peer doesn't come back, doesn't return a `git_sha`, or returns a `git_sha` that doesn't match the local HEAD.
 5. Restarts the **local** `ai-job-server.service` so its self-reported `git_sha` refreshes — `get_git_sha()` is computed once at startup, so without this step a commit made on the primary would leave the peer poller showing amber (peer on the new SHA, primary stuck on the old one) until someone restarted manually. Soft-fails with a warning if the unit isn't installed locally (e.g., running the script from a machine that isn't the primary).
 
@@ -414,6 +414,11 @@ Symptom: topnav widget shows a red dot for the peer; `/v1/server/peers` reports 
    ssh gpu 'systemctl --user status  ai-job-server --no-pager'
    ```
    If not active: `systemctl --user start ai-job-server`. Check why it died with `journalctl --user -u ai-job-server -n 200 --no-pager`.
+   - **Crash-loop with `ModuleNotFoundError` on boot** (`activating (auto-restart)`, status 1): the peer's venv is stale — `git pull` brought new code that imports a package the venv lacks (e.g. `numpy` via `app.sfx.router`). Reinstall deps and restart:
+     ```bash
+     ssh gpu 'cd ~/ai-job-server && .venv/bin/pip install -r requirements.txt && systemctl --user restart ai-job-server'
+     ```
+     Deploys since then run `pip install -r requirements.txt` on the peer automatically (see "Deploying changes"), so this should not recur.
 2. **Wrong host in `config/server.json`?** The `host` field is what the poller resolves. Typos or stale IPs land here.
    ```bash
    curl -s http://primary.local:8090/v1/server/peers | jq '.peers[].host'

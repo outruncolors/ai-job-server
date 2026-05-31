@@ -112,6 +112,10 @@ if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$PEER_HOST" \
     'set -e
      cd ~/ai-job-server
      git pull
+     # Reinstall deps so new Python requirements (added on the primary) reach
+     # the peer — git pull alone leaves the venv stale, which crashes boot when
+     # a freshly-imported module (e.g. numpy via the SFX router) is missing.
+     .venv/bin/pip install -q -r requirements.txt
      systemctl --user restart ai-job-server
      echo "Restarted on $(hostname) at $(date -Iseconds)"'
 then
