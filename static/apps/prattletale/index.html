@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Prattletale · Apps</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav id="topnav"></nav>
+
+  <!-- ===== conversation list ===== -->
+  <section id="pt-list-view">
+    <header id="pt-header">
+      <a href="/apps/" class="back-link">&larr; Apps</a>
+      <h1>💬 Prattletale</h1>
+      <p class="subtitle">Roleplay chats with your characters.</p>
+    </header>
+
+    <div id="pt-toolbar">
+      <button type="button" id="pt-new">+ New conversation</button>
+    </div>
+
+    <main id="pt-list" aria-busy="false"></main>
+  </section>
+
+  <!-- ===== chat view ===== -->
+  <section id="pt-chat-view" hidden>
+    <header id="pt-chat-head">
+      <button type="button" id="pt-back" class="pt-icon-btn" aria-label="Back to conversations">&larr;</button>
+      <span id="pt-chat-avatar" class="pt-av"></span>
+      <div id="pt-chat-titles">
+        <span id="pt-chat-name"></span>
+        <span id="pt-chat-sub"></span>
+      </div>
+      <button type="button" id="pt-delete" class="pt-icon-btn pt-danger" aria-label="Delete conversation" title="Delete conversation">🗑</button>
+    </header>
+
+    <main id="pt-thread" aria-busy="false"></main>
+
+    <footer id="pt-composer">
+      <div id="pt-draft" class="pt-draft" hidden></div>
+      <div class="pt-compose-row">
+        <button type="button" id="pt-mode" class="pt-mode-btn" title="Cycle bubble type"></button>
+        <textarea id="pt-input" rows="1" placeholder="Message…" autocomplete="off"></textarea>
+        <button type="button" id="pt-stack" class="secondary" title="Stack another bubble before sending">+ Stack</button>
+        <button type="button" id="pt-send" title="Send turn">Send</button>
+      </div>
+    </footer>
+  </section>
+
+  <!-- ===== new conversation dialog ===== -->
+  <dialog id="pt-create-dialog">
+    <form id="pt-create-form" method="dialog">
+      <div class="dlg-head">
+        <h3>New conversation</h3>
+        <button type="button" class="x" id="pt-create-close" aria-label="Close">×</button>
+      </div>
+      <label>Counterpart character
+        <select id="pt-create-character"></select>
+      </label>
+      <label>Title<input type="text" id="pt-create-title" placeholder="e.g. Late-night diner"></label>
+      <label>Scenario
+        <textarea id="pt-create-scenario" rows="3"
+          placeholder="Where are you? What's the situation?"></textarea>
+      </label>
+      <label>Role instructions
+        <textarea id="pt-create-role" rows="2"
+          placeholder="How should they stay in character?"></textarea>
+      </label>
+      <label>Your display name<input type="text" id="pt-create-username" value="You"></label>
+      <label>Your persona
+        <textarea id="pt-create-persona" rows="2"
+          placeholder="Who are you in this scene? (optional)"></textarea>
+      </label>
+      <div id="pt-create-msg" class="msg"></div>
+      <div class="dlg-actions">
+        <button type="button" class="secondary" id="pt-create-cancel">Cancel</button>
+        <button type="button" id="pt-create-submit">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/nav.js"></script>
+  <script src="prattletale.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

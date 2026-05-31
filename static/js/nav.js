@@ -30,6 +30,7 @@
       { href: '/apps/',             label: 'All Apps',    page: 'apps' },
       { href: '/apps/blaboratory/', label: 'Blaboratory', page: 'apps' },
       { href: '/apps/hoodat/',      label: 'Hoodat',      page: 'apps' },
+      { href: '/apps/prattletale/', label: 'Prattletale', page: 'apps' },
     ]},
   ];
 
