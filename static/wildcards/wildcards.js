@@ -21,7 +21,7 @@ function renderList() {
   }
   el.innerHTML = _wildcards.map(wc => {
     const sel = _editingId === wc.id ? ' selected' : '';
-    const count = wc.entries ? wc.entries.length : 0;
+    const count = (wc.data && wc.data.entries) ? wc.data.entries.length : 0;
     const desc = (wc.description || '').trim();
     const descHtml = desc ? `<div class="wc-item-desc">${_escHtml(desc)}</div>` : '';
     return `<div class="wc-item${sel}" onclick="editWildcard('${_escHtml(wc.id)}')">
@@ -106,7 +106,7 @@ function editWildcard(id) {
   document.getElementById('f-description').value = wc.description || '';
   document.getElementById('btn-delete').style.display = 'inline-block';
   document.getElementById('form-msg').textContent = '';
-  _renderEntries(wc.entries || []);
+  _renderEntries((wc.data && wc.data.entries) || []);
   renderList();
 }
 
