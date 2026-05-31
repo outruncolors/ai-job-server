@@ -27,13 +27,15 @@ on Hoodat for every non-user character (sheet, avatar, voice); Hoodat stays app-
 
 ## Status
 
-**Phase 1 (text-first conversation loop + voice) and Phase 2 (config & dev tools) are built.** A
-human can create a conversation against a Hoodat character and exchange typed-bubble turns; model
-dialogue/narration can be synthesized to audio with a per-item reveal cadence (degrades to text when
-voice is off or the `voice` capability is absent). Phase 2 adds an in-chat **config view** (edit
-metadata + behaviour after creation), **per-message edit / hide / delete** (and delete-turn), and a
-**dev-tools trace viewer + pipeline node-graph**. Phases 3–4 (plugins, Model×Model, autonomous
-ticks, group chat) are sketched in the design and get their own build plans just-in-time.
+**Phase 1 (text-first conversation loop + voice), Phase 2 (config & dev tools), and Phase 3
+(plugins — Summarizer) are built.** A human can create a conversation against a Hoodat character and
+exchange typed-bubble turns; model dialogue/narration can be synthesized to audio with a per-item
+reveal cadence (degrades to text when voice is off or the `voice` capability is absent). Phase 2
+adds an in-chat **config view** (edit metadata + behaviour after creation), **per-message edit /
+hide / delete** (and delete-turn), and a **dev-tools trace viewer + pipeline node-graph**. Phase 3
+adds a **hook-based plugin system** with **Summarizer** as the first plugin (a 📋 Summarize composer
+mode that map-reduces the history into one summary bubble; Keep or Purge). Phase 4 (Model×Model,
+autonomous ticks, group chat) is sketched in the design and gets its own build plan just-in-time.
 
 ## How it works (Phase 1)
 
@@ -72,3 +74,29 @@ voice (Prattletale settings); without it Prattletale degrades to text.
   via `GET …/turns/{turn_id}/trace`; the generator enriches each trace with the ordered `steps`
   (`{number, id, name, prompt, output}`) by pairing the request steps with the executor's per-step
   output dirs.
+
+## How it works (Phase 3 — plugins)
+
+A **plugin** is a backend package under `app/apps/prattletale/plugins/<id>/` that registers itself
+at import (a `Plugin` manifest + named **actions**), with optional **frontend assets** under
+`static/apps/prattletale/plugins/<id>/`. The backend hook surface is one generic endpoint —
+`POST /conversations/{id}/plugins/{plugin_id}/actions/{action}` — that 404s on an unknown
+plugin/action, 409s when the plugin isn't in the conversation's `config.enabled_plugins`, and
+otherwise runs the action and returns its result dict. `GET /plugins` lists the manifests. The
+frontend loads each enabled plugin's JS, which calls `window.PtPlugins.register({...})` to contribute
+**composer modes**, a **renderPanel**, and **bubble renderers**; the core merges these in without
+knowing what the plugin does. Plugins are toggled per conversation in the config dialog's **Plugins**
+section (persisted through the same nested-`config` PATCH); new conversations start with each plugin
+whose `default_enabled` is true.
+
+**Summarizer** (the first plugin, default-on) adds a **📋 Summarize** composer mode. Selecting it
+slides up a panel with **Keep / Purge**, a **detail level** (Brief / Standard / Detailed), and an
+optional **focus** note. Submitting runs a hierarchical **map-reduce** over the chain executor
+(chunk the covered turns → summarize each chunk → merge partials until one remains; editable
+`summarize.map` / `summarize.reduce` / `summarize.level.*` Prompt Pal entries) and posts one
+avatar-less, centered **📋 Summary** card (a `summary` item on a `system`-authored turn, kept in
+context and rendered as `[Summary so far] …`). **Keep** leaves the originals in context;
+**Purge** also marks the covered originals `hidden_from_context` (still visible, styled
+"summarized") so the summary compresses the window — and re-summarizing folds the prior summary +
+new turns rather than the purged originals. A failed summarize surfaces inline in the panel (no chat
+error bubble).

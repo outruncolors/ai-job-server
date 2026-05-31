@@ -16,6 +16,9 @@ logic in their own package (`app/apps/<name>/`, `static/apps/<name>/`).
   self-contained conversation folder per chat, a synchronous turn-generation
   pipeline, and optional per-item voice + reveal timing. An in-chat config view,
   per-message edit/hide/delete, and a dev-tools trace viewer + pipeline node-graph.
+  A hook-based plugin system (per-conversation enable + generic action dispatch +
+  a `window.PtPlugins` frontend API) ships with **Summarizer**: a 📋 Summarize mode
+  that map-reduces the history into one summary bubble (Keep or Purge).
 
 Blaboratory and Hoodat dogfood the cross-app [Prompt Pal](../tools/prompt-pal.md) registry and
 the FieldControls hover affordance. The single bridge from the systems UI is one
