@@ -198,6 +198,19 @@ instruction* in the
 `turn` prompt; the guard must **not merge** multiple bubbles into one. This is why parsing stays
 trivial and the editor is tunable in the Prompt Pal UI with no extra job dir.
 
+### Message shape is a wildcard
+
+Left alone, the model over-narrates and fires a burst of bubbles every turn. The desired *shape* of
+a reply — how many messages, and whether to include an action or narration — is therefore a
+**wildcard**, `Prattletale Message Style` (seeded if absent by `app/apps/prattletale/seed.py`, then
+tunable in the Wildcards UI). The turn prompt embeds a `%%Prattletale Message Style%%` token in a
+"message shape for this reply" section, and `build_turn_request` resolves it server-side
+(`wildcards.resolve_wildcards`) with a fresh weighted pick each turn — so the per-turn shape follows
+the wildcard's distribution (default 40% single message / 30% action+message / 20% mix with
+narration / 10% burst). Wildcards normally resolve in the browser before a prompt is sent; this
+prompt is built on the server, so resolution happens there. The variety pass and guard then preserve
+that chosen shape (line count/kinds) and only rework wording/format.
+
 ### Commit semantics
 
 The model turn runs **synchronously via direct `execute_chain_job`** inside the POST — exactly

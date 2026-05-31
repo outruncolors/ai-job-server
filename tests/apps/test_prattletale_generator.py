@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from app import wildcards
 from app.apps.prattletale import generator, store
 from app.chain.models import ChainLLMConfig
 from app.prompt_pal import store as pp_store
@@ -15,10 +16,13 @@ _CHARACTER = {"id": "mara-okafor", "name": "Mara", "summary": "a tired diner reg
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch, tmp_path):
-    """Conversations under tmp; default LLM + counterpart stubbed. Prompt Pal store
-    points at an empty tmp dir so prompt resolution uses the in-code defaults."""
+    """Conversations under tmp; default LLM + counterpart stubbed. Prompt Pal +
+    wildcard stores point at empty tmp dirs so resolution uses the in-code
+    defaults and never touches the real config."""
     monkeypatch.setattr(store, "CONVERSATIONS_DIR", tmp_path / "conversations")
     monkeypatch.setattr(pp_store, "PROMPT_PAL_DIR", tmp_path / "prompt_pal")
+    monkeypatch.setattr(wildcards, "_DIR", tmp_path / "wildcards")
+    monkeypatch.setattr(wildcards, "_INDEX_PATH", tmp_path / "wildcards" / "index.json")
     monkeypatch.setattr(
         generator, "get_default_as_chain_llm_config",
         lambda: ChainLLMConfig(api_base="http://x", model="m"),

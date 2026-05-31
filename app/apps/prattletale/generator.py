@@ -28,6 +28,7 @@ from ...chain.models import Alternative, ChainJobRequest, ChainLLMConfig, ChainS
 from ...jobs import create_job, find_job_dir
 from ...llm_config import get_default_as_chain_llm_config
 from ...prompt_pal.service import get_guard, get_text
+from ...wildcards import resolve_wildcards
 from ..hoodat.characters_store import get_character
 from ..hoodat.prompts import render_character_context
 from . import store
@@ -138,12 +139,16 @@ def build_turn_request(
     format guard so the guard still has the last word on format. It is skipped
     when ``variety`` is False or the ``(prattletale, variety)`` prompt is empty.
     """
-    steps = [_llm_step(1, "turn", "Turn", get_text("prattletale", "turn", variables=context_vars))]
+    # resolve_wildcards expands %%name%% tokens (e.g. the per-turn message-shape
+    # pick) with a fresh weighted draw each turn — the server-side equivalent of
+    # the frontend wildcard pass, which this prompt never goes through.
+    turn_prompt = resolve_wildcards(get_text("prattletale", "turn", variables=context_vars))
+    steps = [_llm_step(1, "turn", "Turn", turn_prompt)]
     number = 2
     if variety:
         variety_prompt = get_text("prattletale", "variety", variables=context_vars)
         if variety_prompt.strip():
-            steps.append(_llm_step(number, "variety", "Variety", variety_prompt))
+            steps.append(_llm_step(number, "variety", "Variety", resolve_wildcards(variety_prompt)))
             number += 1
     guard_prompt = get_guard("prattletale", "turn")
     if guard_prompt:

@@ -13,6 +13,7 @@ not affect references.
 from __future__ import annotations
 
 import json
+import random
 import re
 from pathlib import Path
 from typing import Optional
@@ -172,6 +173,53 @@ def delete_wildcard(wid: str) -> bool:
         return False
     _write_index(new_items)
     return True
+
+
+# --- resolution (server-side) ----------------------------------------------
+# The frontend resolves %%name%% tokens before sending a prompt (static/js/
+# wildcards.js). Prompts built on the server (e.g. Prattletale's turn prompt)
+# never pass through it, so this is the equivalent server-side pass: weighted
+# pick per token, nested refs, cycle-safe, depth-capped. Unknown tokens are left
+# literal (same as the frontend). Default per-entry weight is 5, matching JS.
+
+_WC_MAX_DEPTH = 16
+
+
+def _pick_weighted(entries: list[dict]) -> str:
+    texts = [e.get("text") or "" for e in entries]
+    weights = [w if (w := e.get("weight")) else 5 for e in entries]  # 0/None -> 5, like JS `|| 5`
+    if not texts:
+        return ""
+    total = sum(weights)
+    if total <= 0:
+        return random.choice(texts)
+    return random.choices(texts, weights=weights, k=1)[0]
+
+
+def _resolve(text: str, by_name: dict[str, dict], visiting: set[str], depth: int) -> str:
+    if not text or "%%" not in text or depth >= _WC_MAX_DEPTH:
+        return text
+
+    def repl(m: "re.Match[str]") -> str:
+        key = m.group(1).lower()
+        wc = by_name.get(key)
+        entries = _entries_of(wc) if wc else []
+        if not entries or key in visiting:
+            return m.group(0)  # unknown or cyclic -> leave the token literal
+        picked = _pick_weighted(entries)
+        return _resolve(picked, by_name, visiting | {key}, depth + 1)
+
+    return _TOKEN_RE.sub(repl, text)
+
+
+def resolve_wildcards(text: str) -> str:
+    """Resolve ``%%name%%`` wildcard tokens in ``text`` with a weighted random
+    pick per token (recursively, cycle-safe). Unknown tokens are left literal.
+    A fresh pick is made on every call (so each turn varies)."""
+    if not text or "%%" not in text:
+        return text
+    by_name = {(it.get("name") or "").lower(): it for it in list_wildcards()}
+    return _resolve(text, by_name, set(), 0)
 
 
 def upsert_envelope(env: dict) -> tuple[str, str]:
