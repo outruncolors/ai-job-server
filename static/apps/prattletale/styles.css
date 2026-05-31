@@ -310,11 +310,10 @@ dialog input, dialog textarea, dialog select { width: 100%; box-sizing: border-b
 }
 #pt-composer.pt-panel-open .pt-plugin-panel {
   max-height: 60vh; opacity: 1; transform: translateY(0);
+  margin-bottom: var(--gap-sm);
 }
-/* the plugin panel replaces the text composer while open */
-#pt-composer.pt-panel-open .pt-compose-row,
-#pt-composer.pt-panel-open .pt-draft,
-#pt-composer.pt-panel-open .pt-hint { display: none; }
+/* The composer row stays put (same mode button, same layout) — the panel just
+   slides up above it, so keyboard mode-cycling keeps working. */
 
 @media (prefers-reduced-motion: reduce) {
   .pt-plugin-panel { transition: none; transform: none; }

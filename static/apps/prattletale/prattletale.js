@@ -408,12 +408,13 @@
   function convVoiceOn() {
     return !!(_current && _current.conversation.config && _current.conversation.config.voice_enabled);
   }
-  // Items the server might voice: model dialogue + narration (audio is produced
-  // lazily, so this is what decides whether to show a play button before a clip
-  // exists). Action / system_error / user items are never spoken.
+  // Items the server might voice: every non-error model item (dialogue in the
+  // character's voice, everything else via the narrator). Audio is produced
+  // lazily, so this decides whether to show a play button before a clip exists.
+  // system_error + user items are never spoken.
   function isVoiceable(item, turn) {
     return convVoiceOn() && turn && turn.author === 'model'
-      && ['dialogue', 'narration', 'narration_emotion'].includes(item.type);
+      && item.type !== 'system_error';
   }
 
   // POST the per-item synth endpoint; returns the audio descriptor or null. The
@@ -1478,8 +1479,8 @@
       return;
     }
     if ($('pt-input').value !== '') return;   // below here: empty-box command mode
-    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { e.preventDefault(); cycleMode(-1); }
-    else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { e.preventDefault(); cycleMode(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); cycleMode(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); cycleMode(1); }
     else if (e.key === 'x' || e.key === 'X') { e.preventDefault(); if (_draft.length) removeStaged(_draft.length - 1); }
   }
 

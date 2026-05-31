@@ -6,9 +6,10 @@ synthesizes audio for its **spoken** items — but only when the conversation ha
 
 - model ``dialogue`` -> the **counterpart's** Hoodat voice preset
   (``character.speaking_style.voice_preset_id``; skipped if absent);
-- model ``narration`` / ``narration_emotion`` -> the app-level **narrator** voice
+- every **other** non-error model item (``action`` / ``narration`` /
+  ``narration_emotion``) -> the app-level **narrator** voice
   (:func:`app.apps.prattletale.settings_store.narrator_voice_preset_id`);
-- ``action`` / ``system_error`` and **all user items** are never synthesized.
+- ``system_error`` and **all user items** are never synthesized.
 
 Everything degrades cleanly to text: a missing capability, a disabled
 conversation, an absent preset, or a synth failure leaves ``item.audio = None``
@@ -55,13 +56,17 @@ def voice_active(conversation: dict) -> bool:
 
 
 def _preset_for_item(item: dict, character: dict) -> Optional[str]:
-    """The voice preset id for a model item, or None if it shouldn't be spoken."""
+    """The voice preset id for a model item, or None if it shouldn't be spoken.
+
+    ``dialogue`` speaks in the counterpart's own Hoodat voice; **every other**
+    non-error model item (``action`` / ``narration`` / ``narration_emotion``) is
+    spoken by the app-level narrator. Only ``system_error`` is never spoken."""
     item_type = item.get("type")
+    if item_type == ItemType.system_error.value:
+        return None
     if item_type == ItemType.dialogue.value:
         return ((character.get("speaking_style") or {}).get("voice_preset_id")) or None
-    if item_type in (ItemType.narration.value, ItemType.narration_emotion.value):
-        return settings_store.narrator_voice_preset_id()
-    return None  # action / system_error: not spoken
+    return settings_store.narrator_voice_preset_id()
 
 
 async def _synth_to_wav(text: str, preset_id: str, out_path: Path) -> None:

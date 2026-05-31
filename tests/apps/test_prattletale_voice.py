@@ -76,7 +76,7 @@ def _seed(config: dict) -> str:
     return conv["id"]
 
 
-# ---- voice on: dialogue + narration get audio, action does not -------------
+# ---- voice on: dialogue speaks in character; every other beat via narrator --
 
 async def test_voice_enabled_sets_audio_and_writes_media(monkeypatch):
     _set_caps(monkeypatch, {"voice"})
@@ -93,13 +93,13 @@ async def test_voice_enabled_sets_audio_and_writes_media(monkeypatch):
     assert by_type["dialogue"]["audio"]["duration_ms"] > 0
     # narration -> narrator voice
     assert by_type["narration"]["audio"]["voice_preset_id"] == _NARRATOR_VOICE
-    # action is never spoken
-    assert by_type["action"]["audio"] is None
+    # action -> also the narrator (every non-dialogue model item is spoken)
+    assert by_type["action"]["audio"]["voice_preset_id"] == _NARRATOR_VOICE
 
     media = store.media_dir(conv_id)
     assert (media / f"{by_type['dialogue']['id']}.wav").exists()
     assert (media / f"{by_type['narration']['id']}.wav").exists()
-    assert not (media / f"{by_type['action']['id']}.wav").exists()
+    assert (media / f"{by_type['action']['id']}.wav").exists()
 
     # audio round-trips on disk + the trace carries the reveal schedule
     persisted = store.get_transcript(conv_id)["turns"][-1]
@@ -190,13 +190,13 @@ async def test_synthesize_item_is_per_type_and_idempotent(monkeypatch):
     conv = store.get_conversation(conv_id)
     by_type = {i["type"]: i for i in turn["items"]}
 
-    # dialogue -> counterpart voice; narration -> narrator; action -> not spoken
+    # dialogue -> counterpart voice; narration + action -> narrator
     dia = await voice.synthesize_item(conv, dict(_CHARACTER), by_type["dialogue"])
     nar = await voice.synthesize_item(conv, dict(_CHARACTER), by_type["narration"])
     act = await voice.synthesize_item(conv, dict(_CHARACTER), by_type["action"])
     assert dia["voice_preset_id"] == _CP_VOICE and dia["duration_ms"] > 0
     assert nar["voice_preset_id"] == _NARRATOR_VOICE
-    assert act is None
+    assert act["voice_preset_id"] == _NARRATOR_VOICE
 
     # idempotent: a second call reuses the existing wav (no extra synth)
     n = len(calls)
@@ -233,11 +233,11 @@ async def test_item_audio_endpoint_synthesizes_and_persists(monkeypatch):
                      if i["id"] == dialogue["id"])
     assert persisted["audio"]["path"] == audio["path"]
 
-    # a non-spoken item -> null (degrades to text), no media file
+    # a non-dialogue item -> spoken by the narrator (synthesized + persisted)
     r = client.post(f"{base}/{action['id']}/audio")
     assert r.status_code == 200
-    assert r.json()["audio"] is None
-    assert not (store.media_dir(conv_id) / f"{action['id']}.wav").exists()
+    assert r.json()["audio"]["voice_preset_id"] == _NARRATOR_VOICE
+    assert (store.media_dir(conv_id) / f"{action['id']}.wav").exists()
 
     # missing item -> 404
     assert client.post(f"{base}/t9999-i99/audio").status_code == 404
