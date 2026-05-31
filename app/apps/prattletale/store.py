@@ -272,6 +272,20 @@ def append_error_turn(conversation_id: str, message: str, *, job_id: Optional[st
     )
 
 
+def append_summary_turn(conversation_id: str, text: str) -> Optional[dict]:
+    """Append a **system**-authored turn carrying one ``summary`` item.
+
+    Used by the Summarizer plugin: a recap of earlier turns, rendered as an
+    avatar-less centered card and kept in context (the compressed history). None
+    if the conversation is missing."""
+    return _append_turn(
+        conversation_id,
+        Author.system,
+        [{"type": ItemType.summary.value, "text": text}],
+        status=ItemStatus.committed,
+    )
+
+
 def replace_turn(
     conversation_id: str,
     turn_id: str,

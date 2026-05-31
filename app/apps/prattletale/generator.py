@@ -71,12 +71,13 @@ def _llm_step(number: int, step_id: str, name: str, prompt: str) -> ChainStep:
 # ---- context assembly (pure) -----------------------------------------------
 
 def _render_item(item: dict) -> str:
-    """Render one item for the transcript script: dialogue as plain text, every
-    other (visible) type as a parenthesized stage direction."""
+    """Render one item for the transcript script: dialogue (and a ``summary``
+    recap) as plain text, every other (visible) type as a parenthesized stage
+    direction."""
     text = (item.get("text") or "").strip()
     if not text:
         return ""
-    if item.get("type") == ItemType.dialogue.value:
+    if item.get("type") in (ItemType.dialogue.value, ItemType.summary.value):
         return text
     return f"({text})"
 
@@ -84,6 +85,8 @@ def _render_item(item: dict) -> str:
 def _speaker_label(author: str, character: dict) -> str:
     if author == Author.model.value:
         return (character.get("name") or "").strip() or "Counterpart"
+    if author == Author.system.value:
+        return "Summary"
     return "User"
 
 
@@ -101,7 +104,12 @@ def _flatten_transcript(turns: list[dict], character: dict) -> str:
         rendered = [r for r in (_render_item(it) for it in visible) if r]
         if not rendered:
             continue
-        lines.append(f"[{_speaker_label(turn.get('author'), character)}] {' '.join(rendered)}")
+        # A summary turn carries history forward under a distinct label so the
+        # model reads it as "what happened earlier", not as a spoken message.
+        if turn.get("author") == Author.system.value:
+            lines.append(f"[Summary so far] {' '.join(rendered)}")
+        else:
+            lines.append(f"[{_speaker_label(turn.get('author'), character)}] {' '.join(rendered)}")
     return "\n".join(lines)
 
 

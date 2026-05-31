@@ -41,6 +41,7 @@ class ItemType(str, Enum):
     narration = "narration"  # third-person scene/event text
     narration_emotion = "narration_emotion"  # narration of the counterpart's inner state
     system_error = "system_error"  # a failed model turn, never fed back into context
+    summary = "summary"  # a plugin-posted recap of earlier turns (kept in context)
 
 
 class Author(str, Enum):
@@ -48,6 +49,7 @@ class Author(str, Enum):
 
     user = "user"
     model = "model"
+    system = "system"  # app/plugin-authored (e.g. a Summarizer recap) — avatar-less
 
 
 class ItemStatus(str, Enum):
