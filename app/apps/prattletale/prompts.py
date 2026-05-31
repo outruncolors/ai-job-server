@@ -27,15 +27,10 @@ from __future__ import annotations
 import re
 
 from ...prompt_pal.registry import register
+from .generator import GenerationError  # canonical home; re-exported here for the parser
 from .models import ItemType
 
-
-class GenerationError(Exception):
-    """Raised when the model output yields no usable items.
-
-    Defined locally so the parser is self-contained; SP3's generator owns the
-    canonical exception of the same name (this can be re-exported then).
-    """
+__all__ = ["GenerationError", "TURN", "TURN_GUARD", "parse_items"]
 
 
 # ---- turn prompt + format-hygiene guard ------------------------------------
