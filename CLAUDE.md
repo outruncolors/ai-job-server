@@ -136,9 +136,13 @@ no-app→`app="system"`. `hoodat_character` nests the whole `Character` body und
 (`get_character`/`list_characters`/`create_character`/`save_character`/`update_character_fields`)
 still returns the flat `Character` doc so router/generator/avatars/exports/`profile.js` are
 unchanged, while `list_envelopes`/`get_envelope`/`upsert_envelope` back the adapter. `create_character`
-now assigns a slug id (was uuid); existing uuid-keyed docs + avatars are tolerated until the
-re-slug migration. **Pending:** the one-time live re-slug `migrate.py` (do LAST; includes hoodat
-avatar re-keying).
+assigns a slug id (was uuid). **Re-slug migration done:** the one-time live re-slug
+(`app/cruddables/migrate.py`, run via `python -m app.cruddables.migrate`) has been applied — it
+reshapes every on-disk doc to the envelope, re-slugs uuid ids per type (delegating to each store's
+read-normalization so output is byte-identical to a store read), fixes `chain_sequence`
+`sequence_id`/`context_ids` references, re-keys hoodat avatar files + `data.avatar_path`, and
+de-dupes `prompt_pal` by `(app,key)`. It is idempotent (a re-run reslugs 0) and stays in the tree
+as the authoritative migration the store docstrings point to.
 
 | File | Purpose |
 |------|---------|
@@ -148,6 +152,7 @@ avatar re-keying).
 | `app/cruddables/registry.py` | `REGISTRY`, `get_adapter(type)`, `list_types()→[{type,label,count}]` |
 | `app/cruddables/service.py` | `apply_items(items, *, expected_type=None)→{created,updated,errored,results}` — routes each item by its own `type`; one bad item never aborts |
 | `app/cruddables/router.py` | `/v1/cruddables/{types, {type}/export, {type}/extend}` |
+| `app/cruddables/migrate.py` | One-time **re-slug migration** (`run_migration(dry_run=)` / `python -m app.cruddables.migrate`): reshape→envelope, uuid id→slug per type, fix `chain_sequence` refs, re-key hoodat avatars, de-dupe `prompt_pal` by `(app,key)`. Idempotent; already applied. |
 | `app/packs/store.py` | two-tree pack store: `BUILTIN_PACKS_DIR=packs/`, `USER_PACKS_DIR=config/packs/` (`<dir>/<type>/<id>.json`, user shadows builtin); `list_packs()`/`get_pack(type,id)` |
 | `app/packs/service.py` | `apply_pack(type,id)`→`cruddables.service.apply_items` (+`PackNotFound`) |
 | `app/packs/router.py` | `/v1/packs/{packs, {type}/{id}, {type}/{id}/apply}` |
