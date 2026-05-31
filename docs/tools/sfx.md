@@ -77,6 +77,22 @@ identity; macOS `._` sidecar files are skipped. Emote categories derive from the
 vendor `CatID` prefix (`HMNSneez`→`sneeze`, `VOXLaff`→`laugh`, …); global
 categories from the source folder name.
 
+### Converting OGG packs to WAV
+
+Synthesis (below) is WAV-only — parselmouth can't decode Vorbis. If a pack ships
+OGG clips, transcode them after import:
+
+```bash
+.venv/bin/python scripts/convert_ogg_to_wav.py        # or --dry-run / --root PATH
+```
+
+It's manifest-driven: for each `.ogg` item it decodes the vendor file via
+libsndfile (`soundfile`) and writes a 16-bit PCM WAV into the pack's writable
+`normalized/<pack_id>/files/` derivatives dir, then repoints the manifest item
+(refreshing `duration_ms`/`sample_rate`/`channels`). Vendor source folders are
+read-only to the app user, so originals are left in place; the script is
+idempotent. The bundled `shinlalala_lewd` pack is already converted.
+
 ## API (`/v1/sfx`)
 
 | Route | Purpose |

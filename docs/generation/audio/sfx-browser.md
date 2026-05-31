@@ -44,9 +44,11 @@ The Synthesis tab combines clips into a single new sample. Add clips from the Ex
 
 This tab is the first step of a feature that will grow over time. Current limits:
 
-- **WAV clips only** — parselmouth (the only available decoder) can't read the OGG packs and
-  there's no system decoder, so the Explorer's ➕ button is disabled for OGG clips and the
-  endpoint rejects them with a clear error. The bulk of the emote library is WAV.
+- **WAV clips only at runtime** — synthesis decodes with parselmouth, which can't read OGG, so
+  the Explorer's ➕ button is disabled for any `.ogg` clip and the endpoint rejects them. To
+  bring an OGG pack into play, transcode it to WAV once with
+  `scripts/convert_ogg_to_wav.py` (libsndfile) — see the [SFX tool docs](../../tools/sfx.md).
+  The bundled lewd pack has already been converted, so all installed clips are usable.
 
 ## Related
 

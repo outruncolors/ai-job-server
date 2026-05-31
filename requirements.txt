@@ -11,3 +11,5 @@ croniter==5.0.1
 sqlite-vec==0.1.9
 # SFX pitch/formant variants (PSOLA via bundled Praat; no system binary needed)
 praat-parselmouth==0.4.7
+# OGG decode for scripts/convert_ogg_to_wav.py (libsndfile; Praat can't read Vorbis)
+soundfile==0.13.1
