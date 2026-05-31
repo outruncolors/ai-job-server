@@ -23,6 +23,7 @@
   let _current = null;     // {conversation, transcript} of the open chat
   let _draft = [];         // staged composer items before commit
   let _modeIdx = 0;
+  let _editing = -1;       // index of the staged row being inline-edited, or -1
   let _sending = false;
 
   // ---------- helpers ----------
@@ -227,21 +228,47 @@
 
   // ---------- composer ----------
 
+  const PLACEHOLDERS = {
+    dialogue: 'Say something…',
+    action: 'Describe an action…',
+    narration: 'Narrate the scene…',
+  };
+
+  function modeLabel(type) {
+    return (MODES.find((m) => m.type === type) || {}).label || type;
+  }
+
   function resetComposer() {
     _draft = [];
     _modeIdx = 0;
+    _editing = -1;
     $('pt-input').value = '';
+    autoGrow();
     renderMode();
     renderDraft();
   }
 
   function renderMode() {
+    const type = MODES[_modeIdx].type;
     $('pt-mode').textContent = MODES[_modeIdx].label;
+    $('pt-input').placeholder = PLACEHOLDERS[type] || 'Message…';
+    updateSendBtn();
   }
 
-  function cycleMode() {
-    _modeIdx = (_modeIdx + 1) % MODES.length;
+  // Cycle the *compose* mode. `step` is +1 (next) or -1 (prev); wraps both ways.
+  function cycleMode(step) {
+    const n = MODES.length;
+    _modeIdx = (_modeIdx + (step || 1) + n) % n;
     renderMode();
+  }
+
+  // The primary button doubles as Stack / Send: with text it stacks the bubble,
+  // on an empty box it commits the chain. Disabled only when there's nothing to do.
+  function updateSendBtn() {
+    const hasText = $('pt-input').value.trim().length > 0;
+    const btn = $('pt-send');
+    btn.textContent = hasText ? 'Stack' : 'Send';
+    btn.disabled = _sending || (!hasText && _draft.length === 0);
   }
 
   function renderDraft() {
@@ -249,44 +276,109 @@
     if (!_draft.length) {
       box.hidden = true;
       box.innerHTML = '';
+      updateSendBtn();
       return;
     }
     box.hidden = false;
-    box.innerHTML = _draft.map((d, i) => {
-      const label = (MODES.find((m) => m.type === d.type) || {}).label || d.type;
-      return `<span class="pt-chip pt-bubble--${_escHtml(d.type)}">
-        <span class="pt-chip-tag">${_escHtml(label)}</span>
-        <span class="pt-chip-text">${_escHtml(d.text)}</span>
-        <button type="button" class="pt-chip-x" data-i="${i}" aria-label="Remove">×</button>
-      </span>`;
-    }).join('');
-    box.querySelectorAll('.pt-chip-x').forEach((b) => {
-      b.addEventListener('click', () => { _draft.splice(Number(b.dataset.i), 1); renderDraft(); });
+    box.innerHTML = _draft.map((d, i) =>
+      i === _editing ? draftEditorHtml(d, i) : draftRowHtml(d, i)).join('');
+    wireDraft();
+    updateSendBtn();
+  }
+
+  function draftRowHtml(d, i) {
+    return `<div class="pt-staged-row" data-i="${i}">
+      <span class="pt-staged-tag pt-bubble--${_escHtml(d.type)}">${_escHtml(modeLabel(d.type))}</span>
+      <span class="pt-staged-text">${_escHtml(d.text)}</span>
+      <button type="button" class="pt-staged-btn pt-staged-edit" data-i="${i}" title="Edit" aria-label="Edit">✏</button>
+      <button type="button" class="pt-staged-btn pt-staged-del" data-i="${i}" title="Delete" aria-label="Delete">🗑</button>
+    </div>`;
+  }
+
+  function draftEditorHtml(d, i) {
+    return `<div class="pt-staged-row pt-staged-editing" data-i="${i}">
+      <button type="button" class="pt-staged-mode pt-bubble--${_escHtml(d.type)}" data-i="${i}"
+        title="Change type">${_escHtml(modeLabel(d.type))}</button>
+      <textarea class="pt-staged-input" data-i="${i}" rows="1">${_escHtml(d.text)}</textarea>
+      <button type="button" class="pt-staged-btn pt-staged-save" data-i="${i}" title="Save" aria-label="Save">✓</button>
+      <button type="button" class="pt-staged-btn pt-staged-cancel" data-i="${i}" title="Cancel" aria-label="Cancel">✗</button>
+    </div>`;
+  }
+
+  function wireDraft() {
+    const box = $('pt-draft');
+    box.querySelectorAll('.pt-staged-del').forEach((b) =>
+      b.addEventListener('click', () => removeStaged(Number(b.dataset.i))));
+    box.querySelectorAll('.pt-staged-edit').forEach((b) =>
+      b.addEventListener('click', () => { _editing = Number(b.dataset.i); renderDraft(); focusEditor(); }));
+    box.querySelectorAll('.pt-staged-cancel').forEach((b) =>
+      b.addEventListener('click', () => { _editing = -1; renderDraft(); $('pt-input').focus(); }));
+    box.querySelectorAll('.pt-staged-mode').forEach((b) =>
+      b.addEventListener('click', () => {
+        const i = Number(b.dataset.i);
+        const ta = box.querySelector(`.pt-staged-input[data-i="${i}"]`);
+        if (ta) _draft[i].text = ta.value;            // keep in-progress edits across a type change
+        const cur = MODES.findIndex((m) => m.type === _draft[i].type);
+        _draft[i].type = MODES[(cur + 1) % MODES.length].type;
+        renderDraft();
+        focusEditor();
+      }));
+    box.querySelectorAll('.pt-staged-save').forEach((b) =>
+      b.addEventListener('click', () => saveEditor(Number(b.dataset.i))));
+    box.querySelectorAll('.pt-staged-input').forEach((ta) => {
+      ta.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditor(Number(ta.dataset.i)); }
+        else if (e.key === 'Escape') { e.preventDefault(); _editing = -1; renderDraft(); $('pt-input').focus(); }
+      });
     });
   }
 
-  function takeInput() {
-    const inp = $('pt-input');
-    const text = inp.value.trim();
-    if (!text) return null;
-    const item = { type: MODES[_modeIdx].type, text };
-    inp.value = '';
-    autoGrow();
-    return item;
+  function focusEditor() {
+    const ta = $('pt-draft').querySelector('.pt-staged-input');
+    if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
   }
 
-  function stackItem() {
-    const item = takeInput();
-    if (!item) return;
-    _draft.push(item);
+  function saveEditor(i) {
+    const ta = $('pt-draft').querySelector(`.pt-staged-input[data-i="${i}"]`);
+    if (ta) {
+      const text = ta.value.trim();
+      if (!text) { removeStaged(i); return; }   // empty edit drops the bubble
+      _draft[i].text = text;
+    }
+    _editing = -1;
     renderDraft();
     $('pt-input').focus();
   }
 
+  function removeStaged(i) {
+    _draft.splice(i, 1);
+    if (_editing === i) _editing = -1;
+    else if (_editing > i) _editing -= 1;
+    renderDraft();
+  }
+
+  // stack the active input as a new bubble; returns true if anything was staged
+  function stackItem() {
+    const inp = $('pt-input');
+    const text = inp.value.trim();
+    if (!text) return false;
+    _draft.push({ type: MODES[_modeIdx].type, text });
+    inp.value = '';
+    autoGrow();
+    renderDraft();
+    inp.focus();
+    return true;
+  }
+
+  // Enter / Send dispatch: text present -> stack; empty box -> commit the chain.
+  function submitOrStack() {
+    if ($('pt-input').value.trim()) stackItem();
+    else send();
+  }
+
   async function send() {
     if (_sending) return;
-    const pending = takeInput();
-    const items = pending ? _draft.concat([pending]) : _draft.slice();
+    const items = _draft.slice();
     if (!items.length) return;
 
     _sending = true;
@@ -295,6 +387,7 @@
     // optimistic: drop the staged items so the box is clean, show the user turn
     // only after the server echoes it back (keeps ids authoritative).
     _draft = [];
+    _editing = -1;
     renderDraft();
 
     const id = _current.conversation.id;
@@ -346,7 +439,8 @@
   }
 
   function setComposerEnabled(on) {
-    ['pt-input', 'pt-send', 'pt-stack', 'pt-mode'].forEach((id) => { $(id).disabled = !on; });
+    ['pt-input', 'pt-send', 'pt-mode'].forEach((id) => { $(id).disabled = !on; });
+    if (on) updateSendBtn();
   }
 
   // ---------- retry ----------
@@ -480,17 +574,38 @@
 
     $('pt-back').addEventListener('click', goList);
     $('pt-delete').addEventListener('click', deleteConversation);
-    $('pt-mode').addEventListener('click', cycleMode);
-    $('pt-stack').addEventListener('click', stackItem);
-    $('pt-send').addEventListener('click', send);
+    $('pt-mode').addEventListener('click', () => cycleMode(1));
+    $('pt-send').addEventListener('click', submitOrStack);
 
     const inp = $('pt-input');
-    inp.addEventListener('input', autoGrow);
-    inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-    });
+    inp.addEventListener('input', () => { autoGrow(); updateSendBtn(); });
+    inp.addEventListener('keydown', onComposerKey);
 
     window.addEventListener('popstate', showView);
+  }
+
+  // Keyboard model: with text in the box you're *composing* (keys type, Enter
+  // stacks); on an empty box the same keys become *commands* so single letters
+  // don't get eaten mid-message.
+  //   Enter        text -> stack a bubble · empty -> send the chain
+  //   ←/A  →/D     (empty) switch the bubble type back / forward
+  //   X            (empty) remove the most recent staged bubble
+  //   Esc          clear all staged bubbles (and the box)
+  function onComposerKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitOrStack(); return; }
+    if (e.key === 'Escape') {
+      if (_draft.length || $('pt-input').value) {
+        e.preventDefault();
+        _draft = []; _editing = -1;
+        $('pt-input').value = ''; autoGrow();
+        renderDraft();
+      }
+      return;
+    }
+    if ($('pt-input').value !== '') return;   // below here: empty-box command mode
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { e.preventDefault(); cycleMode(-1); }
+    else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { e.preventDefault(); cycleMode(1); }
+    else if (e.key === 'x' || e.key === 'X') { e.preventDefault(); if (_draft.length) removeStaged(_draft.length - 1); }
   }
 
   wire();
