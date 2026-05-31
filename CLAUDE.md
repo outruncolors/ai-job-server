@@ -118,6 +118,43 @@ The project-wide home for the internal LLM prompts apps use for "creative input.
 | `static/prompt-pal/` | Management UI (list + search/filter-by-app/filter-by-tag/sort + editor + live preview); deep-link `?app=&highlight=<id>` scrolls/flashes/opens a row. Nav: Tools dropdown. |
 | `static/js/field-controls.js` + `static/css/field-controls.css` | Reusable **hover-control affordance**: `FieldControls.attach(slot, {kind:'avatar'\|'field', controls:[{id,label,onClick(ctx)}], context})`. Shows a `.fc-cluster` on hover/`:focus-within` (tap-toggle for avatars). App supplies all callbacks — zero app knowledge. |
 
+### Cruddables, Packs & the unified envelope (`app/cruddables/`, `app/packs/`)
+
+Every in-scope CRUD entity ("cruddable") is persisted as one **envelope** shape — shared meta
+columns (`schema_version`/`type`/`id`/`name`/`description`/`tags`/`created_at`/`updated_at`)
+plus a typed `data` payload. On-disk shape == export shape == envelope (single source of truth,
+exportable, LLM-generatable, bundleable into Packs). IDs are human-readable underscore slugs;
+pack items end `_pack_<pack_id>`. Full contract: `docs/tools/packs.md`.
+
+**Migrated types (5 of 6):** `wildcard`, `context_item`, `image_prompt`, `chain_sequence`,
+`prompt_pal` — each store persists the envelope (`data.*` payload), tolerates legacy docs on
+read (`migrate_native`), and exposes `upsert_envelope(dict)→(action,id)`. `chain_sequence`
+keeps `steps`/`variables` under `data` with `data.content_version` (envelope `schema_version`=1).
+`prompt_pal` identity is logical `(data.app, data.key)`; `id = slug(app_key)`; no-app→`app="system"`.
+**Pending:** `hoodat_character` (largest — nested body→`data`, avatar re-keying, big `profile.js`).
+
+| File | Purpose |
+|------|---------|
+| `app/cruddables/envelope.py` | `Cruddable` model + `slugify`/`unique_id`/`now_iso`, `ENVELOPE_SCHEMA_VERSION` |
+| `app/cruddables/base.py` | `CruddableAdapter` ABC: `list_envelopes`/`get_envelope`/`upsert_envelope`/`delete`/`count`/`migrate_native` |
+| `app/cruddables/adapters/*.py` | one thin adapter per type, wrapping its store |
+| `app/cruddables/registry.py` | `REGISTRY`, `get_adapter(type)`, `list_types()→[{type,label,count}]` |
+| `app/cruddables/service.py` | `apply_items(items, *, expected_type=None)→{created,updated,errored,results}` — routes each item by its own `type`; one bad item never aborts |
+| `app/cruddables/router.py` | `/v1/cruddables/{types, {type}/export, {type}/extend}` |
+| `app/packs/store.py` | two-tree pack store: `BUILTIN_PACKS_DIR=packs/`, `USER_PACKS_DIR=config/packs/` (`<dir>/<type>/<id>.json`, user shadows builtin); `list_packs()`/`get_pack(type,id)` |
+| `app/packs/service.py` | `apply_pack(type,id)`→`cruddables.service.apply_items` (+`PackNotFound`) |
+| `app/packs/router.py` | `/v1/packs/{packs, {type}/{id}, {type}/{id}/apply}` |
+| `static/packs/` | Packs page (Tools nav): browse/filter/sort + Apply + View JSON |
+| `static/cruddables/` | Cruddables page (Manage nav): per-type Export/Copy/Extend |
+| `.claude/skills/add-pack/SKILL.md` | `/add-pack <type> <theme>` authors a pack file |
+
+Both routers are wired in `app/main.py` after `prompt_pal_router` (inline imports). Pages are
+auto-served by the root `StaticFiles(html=True)` mount — no page routes. **apply == extend**:
+applying a pack routes its `items` through the same `apply_items` as a pasted Extend, upserting
+by `id` (re-applying overwrites local edits to a pack item). For `chain_sequence`, apply runs
+structural validation but skips capability validation (cross-machine packs). Example builtin
+pack: `packs/wildcard/basic_colors.json`. Tests: `tests/packs/`, `tests/cruddables/`.
+
 ### Hoodat — character creation/management (`app/apps/hoodat/`, `static/apps/hoodat/`)
 
 | File | Purpose |

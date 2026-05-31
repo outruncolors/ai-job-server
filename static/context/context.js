@@ -29,7 +29,7 @@
           : '';
         const sel = _editingId === item.id ? ' selected' : '';
         return `<div class="ctx-item${sel}" onclick="editItem('${item.id}')">
-          <div class="ctx-item-title">${_escHtml(item.title || '(untitled)')}</div>
+          <div class="ctx-item-title">${_escHtml(item.name || '(untitled)')}</div>
           ${item.description ? `<div class="ctx-item-desc">${_escHtml(item.description)}</div>` : ''}
           ${tagsHtml}
         </div>`;

@@ -1,11 +1,23 @@
+"""Wildcard store — persists the unified Cruddable envelope.
+
+On disk (``config/wildcards/index.json``) each item is an envelope:
+``{schema_version,type:"wildcard",id,name,description,tags,created_at,updated_at,
+data:{entries:[{text,weight?}]}}``. IDs are human-readable slugs. Legacy (pre-envelope)
+docs are tolerated on read and reshaped via :func:`_normalize` (the one-time migration in
+``app.cruddables.migrate`` does the authoritative re-slug + reference fixes).
+
+Wildcards reference each other by **name** (``%%name%%``), not id, so re-slugging ids does
+not affect references.
+"""
+
 from __future__ import annotations
 
 import json
 import re
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+from app.cruddables.envelope import now_iso, slugify, unique_id
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _DIR: Path = PROJECT_ROOT / "config" / "wildcards"
@@ -13,9 +25,7 @@ _INDEX_PATH: Path = _DIR / "index.json"
 
 _TOKEN_RE = re.compile(r"%%([^%]+)%%")
 
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+TYPE_NAME = "wildcard"
 
 
 def _read_index() -> list[dict]:
@@ -27,6 +37,34 @@ def _read_index() -> list[dict]:
 def _write_index(entries: list[dict]) -> None:
     _DIR.mkdir(parents=True, exist_ok=True)
     _INDEX_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+
+
+def _normalize(doc: dict) -> dict:
+    """Return ``doc`` as an envelope, reshaping a legacy flat wildcard if needed.
+
+    Legacy docs keep their existing id here (the migration assigns unique slugs); this is
+    only a defensive read-time fallback so nothing crashes before migration runs.
+    """
+    if doc.get("type") == TYPE_NAME and isinstance(doc.get("data"), dict):
+        doc.setdefault("tags", [])
+        doc.setdefault("description", "")
+        return doc
+    now = now_iso()
+    return {
+        "schema_version": 1,
+        "type": TYPE_NAME,
+        "id": doc.get("id") or slugify(doc.get("name") or "wildcard"),
+        "name": doc.get("name") or "",
+        "description": doc.get("description") or "",
+        "tags": doc.get("tags") or [],
+        "created_at": doc.get("created_at") or now,
+        "updated_at": doc.get("updated_at") or now,
+        "data": {"entries": doc.get("entries") or []},
+    }
+
+
+def _entries_of(doc: dict) -> list[dict]:
+    return (doc.get("data") or {}).get("entries") or []
 
 
 def _extract_refs(entries: list[dict]) -> list[str]:
@@ -44,7 +82,7 @@ def check_for_cycles(items: list[dict], root_name: str) -> None:
         key = (it.get("name") or "").lower()
         if not key:
             continue
-        name_refs[key] = _extract_refs(it.get("entries") or [])
+        name_refs[key] = _extract_refs(_entries_of(it))
         display[key] = it.get("name") or key
 
     root = (root_name or "").lower()
@@ -73,23 +111,34 @@ def check_for_cycles(items: list[dict], root_name: str) -> None:
     dfs(root, [])
 
 
+def _taken_ids(items: list[dict], *, exclude: Optional[str] = None) -> set[str]:
+    return {it["id"] for it in items if it.get("id") and it["id"] != exclude}
+
+
 def list_wildcards() -> list[dict]:
-    items = _read_index()
-    for item in items:
-        item.setdefault("description", "")
-    return items
+    return [_normalize(dict(it)) for it in _read_index()]
+
+
+def get_wildcard(wid: str) -> Optional[dict]:
+    return next((it for it in list_wildcards() if it["id"] == wid), None)
 
 
 def create_wildcard(name: str, entries: list[dict], description: str = "") -> dict:
-    items = _read_index()
-    now = _now_iso()
+    if not name or not name.strip():
+        raise ValueError("name is required")
+    items = list_wildcards()
+    now = now_iso()
+    new_id = unique_id(slugify(name), _taken_ids(items))
     item = {
-        "id": str(uuid.uuid4()),
+        "schema_version": 1,
+        "type": TYPE_NAME,
+        "id": new_id,
         "name": name,
         "description": description,
-        "entries": entries,
+        "tags": [],
         "created_at": now,
         "updated_at": now,
+        "data": {"entries": entries},
     }
     candidate = items + [item]
     check_for_cycles(candidate, name)
@@ -100,27 +149,48 @@ def create_wildcard(name: str, entries: list[dict], description: str = "") -> di
 def update_wildcard(
     wid: str, name: str, entries: list[dict], description: str = ""
 ) -> Optional[dict]:
-    items = _read_index()
+    items = list_wildcards()
     idx = next((i for i, e in enumerate(items) if e["id"] == wid), None)
     if idx is None:
         return None
     item = dict(items[idx])
     item["name"] = name
     item["description"] = description
-    item["entries"] = entries
-    item["updated_at"] = _now_iso()
+    item["data"] = {**(item.get("data") or {}), "entries": entries}
+    item["updated_at"] = now_iso()
     candidate = list(items)
     candidate[idx] = item
     check_for_cycles(candidate, name)
-    items[idx] = item
-    _write_index(items)
+    _write_index(candidate)
     return item
 
 
 def delete_wildcard(wid: str) -> bool:
-    items = _read_index()
+    items = list_wildcards()
     new_items = [e for e in items if e["id"] != wid]
     if len(new_items) == len(items):
         return False
     _write_index(new_items)
     return True
+
+
+def upsert_envelope(env: dict) -> tuple[str, str]:
+    """Write an envelope dict with its explicit ``id`` (create or overwrite). Used by
+    packs/extend. Returns ``("created"|"updated", id)``."""
+    items = list_wildcards()
+    idx = next((i for i, e in enumerate(items) if e["id"] == env["id"]), None)
+    now = now_iso()
+    doc = _normalize(dict(env))
+    if idx is None:
+        doc.setdefault("created_at", now)
+        doc["updated_at"] = now
+        items.append(doc)
+        action = "created"
+    else:
+        doc["created_at"] = items[idx].get("created_at") or now
+        doc["updated_at"] = now
+        items[idx] = doc
+        action = "updated"
+    check_for_cycles(items, doc.get("name") or "")
+    _write_index(items)
+    return action, doc["id"]

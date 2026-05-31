@@ -1,0 +1,30 @@
+{
+  "id": "basic_colors",
+  "name": "Basic Colors",
+  "description": "A starter palette of common colors as a single wildcard.",
+  "tags": ["Pack", "colors"],
+  "items": [
+    {
+      "schema_version": 1,
+      "type": "wildcard",
+      "id": "colors_pack_basic_colors",
+      "name": "Colors",
+      "description": "Common color names.",
+      "tags": ["Pack", "colors"],
+      "data": {
+        "entries": [
+          { "text": "red" },
+          { "text": "orange" },
+          { "text": "yellow" },
+          { "text": "green" },
+          { "text": "blue" },
+          { "text": "indigo" },
+          { "text": "violet" },
+          { "text": "black" },
+          { "text": "white" },
+          { "text": "gray" }
+        ]
+      }
+    }
+  ]
+}

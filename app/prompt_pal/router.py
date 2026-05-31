@@ -45,7 +45,7 @@ class PreviewRequest(BaseModel):
 def list_entries(app: Optional[str] = None, tag: Optional[str] = None):
     entries = store.list_entries()
     if app:
-        entries = [e for e in entries if e.get("app") == app]
+        entries = [e for e in entries if (e.get("data") or {}).get("app") == app]
     if tag:
         entries = [e for e in entries if tag in (e.get("tags") or [])]
     return {"entries": entries}
@@ -89,8 +89,9 @@ def preview_entry(entry_id: str, body: PreviewRequest):
     entry = store.get_entry(entry_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Prompt entry not found")
+    data = entry.get("data") or {}
     if body.target == "guard":
-        guard = entry.get("guard")
+        guard = data.get("guard")
         if not guard or not (guard.get("prompt") or "").strip():
             raise HTTPException(status_code=404, detail="entry has no guard prompt")
         node = {
@@ -99,8 +100,8 @@ def preview_entry(entry_id: str, body: PreviewRequest):
         }
     else:
         node = {
-            "prompt": entry.get("prompt", ""),
-            "variables": {**(entry.get("variables") or {}), **body.variables},
+            "prompt": data.get("prompt", ""),
+            "variables": {**(data.get("variables") or {}), **body.variables},
         }
     try:
         text = compose(node, store=store.node_for_id)

@@ -144,7 +144,7 @@
       for (const s of _allSeqs) {
         usedBy[s.id]  = usedBy[s.id]  || [];
         usesMap[s.id] = [];
-        for (const step of (s.steps || [])) {
+        for (const step of ((s.data && s.data.steps) || [])) {
           const altList = step.alternatives || [{ sequence_id: step.sequence_id }];
           for (const alt of altList) {
             if (step.type === 'sequence' && alt && alt.sequence_id) {
@@ -202,7 +202,7 @@
       _currentSeqId = id;
       document.getElementById('chain-seq-name').value = seq.name;
       document.getElementById('seq-edit-msg').textContent = '';
-      loadStepsIntoForm(seq.steps, seq.variables || []);
+      loadStepsIntoForm((seq.data && seq.data.steps) || [], (seq.data && seq.data.variables) || []);
       document.getElementById('seq-edit-bar').style.display = '';
       switchTab('chain');
       history.replaceState(null, '', '/chain?sequence=' + id);

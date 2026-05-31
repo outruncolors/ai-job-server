@@ -54,7 +54,7 @@ def _run_save_wildcard(args: dict) -> dict:
     if existing is None:
         wc = create_wildcard(name, [new_entry], "")
         return {"id": wc["id"], "name": wc["name"], "action": "create_missing"}
-    merged_entries = list(existing.get("entries") or []) + [new_entry]
+    merged_entries = list((existing.get("data") or {}).get("entries") or []) + [new_entry]
     wc = update_wildcard(
         existing["id"], existing["name"], merged_entries, existing.get("description") or ""
     )

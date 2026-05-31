@@ -27,7 +27,7 @@ def test_list_exports_only_hoodat_exports():
     _make_export()
     pp_store.create_entry({"app": "hoodat", "key": "IDEATE", "title": "x", "prompt": "p"})
     pp_store.create_entry({"app": "other", "key": "export.z", "title": "y", "prompt": "p"})
-    keys = {e["key"] for e in exports.list_exports()}
+    keys = {e["data"]["key"] for e in exports.list_exports()}
     assert keys == {"export.bio"}
 
 

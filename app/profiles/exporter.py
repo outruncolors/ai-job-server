@@ -18,15 +18,7 @@ from ..chain import context_library, sequences
 from ..comfyui import config as comfyui_config
 from ..llm_config import CONFIG_PATH as LLM_CONFIG_PATH, LLMConfigDoc
 from ..omnivoice import config as omnivoice_config
-from .models import (
-    ChainSequenceEntry,
-    ContextItemEntry,
-    ImagePromptEntry,
-    MasterProfile,
-    ProfileAsset,
-    VoicePresetEntry,
-    WildcardEntry,
-)
+from .models import MasterProfile, ProfileAsset, VoicePresetEntry
 
 
 def _load_llm_config() -> LLMConfigDoc:
@@ -60,16 +52,11 @@ def build_master_profile(name: str, description: str = "") -> MasterProfile:
         comfyui=comfyui_config.load_config(),
         comfyui_workflows=_load_comfyui_workflows(),
         voice_presets=presets,
-        wildcards=[WildcardEntry.model_validate(e) for e in wildcards.list_wildcards()],
-        context_items=[
-            ContextItemEntry.model_validate(e) for e in context_library.list_items()
-        ],
-        image_prompts=[
-            ImagePromptEntry.model_validate(e) for e in image_prompts.list_prompts()
-        ],
-        chain_sequences=[
-            ChainSequenceEntry.model_validate(e) for e in sequences.list_sequences()
-        ],
+        # Stores already return unified Cruddable envelopes; pass them through.
+        wildcards=wildcards.list_wildcards(),
+        context_items=context_library.list_items(),
+        image_prompts=image_prompts.list_prompts(),
+        chain_sequences=sequences.list_sequences(),
         asset_manifest=[
             ProfileAsset(filename=p.wav_filename, kind="voice_wav") for p in presets
         ],

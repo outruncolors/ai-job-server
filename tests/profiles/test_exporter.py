@@ -124,7 +124,7 @@ def test_build_master_profile_populates_every_domain(seeded_config):
     assert profile.voice_presets[0].wav_filename.endswith(".wav")
 
     assert [w.name for w in profile.wildcards] == ["color"]
-    assert [c.title for c in profile.context_items] == ["House style"]
+    assert [c.name for c in profile.context_items] == ["House style"]
     assert [p.name for p in profile.image_prompts] == ["moody portrait"]
     assert [s.name for s in profile.chain_sequences] == ["story-then-voice"]
 

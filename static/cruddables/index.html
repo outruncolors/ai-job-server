@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cruddables · ai-job-server</title>
+  <link rel="stylesheet" href="/css/responsive.css" />
+  <link rel="stylesheet" href="/cruddables/styles.css" />
+</head>
+<body>
+  <nav id="topnav"></nav>
+  <div id="toast-stack"></div>
+
+  <main class="page">
+    <header class="page-head">
+      <h1>Cruddables</h1>
+      <p class="sub">Every CRUD entity shares one envelope format. Export a collection as JSON, edit it (or generate more with an LLM), then Extend to upsert it back by id. Pasting a pack's items here is the same as applying the pack.</p>
+    </header>
+
+    <section id="cr-types" class="cr-types"><p class="muted">Loading…</p></section>
+  </main>
+
+  <script src="/js/nav.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="/cruddables/cruddables.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

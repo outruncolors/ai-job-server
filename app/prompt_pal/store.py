@@ -1,37 +1,39 @@
-"""File-per-document store for Prompt Pal entries.
+"""File-per-document store for Prompt Pal entries — unified Cruddable envelope.
 
-Each entry is its own JSON file at ``config/prompt_pal/<id>.json``; listing globs
-the directory. ``id`` / ``schema_version`` / ``created_at`` / ``updated_at`` are
-assigned here. Follows the existing store conventions
-(``app/apps/blaboratory/residents_store.py``): a module-level ``PROMPT_PAL_DIR``
-constant (monkeypatchable in tests) and atomic writes (temp file + ``os.replace``).
+Each entry is its own JSON file at ``config/prompt_pal/<id>.json`` in the shared envelope
+shape:
+``{schema_version,type:"prompt_pal",id,name,description,tags,created_at,updated_at,
+data:{app,key,prompt,variables,guard}}``.
 
-File-per-doc (not a single JSON index) because prompt bodies are large multi-line
-text that diff/churn badly in one growing file, and because ``app/profiles/``
-bundles config sub-dirs cleanly per-doc.
+The logical key code references is ``(data.app, data.key)`` (e.g.
+``("hoodat","field.appearance.primary_outfit")``); ``id`` is a human-readable slug derived
+from ``app_key`` and is the deep-link surrogate + filename. ``name`` is the display title.
+When an entry is created without an ``app`` it defaults to ``"system"`` (user-authored
+entries not owned by a specific app).
+
+File-per-doc (not a single JSON index) because prompt bodies are large multi-line text.
+Atomic writes (temp file + ``os.replace``); ``PROMPT_PAL_DIR`` is monkeypatchable in tests.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from app.cruddables.envelope import now_iso, slugify, unique_id
+
 from .compose import PromptNode
-from .models import PromptEntry
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROMPT_PAL_DIR: Path = PROJECT_ROOT / "config" / "prompt_pal"
 
-# Fields a PUT may change. `app`/`key` are immutable code contracts.
+TYPE_NAME = "prompt_pal"
+DEFAULT_APP = "system"
+
+# Flat input keys a create/patch may carry; mapped into the envelope.
 _PATCHABLE = {"title", "description", "tags", "prompt", "variables", "guard"}
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _path_for(entry_id: str) -> Path:
@@ -45,13 +47,66 @@ def _atomic_write(path: Path, data: dict) -> None:
     os.replace(tmp, path)
 
 
+def _normalize(doc: dict) -> dict:
+    """Return ``doc`` as an envelope, reshaping a legacy flat PromptEntry if needed."""
+    if doc.get("type") == TYPE_NAME and isinstance(doc.get("data"), dict):
+        doc.setdefault("tags", [])
+        doc.setdefault("description", "")
+        return doc
+    now = now_iso()
+    app = doc.get("app") or DEFAULT_APP
+    key = doc.get("key") or ""
+    return {
+        "schema_version": 1,
+        "type": TYPE_NAME,
+        "id": doc.get("id") or slugify(f"{app}_{key}"),
+        "name": doc.get("title") or doc.get("name") or "",
+        "description": doc.get("description") or "",
+        "tags": doc.get("tags") or [],
+        "created_at": doc.get("created_at") or now,
+        "updated_at": doc.get("updated_at") or now,
+        "data": {
+            "app": app,
+            "key": key,
+            "prompt": doc.get("prompt") or "",
+            "variables": doc.get("variables") or {},
+            "guard": doc.get("guard"),
+        },
+    }
+
+
+def _envelope_from_flat(fields: dict, *, taken_ids: set[str]) -> dict:
+    """Build a fresh envelope from flat create-input fields."""
+    app = fields.get("app") or DEFAULT_APP
+    key = fields.get("key") or ""
+    now = now_iso()
+    new_id = unique_id(slugify(f"{app}_{key}"), taken_ids)
+    return {
+        "schema_version": 1,
+        "type": TYPE_NAME,
+        "id": new_id,
+        "name": fields.get("title") or fields.get("name") or "",
+        "description": fields.get("description") or "",
+        "tags": list(fields.get("tags") or []),
+        "created_at": now,
+        "updated_at": now,
+        "data": {
+            "app": app,
+            "key": key,
+            "prompt": fields.get("prompt") or "",
+            "variables": dict(fields.get("variables") or {}),
+            "guard": fields.get("guard"),
+        },
+    }
+
+
 def list_entries() -> list[dict]:
     """All persisted prompt entries (unordered)."""
     if not PROMPT_PAL_DIR.exists():
         return []
     out: list[dict] = []
     for p in PROMPT_PAL_DIR.glob("*.json"):
-        out.append(json.loads(p.read_text(encoding="utf-8")))
+        out.append(_normalize(json.loads(p.read_text(encoding="utf-8"))))
     return out
 
 
@@ -59,55 +114,54 @@ def get_entry(entry_id: str) -> Optional[dict]:
     p = _path_for(entry_id)
     if not p.exists():
         return None
-    return json.loads(p.read_text(encoding="utf-8"))
+    return _normalize(json.loads(p.read_text(encoding="utf-8")))
 
 
 def get_by_app_key(app: str, key: str) -> Optional[dict]:
-    """First entry matching ``(app, key)``, or None. Scans the directory."""
+    """First entry matching ``(app, key)`` on the envelope ``data``, or None."""
     for entry in list_entries():
-        if entry.get("app") == app and entry.get("key") == key:
+        d = entry.get("data") or {}
+        if d.get("app") == app and d.get("key") == key:
             return entry
     return None
 
 
+def _taken_ids() -> set[str]:
+    return {e["id"] for e in list_entries() if e.get("id")}
+
+
 def create_entry(fields: dict) -> dict:
-    """Create a new entry from ``fields``, assigning ``id`` / ``schema_version`` /
-    timestamps, validating against ``PromptEntry``, and persisting it.
-    """
-    now = _now_iso()
-    doc = dict(fields)
-    doc["id"] = str(uuid.uuid4())
-    doc["schema_version"] = 1
-    doc["created_at"] = now
-    doc["updated_at"] = now
-    entry = PromptEntry(**doc)
-    data = entry.model_dump()
-    _atomic_write(_path_for(entry.id), data)
-    return data
+    """Create a new entry from flat ``fields`` ({app,key,title,prompt,variables,guard,
+    description,tags}), assigning id/timestamps and persisting it as an envelope."""
+    doc = _envelope_from_flat(fields, taken_ids=_taken_ids())
+    _atomic_write(_path_for(doc["id"]), doc)
+    return doc
 
 
 def save_entry(entry: dict) -> dict:
-    """Persist an existing entry document, bumping ``updated_at``. Requires an
-    ``id``; validates against ``PromptEntry``.
-    """
+    """Persist an existing envelope document, bumping ``updated_at``. Requires an ``id``."""
     if not entry.get("id"):
         raise ValueError("entry must have an id to save")
-    doc = dict(entry)
-    doc["updated_at"] = _now_iso()
-    validated = PromptEntry(**doc)
-    data = validated.model_dump()
-    _atomic_write(_path_for(validated.id), data)
-    return data
+    doc = _normalize(dict(entry))
+    doc["updated_at"] = now_iso()
+    _atomic_write(_path_for(doc["id"]), doc)
+    return doc
 
 
 def update_entry(entry_id: str, **patch) -> Optional[dict]:
-    """Apply a patch (only ``_PATCHABLE`` keys) and persist. None if missing."""
+    """Apply a flat patch (only ``_PATCHABLE`` keys) and persist. None if missing."""
     current = get_entry(entry_id)
     if current is None:
         return None
     for k, v in patch.items():
-        if k in _PATCHABLE and v is not None:
+        if k not in _PATCHABLE or v is None:
+            continue
+        if k == "title":
+            current["name"] = v
+        elif k in ("description", "tags"):
             current[k] = v
+        else:  # prompt / variables / guard live under data
+            current["data"][k] = v
     return save_entry(current)
 
 
@@ -120,11 +174,30 @@ def delete_entry(entry_id: str) -> bool:
 
 
 def node_for_id(entry_id: str) -> Optional[PromptNode]:
-    """Return the stored entry as a compose ``PromptNode`` (``{prompt, variables}``),
-    or None. This is the ``store=`` callable for resolving ``{"prompt_id": id}``
-    references inside other prompts.
+    """The stored entry as a compose ``PromptNode`` (``{prompt, variables}``), or None.
+    The ``store=`` callable for resolving ``{"prompt_id": id}`` references.
     """
     entry = get_entry(entry_id)
     if entry is None:
         return None
-    return {"prompt": entry.get("prompt", ""), "variables": entry.get("variables") or {}}
+    d = entry.get("data") or {}
+    return {"prompt": d.get("prompt", ""), "variables": d.get("variables") or {}}
+
+
+def upsert_envelope(env: dict) -> tuple[str, str]:
+    """Write a prompt_pal envelope with its explicit ``id`` (packs/extend).
+
+    Re-apply overwrites by ``(data.app, data.key)`` identity when present (keeping the
+    existing file), else writes a new file at ``env.id``.
+    """
+    doc = _normalize(dict(env))
+    d = doc.get("data") or {}
+    existing = get_by_app_key(d.get("app"), d.get("key")) if d.get("key") else None
+    if existing is not None:
+        doc["id"] = existing["id"]
+        doc["created_at"] = existing.get("created_at") or doc["created_at"]
+        save_entry(doc)
+        return "updated", doc["id"]
+    created = get_entry(doc["id"]) is not None
+    save_entry(doc)
+    return ("updated" if created else "created"), doc["id"]

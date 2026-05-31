@@ -24,8 +24,8 @@ def test_create_and_list_prompt():
     from app.image_prompts import create_prompt, list_prompts
     entry = create_prompt("Portrait", "a portrait of a cat", workflow="sdxl")
     assert entry["name"] == "Portrait"
-    assert entry["prompt"] == "a portrait of a cat"
-    assert entry["workflow"] == "sdxl"
+    assert entry["data"]["prompt"] == "a portrait of a cat"
+    assert entry["data"]["workflow"] == "sdxl"
     assert "id" in entry
     assert "created_at" in entry
     assert "updated_at" in entry
@@ -37,7 +37,7 @@ def test_create_and_list_prompt():
 def test_create_prompt_workflow_optional():
     from app.image_prompts import create_prompt
     entry = create_prompt("Generic", "a sunset")
-    assert entry["workflow"] is None
+    assert entry["data"]["workflow"] is None
 
 
 def test_create_prompt_empty_name_rejected():
@@ -86,12 +86,12 @@ def test_update_prompt():
     entry = create_prompt("Old", "old text")
     result = update_prompt(entry["id"], prompt="new text", workflow="flux")
     assert result is not None
-    assert result["prompt"] == "new text"
-    assert result["workflow"] == "flux"
+    assert result["data"]["prompt"] == "new text"
+    assert result["data"]["workflow"] == "flux"
     assert result["name"] == "Old"
     # Verify it persisted
     fresh = get_prompt(entry["id"])
-    assert fresh["prompt"] == "new text"
+    assert fresh["data"]["prompt"] == "new text"
 
 
 def test_update_prompt_name_unique_among_others():
@@ -161,8 +161,8 @@ def test_post_prompt(client):
     assert r.status_code == 201
     body = r.json()
     assert body["name"] == "Test"
-    assert body["prompt"] == "a test prompt"
-    assert body["workflow"] == "sdxl"
+    assert body["data"]["prompt"] == "a test prompt"
+    assert body["data"]["workflow"] == "sdxl"
 
 
 def test_post_prompt_workflow_optional(client):
@@ -171,7 +171,7 @@ def test_post_prompt_workflow_optional(client):
         json={"name": "Generic", "prompt": "a sunset"},
     )
     assert r.status_code == 201
-    assert r.json()["workflow"] is None
+    assert r.json()["data"]["workflow"] is None
 
 
 def test_post_prompt_empty_name_422(client):
@@ -206,7 +206,7 @@ def test_get_prompt_endpoint(client):
 
 
 def test_get_prompt_endpoint_404(client):
-    r = client.get("/v1/image-prompts/00000000-0000-0000-0000-000000000000")
+    r = client.get("/v1/image-prompts/does-not-exist")
     assert r.status_code == 404
 
 
@@ -222,8 +222,8 @@ def test_put_prompt_endpoint(client):
     )
     assert r2.status_code == 200
     body = r2.json()
-    assert body["prompt"] == "new"
-    assert body["workflow"] == "flux"
+    assert body["data"]["prompt"] == "new"
+    assert body["data"]["workflow"] == "flux"
 
 
 def test_put_prompt_endpoint_404(client):

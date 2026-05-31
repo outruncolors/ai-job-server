@@ -6,6 +6,10 @@
   let _entries = [];
   let _selectedId = null;
 
+  // app/key/prompt/variables/guard live under the envelope `data`; `name` is the
+  // display title (was `title`).
+  const _d = (e) => (e && e.data) || {};
+
   // ---- loading ----
   async function load() {
     const data = await api('/prompt-pal/entries');
@@ -15,7 +19,7 @@
   }
 
   function rebuildFilters() {
-    const apps = [...new Set(_entries.map((e) => e.app))].sort();
+    const apps = [...new Set(_entries.map((e) => _d(e).app))].sort();
     const tags = [...new Set(_entries.flatMap((e) => e.tags || []))].sort();
     fillSelect($('pp-filter-app'), 'All apps', apps);
     fillSelect($('pp-filter-tag'), 'All tags', tags);
@@ -35,10 +39,10 @@
     const fApp = $('pp-filter-app').value;
     const fTag = $('pp-filter-tag').value;
     let out = _entries.filter((e) => {
-      if (fApp && e.app !== fApp) return false;
+      if (fApp && _d(e).app !== fApp) return false;
       if (fTag && !(e.tags || []).includes(fTag)) return false;
       if (q) {
-        const hay = [e.title, e.key, e.description, (e.tags || []).join(' ')]
+        const hay = [e.name, _d(e).key, e.description, (e.tags || []).join(' ')]
           .join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
@@ -46,10 +50,10 @@
     });
     const sort = $('pp-sort').value;
     out.sort((a, b) => {
-      if (sort === 'title') return (a.title || '').localeCompare(b.title || '');
+      if (sort === 'title') return (a.name || '').localeCompare(b.name || '');
       if (sort === 'updated') return (b.updated_at || '').localeCompare(a.updated_at || '');
       // app: group by app then key
-      return (a.app + a.key).localeCompare(b.app + b.key);
+      return (_d(a).app + _d(a).key).localeCompare(_d(b).app + _d(b).key);
     });
     return out;
   }
@@ -66,10 +70,10 @@
       const tags = (e.tags || []).map((t) => `<span class="pp-tag">${_escHtml(t)}</span>`).join('');
       return `<div class="pp-row${sel}" data-id="${_escHtml(e.id)}">
         <div class="pp-row-top">
-          <span class="pp-badge">${_escHtml(e.app)}</span>
-          <span class="pp-row-title">${_escHtml(e.title || e.key)}</span>
+          <span class="pp-badge">${_escHtml(_d(e).app)}</span>
+          <span class="pp-row-title">${_escHtml(e.name || _d(e).key)}</span>
         </div>
-        <code class="pp-key">${_escHtml(e.key)}</code>
+        <code class="pp-key">${_escHtml(_d(e).key)}</code>
         <div class="pp-tags">${tags}</div>
       </div>`;
     }).join('');
@@ -82,14 +86,14 @@
     _selectedId = id;
     $('pp-editor-empty').hidden = true;
     $('pp-editor').hidden = false;
-    $('pp-ed-app').textContent = entry.app;
-    $('pp-ed-key').textContent = entry.key;
-    $('pp-ed-title').value = entry.title || '';
+    $('pp-ed-app').textContent = _d(entry).app;
+    $('pp-ed-key').textContent = _d(entry).key;
+    $('pp-ed-title').value = entry.name || '';
     $('pp-ed-desc').value = entry.description || '';
     $('pp-ed-tags').value = (entry.tags || []).join(', ');
-    $('pp-ed-prompt').value = entry.prompt || '';
-    $('pp-ed-vars').value = JSON.stringify(entry.variables || {}, null, 2);
-    const guard = entry.guard || {};
+    $('pp-ed-prompt').value = _d(entry).prompt || '';
+    $('pp-ed-vars').value = JSON.stringify(_d(entry).variables || {}, null, 2);
+    const guard = _d(entry).guard || {};
     $('pp-ed-guard-enabled').checked = guard.enabled !== false && !!(guard.prompt || '').trim();
     $('pp-ed-guard-prompt').value = guard.prompt || '';
     $('pp-ed-guard-vars').value = JSON.stringify(guard.variables || {}, null, 2);

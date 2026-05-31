@@ -21,11 +21,11 @@ def test_create_get_list(client):
     r = _create(client)
     assert r.status_code == 201
     entry = r.json()
-    assert entry["app"] == "hoodat" and entry["key"] == "export.bio"
+    assert entry["data"]["app"] == "hoodat" and entry["data"]["key"] == "export.bio"
 
     got = client.get(f"/v1/prompt-pal/entries/{entry['id']}")
     assert got.status_code == 200
-    assert got.json()["title"] == "Bio export"
+    assert got.json()["name"] == "Bio export"
 
     listed = client.get("/v1/prompt-pal/entries", params={"app": "hoodat"}).json()["entries"]
     assert any(e["id"] == entry["id"] for e in listed)
@@ -48,9 +48,9 @@ def test_put_patches_editable_only(client):
     )
     assert r.status_code == 200
     updated = r.json()
-    assert updated["title"] == "New"
-    assert updated["app"] == "hoodat"  # immutable, ignored
-    assert updated["key"] == "export.bio"
+    assert updated["name"] == "New"
+    assert updated["data"]["app"] == "hoodat"  # immutable, ignored
+    assert updated["data"]["key"] == "export.bio"
 
 
 def test_put_missing_404(client):
@@ -77,4 +77,4 @@ def test_tag_filter(client):
     _create(client, key="a", tags=["x"])
     _create(client, key="b", tags=["y"])
     out = client.get("/v1/prompt-pal/entries", params={"tag": "x"}).json()["entries"]
-    assert {e["key"] for e in out} == {"a"}
+    assert {e["data"]["key"] for e in out} == {"a"}

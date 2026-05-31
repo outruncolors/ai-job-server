@@ -143,7 +143,8 @@ def _expand_steps(
         # Renumber inner steps so they sort after this outer step but before the next one.
         outer_number = step.number if step.number > 0 else (len(result) + 1)
         inner_offset = outer_number * 1000
-        sub_steps = [ChainStep(**s) for s in seq.get("steps", [])]
+        from .sequences import steps_of
+        sub_steps = [ChainStep(**s) for s in steps_of(seq)]
         result.extend(
             _expand_steps(
                 sub_steps,

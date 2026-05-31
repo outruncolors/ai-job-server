@@ -26,7 +26,8 @@ def _node_for(app: str, key: str) -> Optional[dict]:
     """
     entry = store.get_by_app_key(app, key)
     if entry is not None:
-        return {"prompt": entry.get("prompt", ""), "variables": entry.get("variables") or {}}
+        d = entry.get("data") or {}
+        return {"prompt": d.get("prompt", ""), "variables": d.get("variables") or {}}
 
     rp = registry.get_registered(app, key)
     if rp is None:
@@ -43,7 +44,7 @@ def _guard_for(app: str, key: str) -> Optional[dict]:
     """
     entry = store.get_by_app_key(app, key)
     if entry is not None:
-        return entry.get("guard")
+        return (entry.get("data") or {}).get("guard")
 
     rp = registry.get_registered(app, key)
     if rp is None:

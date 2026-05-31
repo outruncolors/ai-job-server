@@ -27,7 +27,7 @@ def test_seed_is_idempotent_and_absent_only():
     registry.seed_registered()
     again = store.get_by_app_key("testapp", "SEEDME")
     assert again["id"] == first["id"]
-    assert again["prompt"] == "EDITED"
+    assert again["data"]["prompt"] == "EDITED"
 
 
 def test_store_copy_wins_over_default():

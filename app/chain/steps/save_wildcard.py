@@ -38,7 +38,7 @@ def run_save_wildcard_step(
             result = create_wildcard(name, [new_entry], "")
             action = "create_missing"
         else:
-            merged_entries = list(existing.get("entries") or []) + [new_entry]
+            merged_entries = list((existing.get("data") or {}).get("entries") or []) + [new_entry]
             result = update_wildcard(
                 existing["id"],
                 existing["name"],

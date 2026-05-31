@@ -42,7 +42,7 @@ def test_guard_put_roundtrip_and_preview():
         "guard": {"enabled": True, "prompt": "edit {{previous}} {{var.tone}}",
                   "variables": {"tone": "calm"}}})
     assert r.status_code == 200
-    assert r.json()["guard"]["prompt"] == "edit {{previous}} {{var.tone}}"
+    assert r.json()["data"]["guard"]["prompt"] == "edit {{previous}} {{var.tone}}"
 
     # The stored guard wins in get_guard.
     assert service.get_guard("hoodat", "qa.testguard") == "edit {{previous}} calm"
@@ -76,7 +76,7 @@ def test_seed_backfills_guard_onto_legacy_entry():
     registry.seed_registered()
     after = store.get_by_app_key("testapp", "LEGACYGUARD")
     assert after["id"] == "legacy1"  # same entry, not a duplicate
-    assert after["guard"]["prompt"] == "edit {{previous}}"
+    assert after["data"]["guard"]["prompt"] == "edit {{previous}}"
 
 
 def test_seed_does_not_clobber_disabled_guard():
@@ -87,7 +87,7 @@ def test_seed_does_not_clobber_disabled_guard():
                         "guard": {"enabled": False, "prompt": ""}})
     registry.seed_registered()
     after = store.get_by_app_key("testapp", "KEEPOFF")
-    assert after["guard"]["enabled"] is False  # the disable survived re-seeding
+    assert after["data"]["guard"]["enabled"] is False  # the disable survived re-seeding
 
 
 def test_create_with_guard():
@@ -96,4 +96,4 @@ def test_create_with_guard():
         "app": "hoodat", "key": "qa.created", "title": "t", "prompt": "p",
         "guard": {"enabled": True, "prompt": "g {{previous}}"}})
     assert r.status_code == 201
-    assert r.json()["guard"]["prompt"] == "g {{previous}}"
+    assert r.json()["data"]["guard"]["prompt"] == "g {{previous}}"

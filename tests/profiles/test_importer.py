@@ -11,15 +11,12 @@ from app.chain import context_library, sequences
 from app.comfyui import config as comfyui_cfg
 from app.omnivoice import config as omnivoice_cfg
 from app.profiles import importer
+from app.cruddables.envelope import Cruddable
 from app.profiles.importer import apply_master_profile
 from app.profiles.models import (
-    ChainSequenceEntry,
-    ContextItemEntry,
-    ImagePromptEntry,
     MasterProfile,
     ProfileAsset,
     VoicePresetEntry,
-    WildcardEntry,
 )
 
 
@@ -70,15 +67,38 @@ def _profile_with_payload(asset_filename: str = "vp1.wav") -> MasterProfile:
             VoicePresetEntry(id="vp1", name="Narrator", caption="warm", wav_filename=asset_filename)
         ],
         wildcards=[
-            WildcardEntry(id="w1", name="color", entries=[{"text": "red"}, {"text": "blue"}])
+            Cruddable(
+                type="wildcard",
+                id="w1",
+                name="color",
+                data={"entries": [{"text": "red"}, {"text": "blue"}]},
+            )
         ],
-        context_items=[ContextItemEntry(id="c1", title="House style", content="tight")],
-        image_prompts=[ImagePromptEntry(id="ip1", name="moody", prompt="cinematic")],
+        context_items=[
+            Cruddable(
+                type="context_item",
+                id="c1",
+                name="House style",
+                data={"content": "tight"},
+            )
+        ],
+        image_prompts=[
+            Cruddable(
+                type="image_prompt",
+                id="ip1",
+                name="moody",
+                data={"prompt": "cinematic", "workflow": None},
+            )
+        ],
         chain_sequences=[
-            ChainSequenceEntry(
+            Cruddable(
+                type="chain_sequence",
                 id="s1",
                 name="story-then-voice",
-                steps=[{"id": "a", "name": "Draft", "type": "llm", "prompt": "x"}],
+                data={
+                    "steps": [{"id": "a", "name": "Draft", "type": "llm", "prompt": "x"}],
+                    "variables": [],
+                },
             )
         ],
         asset_manifest=[ProfileAsset(filename=asset_filename, kind="voice_wav")],
@@ -196,13 +216,13 @@ def test_merge_upserts_by_overwriting_same_id(isolated_config, tmp_path):
     apply_master_profile(_profile_with_payload(), mode="replace", asset_source=asset_dir)
 
     mutated = _profile_with_payload()
-    mutated.wildcards[0].entries = [{"text": "green"}]  # same id, different content
+    mutated.wildcards[0].data["entries"] = [{"text": "green"}]  # same id, different content
     apply_master_profile(mutated, mode="merge", asset_source=asset_dir)
 
     wc = json.loads(wildcards_mod._INDEX_PATH.read_text())
     assert len(wc) == 1
     assert wc[0]["id"] == "w1"
-    assert wc[0]["entries"] == [{"text": "green"}]
+    assert wc[0]["data"]["entries"] == [{"text": "green"}]
 
 
 def test_missing_asset_records_warning_and_does_not_abort(isolated_config, tmp_path):

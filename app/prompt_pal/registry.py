@@ -121,5 +121,5 @@ def seed_registered() -> None:
         existing = store.get_by_app_key(rp.app, rp.key)
         if existing is None:
             store.create_entry(rp.as_fields())
-        elif rp.guard is not None and "guard" not in existing:
+        elif rp.guard is not None and (existing.get("data") or {}).get("guard") is None:
             store.update_entry(existing["id"], guard=dict(rp.guard))

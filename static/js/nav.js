@@ -17,14 +17,20 @@
       { href: '/mcp',        label: 'MCP',       page: 'mcp'       },
       { href: '/embed-lab/', label: 'Embed Lab', page: 'embed-lab' },
       { href: '/prompt-pal/', label: 'Prompt Pal', page: 'prompt-pal' },
+      { href: '/packs/',     label: 'Packs',      page: 'packs'      },
     ]},
     { label: 'Manage', dropdown: [
       { href: '/tickets/', label: 'Tickets', page: 'tickets' },
       { href: '/server',   label: 'Server',  page: 'server'  },
       { href: '/jobs',     label: 'Jobs',    page: 'jobs'    },
       { href: '/docs/',    label: 'Docs',    page: 'docs'    },
+      { href: '/cruddables/', label: 'Cruddables', page: 'cruddables' },
     ]},
-    { href: '/apps/', label: 'Apps', page: 'apps' },
+    { label: 'Apps', dropdown: [
+      { href: '/apps/',             label: 'All Apps',    page: 'apps' },
+      { href: '/apps/blaboratory/', label: 'Blaboratory', page: 'apps' },
+      { href: '/apps/hoodat/',      label: 'Hoodat',      page: 'apps' },
+    ]},
   ];
 
   // Expose for nav-mobile.js (it rebuilds the mobile menu from this same

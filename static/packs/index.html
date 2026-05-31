@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Packs · ai-job-server</title>
+  <link rel="stylesheet" href="/css/responsive.css" />
+  <link rel="stylesheet" href="/packs/styles.css" />
+</head>
+<body>
+  <nav id="topnav"></nav>
+  <div id="toast-stack"></div>
+
+  <main class="page">
+    <header class="page-head">
+      <h1>Packs</h1>
+      <p class="sub">Curated bundles of cruddables. Applying a pack writes each item to its store, overwriting any existing item with the same id.</p>
+    </header>
+
+    <section class="controls">
+      <input id="pk-search" type="search" placeholder="Search packs…" autocomplete="off" />
+      <select id="pk-type"><option value="">All types</option></select>
+      <select id="pk-tag"><option value="">All tags</option></select>
+      <select id="pk-sort">
+        <option value="name">Sort: Name</option>
+        <option value="type">Sort: Type</option>
+        <option value="count">Sort: Item count</option>
+      </select>
+    </section>
+
+    <section id="pk-list" class="pk-list"><p class="muted">Loading…</p></section>
+  </main>
+
+  <dialog id="pk-json-dialog" class="json-dialog">
+    <header class="json-dialog-head">
+      <strong id="pk-json-title">Pack JSON</strong>
+      <span class="spacer"></span>
+      <button id="pk-json-copy" class="btn">Copy</button>
+      <button id="pk-json-download" class="btn">Download</button>
+      <button id="pk-json-close" class="btn btn-ghost">Close</button>
+    </header>
+    <pre id="pk-json-body" class="json-body"></pre>
+  </dialog>
+
+  <script src="/js/nav.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="/packs/packs.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

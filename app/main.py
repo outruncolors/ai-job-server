@@ -245,6 +245,12 @@ app.include_router(blaboratory_router)
 app.include_router(hoodat_router)
 app.include_router(prompt_pal_router)
 
+from app.cruddables.router import router as cruddables_router  # noqa: E402
+from app.packs.router import router as packs_router  # noqa: E402
+
+app.include_router(cruddables_router)
+app.include_router(packs_router)
+
 
 @app.get("/health", response_model=HealthResponse)
 def health():

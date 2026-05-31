@@ -1,0 +1,42 @@
+.page { max-width: 1000px; margin: 0 auto; padding: 16px; }
+.page-head h1 { margin: 0 0 4px; }
+.page-head .sub { color: var(--muted, #9aa); margin: 0 0 16px; max-width: 70ch; }
+.muted { color: var(--muted, #9aa); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.controls input, .controls select {
+  background: var(--panel, #1a1d22); color: inherit;
+  border: 1px solid var(--border, #333); border-radius: 6px; padding: 6px 8px;
+}
+.controls #pk-search { flex: 1 1 220px; min-width: 160px; }
+
+.pk-list { display: flex; flex-direction: column; gap: 10px; }
+.pk-card {
+  background: var(--panel, #1a1d22); border: 1px solid var(--border, #333);
+  border-radius: 8px; padding: 12px 14px;
+}
+.pk-card h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.pk-card .pk-desc { color: var(--muted, #9aa); margin: 0 0 8px; }
+.pk-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.chip {
+  font-size: 0.75rem; padding: 2px 8px; border-radius: 999px;
+  background: #2a2f37; border: 1px solid var(--border, #333);
+}
+.chip.type { background: #1f3a2e; }
+.chip.source-user { background: #3a2f1f; }
+.chip.source-builtin { background: #1f2a3a; }
+.pk-actions { display: flex; gap: 8px; }
+.btn {
+  background: #2a2f37; color: inherit; border: 1px solid var(--border, #333);
+  border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+.btn:hover { background: #343a44; }
+.btn-primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-ghost { background: transparent; }
+
+.json-dialog { background: var(--panel, #1a1d22); color: inherit; border: 1px solid var(--border, #333); border-radius: 10px; max-width: 90vw; width: 760px; }
+.json-dialog::backdrop { background: rgba(0,0,0,0.6); }
+.json-dialog-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.json-dialog-head .spacer { flex: 1; }
+.json-body { max-height: 60vh; overflow: auto; background: #11141a; padding: 10px; border-radius: 6px; white-space: pre; }

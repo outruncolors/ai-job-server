@@ -18,12 +18,13 @@ function _wc_resolve(text, map, visiting, depth) {
   return text.replace(/%%([^%]+)%%/g, (match, name) => {
     const key = name.toLowerCase();
     const wc  = map[key];
-    if (!wc || !wc.entries.length) return match;
+    const wcEntries = (wc && wc.data && wc.data.entries) || [];
+    if (!wcEntries.length) return match;
     if (visiting.has(key)) {
       console.warn(`resolveWildcards: cycle detected at %%${name}%%; leaving literal`);
       return match;
     }
-    const picked = _wc_pickWeighted(wc.entries);
+    const picked = _wc_pickWeighted(wcEntries);
     const next   = new Set(visiting);
     next.add(key);
     return _wc_resolve(picked, map, next, depth + 1);
@@ -48,9 +49,10 @@ function _wc_resolve_tracked(text, map, visiting, depth, subs) {
   return text.replace(/%%([^%]+)%%/g, (match, name) => {
     const key = name.toLowerCase();
     const wc  = map[key];
-    if (!wc || !wc.entries.length) return match;
+    const wcEntries = (wc && wc.data && wc.data.entries) || [];
+    if (!wcEntries.length) return match;
     if (visiting.has(key)) return match;
-    const picked = _wc_pickWeighted(wc.entries);
+    const picked = _wc_pickWeighted(wcEntries);
     const next   = new Set(visiting);
     next.add(key);
     const result = _wc_resolve_tracked(picked, map, next, depth + 1, subs);

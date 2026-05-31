@@ -1,0 +1,33 @@
+.page { max-width: 1000px; margin: 0 auto; padding: 16px; }
+.page-head h1 { margin: 0 0 4px; }
+.page-head .sub { color: var(--muted, #9aa); margin: 0 0 16px; max-width: 80ch; }
+.muted { color: var(--muted, #9aa); }
+
+.cr-types { display: flex; flex-direction: column; gap: 14px; }
+.cr-card {
+  background: var(--panel, #1a1d22); border: 1px solid var(--border, #333);
+  border-radius: 8px; padding: 12px 14px;
+}
+.cr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cr-head h3 { margin: 0; font-size: 1.05rem; }
+.cr-head .count { color: var(--muted, #9aa); }
+.cr-head .spacer { flex: 1; }
+
+.cr-extend { display: flex; flex-direction: column; gap: 8px; }
+.cr-extend textarea {
+  width: 100%; min-height: 96px; resize: vertical; box-sizing: border-box;
+  background: #11141a; color: inherit; border: 1px solid var(--border, #333);
+  border-radius: 6px; padding: 8px; font-family: monospace; font-size: 0.85rem;
+}
+.cr-extend-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.btn {
+  background: #2a2f37; color: inherit; border: 1px solid var(--border, #333);
+  border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+.btn:hover { background: #343a44; }
+.btn-primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+
+.cr-report { margin: 0; padding: 8px; background: #11141a; border-radius: 6px; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 0.8rem; }
+.cr-report:empty { display: none; }

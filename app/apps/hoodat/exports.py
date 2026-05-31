@@ -29,7 +29,8 @@ def list_exports() -> list[dict]:
     """All Hoodat export-prompt entries (Prompt Pal entries keyed `export.*`)."""
     return [
         e for e in pp_store.list_entries()
-        if e.get("app") == "hoodat" and str(e.get("key", "")).startswith(EXPORT_PREFIX)
+        if (e.get("data") or {}).get("app") == "hoodat"
+        and str((e.get("data") or {}).get("key", "")).startswith(EXPORT_PREFIX)
     ]
 
 

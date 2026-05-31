@@ -5,15 +5,12 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from app.cruddables.envelope import Cruddable
 from app.profiles.models import (
     SCHEMA_VERSION,
-    ChainSequenceEntry,
-    ContextItemEntry,
-    ImagePromptEntry,
     MasterProfile,
     ProfileAsset,
     VoicePresetEntry,
-    WildcardEntry,
 )
 
 
@@ -62,44 +59,53 @@ def _fully_populated() -> MasterProfile:
             )
         ],
         wildcards=[
-            WildcardEntry(
+            Cruddable(
+                type="wildcard",
                 id="w1",
                 name="color",
                 description="basic palette",
-                entries=[{"text": "red"}, {"text": "blue"}],
+                data={"entries": [{"text": "red"}, {"text": "blue"}]},
                 created_at="2026-05-16T10:00:00+00:00",
                 updated_at="2026-05-16T10:00:00+00:00",
             )
         ],
         context_items=[
-            ContextItemEntry(
+            Cruddable(
+                type="context_item",
                 id="c1",
-                title="House style",
+                name="House style",
                 tags=["style", "voice"],
                 description="Tone guide",
-                content="Write in short, direct sentences.",
+                data={"content": "Write in short, direct sentences."},
                 created_at="2026-05-16T10:00:00+00:00",
                 updated_at="2026-05-16T10:00:00+00:00",
             )
         ],
         image_prompts=[
-            ImagePromptEntry(
+            Cruddable(
+                type="image_prompt",
                 id="ip1",
                 name="moody portrait",
-                prompt="cinematic portrait, %%color%% lighting",
-                workflow="flux-dev.json",
+                data={
+                    "prompt": "cinematic portrait, %%color%% lighting",
+                    "workflow": "flux-dev.json",
+                },
                 created_at="2026-05-16T10:00:00+00:00",
                 updated_at="2026-05-16T10:00:00+00:00",
             )
         ],
         chain_sequences=[
-            ChainSequenceEntry(
+            Cruddable(
+                type="chain_sequence",
                 id="s1",
                 name="story-then-voice",
-                steps=[
-                    {"id": "a", "name": "Draft", "type": "llm", "prompt": "Write a scene"},
-                    {"id": "b", "name": "Read", "type": "voice", "voice_preset_id": "vp1"},
-                ],
+                data={
+                    "steps": [
+                        {"id": "a", "name": "Draft", "type": "llm", "prompt": "Write a scene"},
+                        {"id": "b", "name": "Read", "type": "voice", "voice_preset_id": "vp1"},
+                    ],
+                    "variables": [],
+                },
                 created_at="2026-05-16T10:00:00+00:00",
                 updated_at="2026-05-16T10:00:00+00:00",
             )

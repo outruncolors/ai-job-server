@@ -1,20 +1,23 @@
 from __future__ import annotations
 
 import json
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+from app.cruddables.envelope import now_iso, slugify, unique_id
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SEQUENCES_DIR: Path = PROJECT_ROOT / "config" / "chain_sequences"
 INDEX_PATH: Path = SEQUENCES_DIR / "index.json"
 
+TYPE_NAME = "chain_sequence"
+# Version of the *sequence content* shape (the step graph), stored inside `data`.
+# Distinct from the envelope's own top-level `schema_version`.
 SCHEMA_VERSION = 2
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return now_iso()
 
 
 def _read_index() -> list[dict]:
@@ -37,8 +40,45 @@ def _unique_name(base: str, existing: list[str]) -> str:
     return f"{base} ({n})"
 
 
+def steps_of(seq: dict) -> list[dict]:
+    """Step graph of a sequence envelope (tolerates legacy top-level `steps`)."""
+    if isinstance(seq.get("data"), dict) and "steps" in seq["data"]:
+        return seq["data"].get("steps") or []
+    return seq.get("steps") or []
+
+
+def vars_of(seq: dict) -> list[dict]:
+    if isinstance(seq.get("data"), dict) and "variables" in seq["data"]:
+        return seq["data"].get("variables") or []
+    return seq.get("variables") or []
+
+
+def _normalize(doc: dict) -> dict:
+    """Return ``doc`` as an envelope, reshaping a legacy flat sequence if needed."""
+    if doc.get("type") == TYPE_NAME and isinstance(doc.get("data"), dict):
+        doc.setdefault("tags", [])
+        doc.setdefault("description", "")
+        return doc
+    now = now_iso()
+    return {
+        "schema_version": 1,
+        "type": TYPE_NAME,
+        "id": doc.get("id") or slugify(doc.get("name") or "sequence"),
+        "name": doc.get("name") or "",
+        "description": doc.get("description") or "",
+        "tags": doc.get("tags") or [],
+        "created_at": doc.get("created_at") or now,
+        "updated_at": doc.get("updated_at") or now,
+        "data": {
+            "content_version": doc.get("schema_version") or SCHEMA_VERSION,
+            "steps": doc.get("steps") or [],
+            "variables": doc.get("variables") or [],
+        },
+    }
+
+
 def list_sequences() -> list[dict]:
-    return _read_index()
+    return [_normalize(dict(s)) for s in _read_index()]
 
 
 def check_for_cycles(entries: list[dict], root_id: str) -> None:
@@ -50,7 +90,7 @@ def check_for_cycles(entries: list[dict], root_id: str) -> None:
         if not seq:
             return []
         deps: list[str] = []
-        for step in seq.get("steps", []):
+        for step in steps_of(seq):
             if step.get("type") != "sequence":
                 continue
             # v2: sequence_id may live on an alternative
@@ -188,25 +228,34 @@ def save_sequence(
     _validate_steps(normalized)
     validate_llm_step_capabilities(normalized)
     vars_list = list(variables or [])
-    entries = _read_index()
+    entries = list_sequences()
     existing = next((e for e in entries if e["name"] == name), None)
-    now = _now_iso()
+    now = now_iso()
     if existing:
-        existing["schema_version"] = SCHEMA_VERSION
-        existing["steps"] = normalized
-        existing["variables"] = vars_list
+        existing["data"] = {
+            "content_version": SCHEMA_VERSION,
+            "steps": normalized,
+            "variables": vars_list,
+        }
         existing["updated_at"] = now
         check_for_cycles(entries, existing["id"])
         _write_index(entries)
         return existing
+    new_id = unique_id(slugify(name), {e["id"] for e in entries})
     entry = {
-        "id": str(uuid.uuid4()),
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": 1,
+        "type": TYPE_NAME,
+        "id": new_id,
         "name": name,
-        "steps": normalized,
-        "variables": vars_list,
+        "description": "",
+        "tags": [],
         "created_at": now,
         "updated_at": now,
+        "data": {
+            "content_version": SCHEMA_VERSION,
+            "steps": normalized,
+            "variables": vars_list,
+        },
     }
     entries.append(entry)
     check_for_cycles(entries, entry["id"])
@@ -215,7 +264,7 @@ def save_sequence(
 
 
 def delete_sequence(seq_id: str) -> bool:
-    entries = _read_index()
+    entries = list_sequences()
     new_entries = [e for e in entries if e["id"] != seq_id]
     if len(new_entries) == len(entries):
         return False
@@ -224,22 +273,65 @@ def delete_sequence(seq_id: str) -> bool:
 
 
 def duplicate_sequence(seq_id: str) -> Optional[dict]:
-    entries = _read_index()
+    entries = list_sequences()
     source = next((e for e in entries if e["id"] == seq_id), None)
     if source is None:
         return None
     existing_names = [e["name"] for e in entries]
     new_name = _unique_name(source["name"] + " (copy)", existing_names)
-    now = _now_iso()
+    now = now_iso()
+    new_id = unique_id(slugify(new_name), {e["id"] for e in entries})
     entry = {
-        "id": str(uuid.uuid4()),
-        "schema_version": source.get("schema_version", SCHEMA_VERSION),
+        "schema_version": 1,
+        "type": TYPE_NAME,
+        "id": new_id,
         "name": new_name,
-        "steps": source["steps"],
-        "variables": list(source.get("variables") or []),
+        "description": source.get("description") or "",
+        "tags": list(source.get("tags") or []),
         "created_at": now,
         "updated_at": now,
+        "data": {
+            "content_version": (source.get("data") or {}).get("content_version", SCHEMA_VERSION),
+            "steps": steps_of(source),
+            "variables": list(vars_of(source)),
+        },
     }
     entries.append(entry)
     _write_index(entries)
     return entry
+
+
+def get_sequence(seq_id: str) -> Optional[dict]:
+    return next((e for e in list_sequences() if e["id"] == seq_id), None)
+
+
+def upsert_envelope(env: dict) -> tuple[str, str]:
+    """Write a chain_sequence envelope with its explicit ``id`` (packs/extend).
+
+    Runs structural validation (``_validate_steps`` / ``check_for_cycles``) but **skips**
+    capability validation so a cross-machine pack applies even if a named preset is absent.
+    """
+    doc = _normalize(dict(env))
+    normalized = [_normalize_step(s, i + 1) for i, s in enumerate(steps_of(doc))]
+    _validate_steps(normalized)
+    doc["data"] = {
+        "content_version": (doc.get("data") or {}).get("content_version", SCHEMA_VERSION),
+        "steps": normalized,
+        "variables": list(vars_of(doc)),
+    }
+    entries = list_sequences()
+    idx = next((i for i, e in enumerate(entries) if e["id"] == doc["id"]), None)
+    now = now_iso()
+    if idx is None:
+        doc.setdefault("created_at", now)
+        doc["updated_at"] = now
+        entries.append(doc)
+        action = "created"
+    else:
+        doc["created_at"] = entries[idx].get("created_at") or now
+        doc["updated_at"] = now
+        entries[idx] = doc
+        action = "updated"
+    check_for_cycles(entries, doc["id"])
+    _write_index(entries)
+    return action, doc["id"]

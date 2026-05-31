@@ -29,12 +29,12 @@ def test_create_assigns_server_fields():
     assert entry["id"]
     assert entry["schema_version"] == 1
     assert entry["created_at"] and entry["updated_at"]
-    assert entry["app"] == "hoodat" and entry["key"] == "IDEATE"
+    assert entry["data"]["app"] == "hoodat" and entry["data"]["key"] == "IDEATE"
 
 
 def test_get_and_get_by_app_key():
     created = store.create_entry(_fields())
-    assert store.get_entry(created["id"])["title"] == "Ideate"
+    assert store.get_entry(created["id"])["name"] == "Ideate"
     assert store.get_by_app_key("hoodat", "IDEATE")["id"] == created["id"]
     assert store.get_by_app_key("hoodat", "MISSING") is None
     assert store.get_entry("nope") is None
@@ -43,7 +43,7 @@ def test_get_and_get_by_app_key():
 def test_list_entries():
     store.create_entry(_fields(key="A"))
     store.create_entry(_fields(key="B"))
-    keys = {e["key"] for e in store.list_entries()}
+    keys = {e["data"]["key"] for e in store.list_entries()}
     assert keys == {"A", "B"}
 
 
@@ -56,10 +56,10 @@ def test_update_only_patchable_fields():
         app="evil",  # must be ignored (immutable)
         key="evil",  # must be ignored (immutable)
     )
-    assert updated["title"] == "New"
-    assert updated["prompt"] == "changed"
-    assert updated["app"] == "hoodat"
-    assert updated["key"] == "IDEATE"
+    assert updated["name"] == "New"
+    assert updated["data"]["prompt"] == "changed"
+    assert updated["data"]["app"] == "hoodat"
+    assert updated["data"]["key"] == "IDEATE"
     assert updated["updated_at"] >= created["updated_at"]
 
 

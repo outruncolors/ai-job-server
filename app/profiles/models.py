@@ -34,6 +34,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..comfyui.config import ComfyUIConfig
+from ..cruddables.envelope import Cruddable
 from ..llm_config import LLMConfigDoc
 from ..omnivoice.config import OmniVoiceConfig
 
@@ -107,9 +108,11 @@ class MasterProfile(BaseModel):
     comfyui_workflows: list[str] = Field(default_factory=list)
 
     voice_presets: list[VoicePresetEntry] = Field(default_factory=list)
-    wildcards: list[WildcardEntry] = Field(default_factory=list)
-    context_items: list[ContextItemEntry] = Field(default_factory=list)
-    image_prompts: list[ImagePromptEntry] = Field(default_factory=list)
-    chain_sequences: list[ChainSequenceEntry] = Field(default_factory=list)
+    # The four scalar CRUD domains are stored as unified Cruddable envelopes —
+    # the single source of truth shared with the live stores / Packs / export-import.
+    wildcards: list[Cruddable] = Field(default_factory=list)
+    context_items: list[Cruddable] = Field(default_factory=list)
+    image_prompts: list[Cruddable] = Field(default_factory=list)
+    chain_sequences: list[Cruddable] = Field(default_factory=list)
 
     asset_manifest: list[ProfileAsset] = Field(default_factory=list)
