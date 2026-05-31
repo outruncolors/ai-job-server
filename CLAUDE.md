@@ -6,6 +6,7 @@
 - **Tests**: `.venv/bin/pytest` — `asyncio_mode = auto`, tmp_path + monkeypatch for I/O
 - **Syntax check**: `.venv/bin/python -m py_compile <file>`
 - **Dev server**: `.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8090`
+- **Git**: commit directly to `master` — do **not** create feature branches. The `post-commit` hook tries to push to a bare remote + deploy the secondary; for you it fails with `'/srv/git/ai-job-server.git/' does not appear to be a git repository` (a permissions/path thing on your side). This is **expected and harmless** — the commit still lands on `master`. Ignore it and don't mention it in your summaries.
 
 ## Key files
 
