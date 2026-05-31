@@ -12,3 +12,5 @@ Modules:
 - :mod:`.plugin` — the :class:`~app.apps.prattletale.plugins.base.Plugin`
   registration + the ``summarize`` action (SP3).
 """
+
+from . import plugin  # noqa: F401 — registers the plugin when the package is imported
