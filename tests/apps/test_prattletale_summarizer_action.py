@@ -143,9 +143,29 @@ def test_bad_detail_422(client):
 
 
 def test_disabled_plugin_409(client):
-    cid = _seed(enabled=False)
+    cid = _seed(enabled=False)  # explicit enabled_plugins: []
     r = _dispatch(client, cid, {"mode": "keep", "detail": "standard"})
     assert r.status_code == 409
+
+
+def test_legacy_conversation_missing_key_uses_default_on(client):
+    """A conversation created before plugins (no enabled_plugins key) gets the
+    default-on plugins — Summarizer dispatches, no 409."""
+    import json
+
+    conv = store.create_conversation({"title": "Legacy", "counterpart_character_id": "mara-okafor"})
+    cid = conv["id"]
+    # Simulate a pre-plugins doc on disk: drop the key the model now defaults in
+    # (writing the file directly bypasses the model that would re-add it).
+    p = store._conversation_path(cid)
+    doc = json.loads(p.read_text(encoding="utf-8"))
+    doc["config"].pop("enabled_plugins", None)
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    assert "enabled_plugins" not in (store.get_conversation(cid).get("config") or {})
+
+    store.append_user_turn(cid, [{"type": "dialogue", "text": "hi"}])
+    r = _dispatch(client, cid, {"mode": "keep", "detail": "standard"})
+    assert r.status_code == 200, r.text
 
 
 # --- nothing to summarize --------------------------------------------------

@@ -272,7 +272,7 @@ async def dispatch_plugin_action(
     run = plugin.get_action(action)
     if run is None:
         raise HTTPException(status_code=404, detail="Action not found")
-    enabled = (conversation.get("config") or {}).get("enabled_plugins") or []
+    enabled = plugin_registry.effective_enabled_ids(conversation.get("config") or {})
     if plugin_id not in enabled:
         raise HTTPException(status_code=409, detail="Plugin not enabled for this conversation")
     try:

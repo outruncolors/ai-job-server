@@ -152,7 +152,15 @@
   // on chat load and after the config dialog toggles plugins.
   async function syncPlugins() {
     const manifests = await loadPluginManifests();
-    const enabled = enabledPluginIds();
+    // A conversation created before plugins has no enabled_plugins key — resolve it
+    // to the default-on set so those plugins are discoverable (an explicit list,
+    // including [], is left untouched). Mutates the in-memory config only; it
+    // persists to disk the next time the config dialog is saved.
+    const cfg = _current.conversation.config || (_current.conversation.config = {});
+    if (!Array.isArray(cfg.enabled_plugins)) {
+      cfg.enabled_plugins = manifests.filter((m) => m.default_enabled).map((m) => m.id);
+    }
+    const enabled = cfg.enabled_plugins;
     await Promise.all(manifests.filter((m) => enabled.includes(m.id)).map(injectPluginAssets));
     rebuildModes();
   }

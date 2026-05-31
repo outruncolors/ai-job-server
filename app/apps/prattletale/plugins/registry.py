@@ -37,6 +37,21 @@ def list_plugins() -> list[Plugin]:
     return list(PLUGIN_REGISTRY.values())
 
 
+def default_enabled_ids() -> list[str]:
+    """Ids of plugins that are on by default. Used to resolve the effective enabled
+    set for a conversation whose ``config.enabled_plugins`` is **absent** (a legacy
+    conversation created before plugins) — an explicit ``[]`` still means none."""
+    return [p.id for p in PLUGIN_REGISTRY.values() if p.default_enabled]
+
+
+def effective_enabled_ids(config: dict) -> list[str]:
+    """The plugin ids enabled for a conversation. A missing ``enabled_plugins`` key
+    falls back to the default-on set (so default plugins reach legacy conversations);
+    an explicit list (including ``[]``) is honored verbatim."""
+    enabled = (config or {}).get("enabled_plugins")
+    return list(enabled) if isinstance(enabled, list) else default_enabled_ids()
+
+
 def _import_plugin_modules() -> None:
     """Import every plugin package so its register() calls have run."""
     for mod in _PLUGIN_MODULES:
