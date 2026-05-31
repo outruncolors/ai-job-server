@@ -64,12 +64,20 @@
           <label class="hd-sfx-enable">
             <input type="checkbox" id="hd-sfx-enabled"> Enable emote sound effects
           </label>
-          <label class="hd-voice-preset">Emote identity
-            <select id="hd-sfx-identity"></select>
-          </label>
+          <div class="hd-sfx-identity-row">
+            <label>Emote variant
+              <select id="hd-sfx-identity"></select>
+            </label>
+            <label>Pitch
+              <select id="hd-sfx-pitch">
+                <option value="low">Low</option>
+                <option value="normal" selected>Normal</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+          </div>
           <p class="hd-field-hint">Picks the voice/age profile used for this character's emote
-            cues (sneeze, laugh, sigh…). <code>(lower)</code> / <code>(higher)</code> variants
-            are pitch-shifted.</p>
+            cues (sneeze, laugh, sigh…). The pitch variants are formant-shifted.</p>
         </div>
       </section>
     </section>

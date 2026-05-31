@@ -817,6 +817,15 @@
     synth.title = caps.voice ? '' : 'Voice synthesis not available on this node';
   }
 
+  // Split a stored profile id into its base identity + pitch ("young_woman_high"
+  // -> {base:"young_woman", pitch:"high"}); a plain id is the "normal" pitch.
+  function splitSfxIdentity(value) {
+    if (!value) return { base: '', pitch: 'normal' };
+    if (value.endsWith('_low')) return { base: value.slice(0, -4), pitch: 'low' };
+    if (value.endsWith('_high')) return { base: value.slice(0, -5), pitch: 'high' };
+    return { base: value, pitch: 'normal' };
+  }
+
   async function loadSfx() {
     let identities = [];
     try {
@@ -825,19 +834,28 @@
     } catch (e) { identities = []; }
     const sfx = (character.speaking_style || {}).sfx || {};
     const sel = $('hd-sfx-identity');
+    const pitchSel = $('hd-sfx-pitch');
     const enable = $('hd-sfx-enabled');
-    sel.innerHTML = '<option value="">(none)</option>' + identities.map((it) => {
+    // Left select: only the base identities (pitch variants are chosen on the right).
+    const bases = identities.filter((it) => (it.pitch || 'base') === 'base');
+    sel.innerHTML = '<option value="">(none)</option>' + bases.map((it) => {
       const cover = (it.packs && it.packs.length) ? '' : ' — no pack installed';
       return `<option value="${_escHtml(it.value)}">${_escHtml(it.label)}${cover}</option>`;
     }).join('');
-    sel.value = sfx.emotes_identity || '';
+    const cur = splitSfxIdentity(sfx.emotes_identity);
+    sel.value = cur.base;
+    pitchSel.value = cur.pitch;
     enable.checked = !!sfx.enabled;
     const save = async () => {
-      const next = { emotes_identity: sel.value || null, enabled: enable.checked };
+      const base = sel.value;
+      const pitch = pitchSel.value;
+      const identity = !base ? null : (pitch === 'normal' ? base : `${base}_${pitch}`);
+      const next = { emotes_identity: identity, enabled: enable.checked };
       await api(`${APP}/characters/${charId}`, 'PUT', { speaking_style: { sfx: next } });
       setLocal('speaking_style', 'sfx', next);
     };
     sel.addEventListener('change', save);
+    pitchSel.addEventListener('change', save);
     enable.addEventListener('change', save);
   }
 
