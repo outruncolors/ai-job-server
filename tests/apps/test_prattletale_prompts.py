@@ -1,4 +1,4 @@
-"""SP2 — Prattletale prompt registration + tagged-line parser (no network)."""
+"""SP2 — Prattletale prompt registration + canonical-message parser (no network)."""
 
 from __future__ import annotations
 
@@ -72,55 +72,76 @@ def test_variety_prompt_seeds_and_composes_with_transcript():
     assert "{{var.transcript}}" not in text
 
 
-# ---- parser ----------------------------------------------------------------
+# ---- parser: canonical message format --------------------------------------
 
-def test_parse_maps_each_tag_to_item_type():
+def test_quoted_line_parses_as_dialogue():
+    assert parse_items('"hello"') == [{"type": "dialogue", "text": "hello"}]
+
+
+def test_dialogue_keeps_nested_single_quotes():
+    items = parse_items('"Did you just say \'maskidate\'?"')
+    assert items == [{"type": "dialogue", "text": "Did you just say 'maskidate'?"}]
+
+
+def test_asterisk_line_parses_as_action():
+    assert parse_items("*Mara looks away.*") == [{"type": "action", "text": "Mara looks away."}]
+
+
+def test_plain_line_parses_as_narration():
+    assert parse_items("The room goes quiet.") == [
+        {"type": "narration", "text": "The room goes quiet."}
+    ]
+
+
+def test_multiple_action_spans_split_into_separate_items():
+    # Each *…* span is its own action item -> its own SFX candidate.
+    items = parse_items("*turns around* *opens the door*")
+    assert items == [
+        {"type": "action", "text": "turns around"},
+        {"type": "action", "text": "opens the door"},
+    ]
+
+
+def test_underscore_wrapped_line_normalized_to_narration():
+    assert parse_items("_she hesitates_") == [{"type": "narration", "text": "she hesitates"}]
+
+
+def test_canonical_mix_parses_in_order():
+    raw = '*She slides the menu across the table.*\n"Where else would I be."\nRain streaks the window.'
+    items = parse_items(raw)
+    assert [it["type"] for it in items] == ["action", "dialogue", "narration"]
+
+
+# ---- parser: legacy bracket tags (back-compat input only) ------------------
+
+def test_legacy_tags_map_to_item_types():
     raw = (
-        "[say] Where else would I be.\n"
-        "[do] She slides the menu across the table.\n"
-        "[narration] Rain streaks the window.\n"
-        "[feel] She is more relieved than she'll admit."
+        "[say] hello\n"
+        "[do] turns around\n"
+        "[narration] The room goes quiet.\n"
+        "[feel] nervous"
     )
     items = parse_items(raw)
-    assert [it["type"] for it in items] == [
-        "dialogue",
-        "action",
-        "narration",
-        "narration_emotion",
-    ]
-    assert items[0]["text"] == "Where else would I be."
-    assert items[2]["text"] == "Rain streaks the window."
-
-
-def test_untagged_continuation_appends_to_previous():
-    raw = "[say] hey\nyou actually came"
-    items = parse_items(raw)
-    assert len(items) == 1
-    assert items[0]["type"] == "dialogue"
-    assert items[0]["text"] == "hey you actually came"
-
-
-def test_lone_untagged_line_defaults_to_dialogue():
-    items = parse_items("where have you been")
-    assert items == [{"type": "dialogue", "text": "where have you been"}]
+    # [feel] collapses into narration — the canonical format has no feeling type.
+    assert [it["type"] for it in items] == ["dialogue", "action", "narration", "narration"]
+    assert items[0]["text"] == "hello"
+    assert items[1]["text"] == "turns around"
 
 
 def test_fences_are_stripped():
-    raw = "```\n[say] hi\n[narration] she waves.\n```"
+    raw = '```\n"hi"\nshe waves.\n```'
     items = parse_items(raw)
     assert [it["type"] for it in items] == ["dialogue", "narration"]
     assert items[0]["text"] == "hi"
 
 
 def test_language_hinted_fence_is_stripped():
-    assert _strip_fences("```text\n[say] hi\n```") == "[say] hi"
+    assert _strip_fences('```text\n"hi"\n```') == '"hi"'
 
 
-def test_unknown_tag_coalesces_into_previous():
-    raw = "[say] hi\n[bogus] still part of the line"
-    items = parse_items(raw)
-    assert len(items) == 1
-    assert items[0]["text"] == "hi [bogus] still part of the line"
+def test_unknown_tag_maps_to_narration():
+    items = parse_items("[bogus] some scene beat")
+    assert items == [{"type": "narration", "text": "some scene beat"}]
 
 
 @pytest.mark.parametrize("raw", ["", "   ", "\n\n  \t\n", "```\n\n```"])

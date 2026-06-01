@@ -124,6 +124,38 @@ def test_replace_turn_missing_returns_none():
     assert store.replace_turn(conv["id"], "t9999", [{"type": "dialogue", "text": "x"}]) is None
 
 
+def test_user_items_stored_in_canonical_format():
+    conv = _make_conversation()
+    cid = conv["id"]
+    turn = store.append_user_turn(cid, [
+        {"type": "dialogue", "text": "hello"},
+        {"type": "action", "text": "turns around"},
+        {"type": "narration", "text": "The room goes quiet."},
+    ])
+    texts = [it["text"] for it in turn["items"]]
+    assert texts == ['"hello"', "*turns around*", "The room goes quiet."]
+
+
+def test_user_items_are_not_double_wrapped():
+    conv = _make_conversation()
+    cid = conv["id"]
+    turn = store.append_user_turn(cid, [
+        {"type": "dialogue", "text": '"hello"'},
+        {"type": "action", "text": "*turns around*"},
+    ])
+    texts = [it["text"] for it in turn["items"]]
+    assert texts == ['"hello"', "*turns around*"]
+
+
+def test_model_items_are_stored_verbatim():
+    # The model already emits canonical text (parsed upstream); the store must not
+    # re-wrap it the way it canonicalizes user-composed bubbles.
+    conv = _make_conversation()
+    cid = conv["id"]
+    turn = store.append_model_turn(cid, [{"type": "dialogue", "text": "hello"}], job_id="j")
+    assert turn["items"][0]["text"] == "hello"
+
+
 def test_transcript_ops_on_missing_conversation_return_none():
     assert store.get_transcript("nope") is None
     assert store.append_user_turn("nope", [{"type": "dialogue", "text": "x"}]) is None

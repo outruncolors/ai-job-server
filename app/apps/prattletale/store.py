@@ -204,17 +204,41 @@ def get_transcript(conversation_id: str) -> Optional[dict]:
     return _read_transcript(conversation_id)
 
 
+def _canonical_user_text(item_type: str, text: str) -> str:
+    """Wrap a user-composed bubble in the canonical message format by type:
+    dialogue -> ``"spoken words"``, action -> ``*action text*``, narration (and
+    anything else) stays undecorated. Idempotent — text already wrapped in the
+    right delimiters is left alone, so re-sends never double-wrap.
+    """
+    t = (text or "").strip()
+    if not t:
+        return t
+    if item_type == ItemType.dialogue.value:
+        return t if (len(t) >= 2 and t[0] == '"' and t[-1] == '"') else f'"{t}"'
+    if item_type == ItemType.action.value:
+        return t if (len(t) >= 2 and t[0] == "*" and t[-1] == "*") else f"*{t}*"
+    return t
+
+
 def _build_items(turn_id: str, author: Author, items: list[dict], *, status: ItemStatus) -> list[dict]:
-    """Turn caller-supplied ``{type, text, hidden_from_context?}`` dicts into full items."""
+    """Turn caller-supplied ``{type, text, hidden_from_context?}`` dicts into full items.
+
+    User-authored bubbles are normalized to the canonical message format
+    (dialogue quoted, action asterisk-wrapped); model/system items are stored as
+    given (the model already emits canonical text, parsed by ``parse_items``).
+    """
     now = now_iso()
     built: list[dict] = []
     for idx, raw in enumerate(items, start=1):
+        text = raw.get("text", "")
+        if author == Author.user:
+            text = _canonical_user_text(raw["type"], text)
         item = Item(
             id=_item_id(turn_id, idx),
             turn_id=turn_id,
             author=author,
             type=ItemType(raw["type"]),
-            text=raw.get("text", ""),
+            text=text,
             status=status,
             audio=raw.get("audio"),
             hidden_from_context=bool(raw.get("hidden_from_context", False)),

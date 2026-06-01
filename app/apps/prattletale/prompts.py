@@ -1,25 +1,33 @@
-"""Prattletale's turn-generation prompt + tagged-line parser.
+"""Prattletale's turn-generation prompt + canonical-message parser.
 
 Registered at import time with Prompt Pal:
 - ``turn`` — the model's reply prompt. It instructs the model to answer as the
   counterpart in the cadence of a texting burst: an ordered stack of short,
-  texty bubbles, **one tagged line per bubble**
-  (``[say]``/``[do]``/``[narration]``/``[feel]``). It consumes
-  ``{{var.character}}`` (the rendered Hoodat sheet), ``{{var.scenario}}``,
-  ``{{var.role_instructions}}``, ``{{var.user_persona}}`` and
-  ``{{var.transcript}}`` (filled at call time by the generator's
-  ``build_context``). It carries a **guard** — a second editor LLM pass
-  (Hoodat's ``SPOKEN_ONLY_GUARD`` is the precedent) that does **format hygiene
-  only**: every line tagged, leaked meta / OOC stripped, no bubbles merged.
+  texty bubbles, **one message per line**. It consumes ``{{var.character}}``
+  (the rendered Hoodat sheet), ``{{var.scenario}}``, ``{{var.role_instructions}}``,
+  ``{{var.user_persona}}`` and ``{{var.transcript}}`` (filled at call time by the
+  generator's ``build_context``). It carries a **guard** — a second editor LLM
+  pass (Hoodat's ``SPOKEN_ONLY_GUARD`` is the precedent) that does **format
+  hygiene only**: leaked meta / OOC stripped, no bubbles merged.
 
-The tagged-line format (not JSON) is deliberate: a chat turn is an open-ended
+The line-per-bubble format (not JSON) is deliberate: a chat turn is an open-ended
 ordered sequence of short strings, and the failure mode that matters is "model
 wrapped dialogue in prose / added a preamble", which the format degrades on
-gracefully (untagged line -> dialogue) instead of throwing.
+gracefully (an unrecognized line -> narration) instead of throwing.
 
 ``parse_items(raw)`` turns the (guarded) output into ordered ``{type, text}``
-dicts; ``_strip_fences(raw)`` peels a ```` ``` ```` wrapper first. ``ItemType``
-values come from :mod:`app.apps.prattletale.models`.
+dicts in the **canonical message format**:
+
+- ``"spoken words"``  -> dialogue   (double-quoted; single quotes may nest)
+- ``*action text*``   -> action     (asterisk-wrapped; one item per ``*…*`` span)
+- plain undecorated   -> narration
+
+The legacy bracket tags ``[say]``/``[do]``/``[narration]``/``[feel]`` are still
+accepted as **input/back-compat only** (``[feel]`` collapses into narration —
+the canonical format has no separate feeling type). Underscores are no longer a
+decorator: a stray ``_wrapped_`` line is normalized to plain narration.
+``_strip_fences(raw)`` peels a ```` ``` ```` wrapper first. ``ItemType`` values
+come from :mod:`app.apps.prattletale.models`.
 """
 
 from __future__ import annotations
@@ -178,17 +186,31 @@ register(
 )
 
 
-# ---- tagged-line parser ----------------------------------------------------
+# ---- canonical-message parser ----------------------------------------------
 
-# Maps the model-facing tag to the on-disk ItemType value.
+# Legacy bracket tag -> on-disk ItemType value. Accepted as INPUT/back-compat
+# only (the canonical format below is what the model now emits). ``feel`` has no
+# canonical equivalent, so it collapses into plain narration.
 _TAG_TO_TYPE = {
     "say": ItemType.dialogue.value,
     "do": ItemType.action.value,
     "narration": ItemType.narration.value,
-    "feel": ItemType.narration_emotion.value,
+    "feel": ItemType.narration.value,
 }
 
-_LINE_RE = re.compile(r"^\s*\[(\w+)\]\s*(.+)$")
+# Legacy ``[tag] text`` line (back-compat input only).
+_LEGACY_TAG_RE = re.compile(r"^\s*\[(\w+)\]\s*(.+)$")
+# A full double-quoted unit -> dialogue. The inner text may contain single
+# quotes ("'maskidate'") but not nested double quotes (not supported).
+_DIALOGUE_RE = re.compile(r'^"([^"]*)"$')
+# A line made up entirely of one or more whitespace-separated ``*…*`` spans, and
+# the per-span matcher used to split it. Each span becomes its own action item
+# (and so its own SFX candidate).
+_ACTION_LINE_RE = re.compile(r"^(?:\s*\*[^*]+?\*\s*)+$")
+_ACTION_SPAN_RE = re.compile(r"\*([^*]+?)\*")
+# A stray underscore-wrapped unit from old/invalid output -> plain narration
+# (underscores are no longer a decorator; the wrappers are simply dropped).
+_UNDERSCORE_RE = re.compile(r"^_+(.+?)_+$")
 
 # Deterministic emoji scrub — the prompt + guard ask the model not to emit emoji,
 # but a regex pass guarantees it regardless of the model. Covers the emoji planes,
@@ -231,30 +253,49 @@ def _strip_fences(raw: str) -> str:
 
 
 def parse_items(raw: str) -> list[dict]:
-    """Parse tagged-line model output into ordered ``{type, text}`` item dicts.
+    """Parse model output into ordered ``{type, text}`` item dicts.
 
-    Each ``[tag] text`` line becomes one item (``say``->dialogue, ``do``->action,
-    ``narration``->narration, ``feel``->narration_emotion). An untagged (or
-    unknown-tag) non-empty line **coalesces into the previous item's text**; a
-    lone leading untagged line defaults to ``dialogue``. Emoji are stripped from
-    every item (and an item left empty by the scrub is dropped). Raises
-    :class:`GenerationError` on empty / whitespace-only input or when nothing
-    survives the scrub.
+    Canonical format, one message per line:
+
+    - ``"spoken words"`` -> dialogue (the outer double quotes are stripped),
+    - ``*action text*`` -> action (one item per ``*…*`` span on the line),
+    - any other non-empty line -> narration (plain, undecorated).
+
+    Legacy bracket tags (``[say]``/``[do]``/``[narration]``/``[feel]``) are still
+    accepted as input; ``[feel]`` and any unknown tag map to narration. A stray
+    ``_underscore-wrapped_`` line is normalized to plain narration. Emoji are
+    stripped from every item (and an item left empty by the scrub is dropped).
+    Raises :class:`GenerationError` on empty / whitespace-only input or when
+    nothing survives the scrub.
     """
     items: list[dict] = []
     for line in _strip_fences(raw).splitlines():
-        if not line.strip():
+        stripped = line.strip()
+        if not stripped:
             continue
-        m = _LINE_RE.match(line)
-        item_type = _TAG_TO_TYPE.get(m.group(1).lower()) if m else None
-        if item_type is not None:
-            items.append({"type": item_type, "text": m.group(2).strip()})
-        elif items:
-            # Untagged / unrecognized-tag continuation -> append to the prior bubble.
-            items[-1]["text"] = f"{items[-1]['text']} {line.strip()}".strip()
-        else:
-            # A lone leading untagged line is taken as spoken dialogue.
-            items.append({"type": ItemType.dialogue.value, "text": line.strip()})
+        # Legacy bracket tag (back-compat input only).
+        legacy = _LEGACY_TAG_RE.match(stripped)
+        if legacy:
+            item_type = _TAG_TO_TYPE.get(legacy.group(1).lower(), ItemType.narration.value)
+            items.append({"type": item_type, "text": legacy.group(2).strip()})
+            continue
+        # Canonical dialogue: a full double-quoted line.
+        dialogue = _DIALOGUE_RE.match(stripped)
+        if dialogue:
+            items.append({"type": ItemType.dialogue.value, "text": dialogue.group(1).strip()})
+            continue
+        # Canonical action: a line of one or more ``*…*`` spans, each its own item.
+        if _ACTION_LINE_RE.match(stripped):
+            for span in _ACTION_SPAN_RE.findall(stripped):
+                items.append({"type": ItemType.action.value, "text": span.strip()})
+            continue
+        # Stray underscore-wrapped text from old/invalid output -> narration.
+        underscore = _UNDERSCORE_RE.match(stripped)
+        if underscore:
+            items.append({"type": ItemType.narration.value, "text": underscore.group(1).strip()})
+            continue
+        # Otherwise: plain narration.
+        items.append({"type": ItemType.narration.value, "text": stripped})
 
     cleaned = [{"type": it["type"], "text": t}
                for it in items if (t := _clean_text(it["text"]))]

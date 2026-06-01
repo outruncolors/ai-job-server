@@ -21,35 +21,35 @@ from ... import wildcards as _wildcards
 MESSAGE_STYLE_WILDCARD_NAME = "Prattletale Message Style"
 
 # text = a natural-language directive the turn prompt embeds; weight = relative
-# frequency. Phrased in the prompt's own tag vocabulary ([say]/[do]/[narration]/
-# [feel]) so the model can follow it directly.
+# frequency. Phrased in the canonical message vocabulary (spoken dialogue /
+# action / narration) so the model can follow it directly.
 MESSAGE_STYLE_ENTRIES: list[dict] = [
     {
         "weight": 40,
         "text": (
-            "Just one message this reply: a single [say] line and nothing else. "
+            "Just one message this reply: a single spoken line and nothing else. "
             "No action, no narration — only the spoken text."
         ),
     },
     {
         "weight": 30,
         "text": (
-            "One action and one message: a brief [do] beat (something physical "
-            "you're doing) and a single [say] line. Nothing else."
+            "One action and one message: a brief action beat (something physical "
+            "you're doing) and a single spoken line. Nothing else."
         ),
     },
     {
         "weight": 20,
         "text": (
-            "A small mix this reply: a spoken [say] line together with an action "
-            "([do]) and/or a short scene-or-feeling beat ([narration] or [feel]). "
-            "Keep it to about two or three lines total."
+            "A small mix this reply: a spoken line together with an action and/or "
+            "a short scene-or-feeling narration beat. Keep it to about two or "
+            "three lines total."
         ),
     },
     {
         "weight": 10,
         "text": (
-            "A quick burst this reply: two or more short [say] messages "
+            "A quick burst this reply: two or more short spoken messages "
             "back-to-back, the way someone fires off rapid texts. Three is rarer, "
             "more than that rarer still. An action or narration line is optional."
         ),

@@ -77,7 +77,8 @@ async def test_run_model_turn_commits_a_typed_turn_and_trace(monkeypatch):
     assert trace["raw_final_output"] == output
     assert trace["error"] is None
     assert len(trace["parsed_items"]) == 2
-    assert "[User] you actually showed up" in trace["context_input"]["transcript"]
+    # User dialogue is stored/flattened in canonical (double-quoted) form.
+    assert '[User] "you actually showed up"' in trace["context_input"]["transcript"]
 
 
 # ---- failure path ----------------------------------------------------------

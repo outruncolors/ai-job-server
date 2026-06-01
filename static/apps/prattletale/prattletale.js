@@ -935,6 +935,23 @@
     renderDraft();
   }
 
+  // Wrap a composed bubble in the canonical message format by type: dialogue ->
+  // "spoken words", action -> *action text*, narration (and anything else) plain.
+  // Idempotent — already-wrapped text is left as-is so we never double-wrap.
+  function canonicalText(type, raw) {
+    const text = (raw || '').trim();
+    if (!text) return text;
+    if (type === 'dialogue') {
+      return (text.length >= 2 && text[0] === '"' && text[text.length - 1] === '"')
+        ? text : `"${text}"`;
+    }
+    if (type === 'action') {
+      return (text.length >= 2 && text[0] === '*' && text[text.length - 1] === '*')
+        ? text : `*${text}*`;
+    }
+    return text;
+  }
+
   // stack the active input as a new bubble; returns true if anything was staged
   function stackItem() {
     if (_panelMode) return false;  // a plugin mode owns the composer — no text bubbles
@@ -960,7 +977,9 @@
 
   async function send() {
     if (_sending) return;
-    const items = _draft.slice();
+    // Commit the staged draft in canonical message format (the backend also
+    // normalizes, but wrapping here keeps the optimistic echo identical).
+    const items = _draft.map((d) => ({ type: d.type, text: canonicalText(d.type, d.text) }));
     if (!items.length) return;
 
     _sending = true;

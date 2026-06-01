@@ -73,7 +73,7 @@ async def test_trace_has_enriched_steps_with_variety(client, monkeypatch):
     trace = r.json()
     assert trace["job_id"] == job_id
     assert trace["raw_final_output"] == "[say] hey"
-    assert trace["context_input"]["transcript"].startswith("[User] hi")
+    assert trace["context_input"]["transcript"].startswith('[User] "hi"')
     assert len(trace["parsed_items"]) == 1
 
     steps = trace["steps"]

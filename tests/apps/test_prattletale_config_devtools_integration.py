@@ -115,7 +115,7 @@ def test_fully_hidden_turn_leaves_no_dangling_label():
 
     ctx = generator.build_context(store.get_conversation(cid), dict(_CHARACTER), store.get_transcript(cid))
     # the all-hidden turn produces no line at all — no "[Mara] " with empty body
-    assert ctx["transcript"].splitlines() == ["[User] visible-user"]
+    assert ctx["transcript"].splitlines() == ['[User] "visible-user"']
     assert "Mara" not in ctx["transcript"]
 
 
@@ -142,7 +142,7 @@ def test_window_larger_than_turn_count_returns_all(client):
         store.append_user_turn(cid, [{"type": "dialogue", "text": str(n)}])
     client.patch(f"/v1/apps/prattletale/conversations/{cid}", json={"config": {"context_window_turns": 999}})
     ctx = generator.build_context(store.get_conversation(cid), dict(_CHARACTER), store.get_transcript(cid))
-    assert ctx["transcript"].splitlines() == ["[User] 1", "[User] 2", "[User] 3"]
+    assert ctx["transcript"].splitlines() == ['[User] "1"', '[User] "2"', '[User] "3"']
 
 
 def test_window_zero_rejected(client):

@@ -84,7 +84,7 @@ def test_patch_context_window_changes_built_window(client):
     assert conv["config"]["voice_enabled"] is False
 
     ctx = generator.build_context(conv, dict(_CHARACTER), store.get_transcript(cid))
-    assert ctx["transcript"].splitlines() == ["[User] 4", "[User] 5"]
+    assert ctx["transcript"].splitlines() == ['[User] "4"', '[User] "5"']
 
 
 def test_patch_context_window_zero_or_negative_422(client):

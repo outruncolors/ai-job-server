@@ -102,33 +102,35 @@ def test_zero_or_negative_window_falls_back_to_full_history():
         assert ctx["transcript"].splitlines() == ["[User] 1", "[User] 2", "[User] 3"]
 
 
-# ---- guard invariant: leaked meta / OOC never inflates the bubble count -----
+# ---- parser contract: one message per line ---------------------------------
 # The guard itself is an LLM pass (untestable here); these pin the parser
-# contract it leans on — tagged-line count == item count, and any meta / OOC
-# the guard fails to strip coalesces instead of becoming a spurious bubble.
+# contract it leans on — one canonical line == one item, and any meta / OOC the
+# guard fails to strip degrades to a plain narration bubble (never throws).
 
-def test_tagged_line_count_equals_bubble_count():
+def test_line_count_equals_bubble_count():
     raw = "\n".join([
-        "[narration] She doesn't look up.",
-        "[say] Where else would I be.",
-        "[do] She slides the menu over.",
-        "[feel] more relieved than she'll admit",
+        "She doesn't look up.",
+        '"Where else would I be."',
+        "*She slides the menu over.*",
+        "_more relieved than she'll admit_",
     ])
     items = parse_items(raw)
-    assert len(items) == 4  # four tagged lines -> exactly four bubbles
+    assert len(items) == 4  # four lines -> exactly four bubbles
+    # narration / dialogue / action / (underscore-wrapped -> narration)
     assert [i["type"] for i in items] == [
-        "narration", "dialogue", "action", "narration_emotion",
+        "narration", "dialogue", "action", "narration",
     ]
 
 
-def test_leaked_meta_line_coalesces_not_a_new_bubble():
-    """An OOC / meta line the guard missed has no tag, so it folds into the
-    previous bubble rather than adding one — the bubble count is stable."""
-    raw = "[say] hey\n(OOC: let me know if this is too much)\n[say] you came back"
+def test_leaked_meta_line_becomes_its_own_narration_bubble():
+    """An OOC / meta line the guard missed is undecorated, so it parses as a
+    plain narration bubble (the guard is what strips OOC upstream)."""
+    raw = '"hey"\n(OOC: let me know if this is too much)\n"you came back"'
     items = parse_items(raw)
-    assert len(items) == 2  # the untagged OOC line did not create a third bubble
-    assert items[0]["text"] == "hey (OOC: let me know if this is too much)"
-    assert items[1]["text"] == "you came back"
+    assert [i["type"] for i in items] == ["dialogue", "narration", "dialogue"]
+    assert items[0]["text"] == "hey"
+    assert items[1]["text"] == "(OOC: let me know if this is too much)"
+    assert items[2]["text"] == "you came back"
 
 
 # ---- concurrent-write safety: appends re-read before writing ----------------

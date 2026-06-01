@@ -116,7 +116,8 @@ def test_post_turn_returns_user_and_model(client):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["user_turn"]["author"] == "user"
-    assert body["user_turn"]["items"][0]["text"] == "you actually showed up"
+    # User dialogue is stored in the canonical format (double-quoted).
+    assert body["user_turn"]["items"][0]["text"] == '"you actually showed up"'
     assert body["model_turn"]["author"] == "model"
     assert [i["type"] for i in body["model_turn"]["items"]] == ["narration", "dialogue"]
 

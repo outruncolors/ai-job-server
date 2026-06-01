@@ -162,21 +162,24 @@ independently testable stages.
    `config.variety_pass_enabled`, default on) sits between the draft and the guard: it is given the
    recent transcript + the drafted reply (`{{previous}}`) and rewrites the draft only when it
    repeats the structure/opening/length/move of the character's recent messages — the primary lever
-   against conversations getting monotonous. It keeps the tagged-line format, so the guard + parser
-   downstream are unchanged.
+   against conversations getting monotonous. It keeps the canonical message format, so the guard +
+   parser downstream are unchanged.
 
-3. **`parse_items(raw) -> list[dict]`** — **tagged-line format, not JSON.** The model emits one
-   tagged line per bubble:
+3. **`parse_items(raw) -> list[dict]`** — **canonical message format, not JSON.** The model emits one
+   message per line:
    ```
-   [narration] She doesn't look up from the menu.
-   [say] Where else would I be.
+   She doesn't look up from the menu.
+   "Where else would I be."
    ```
-   Tag→type map: `say`→`dialogue`, `do`→`action`, `narration`→`narration`, `feel`→
-   `narration_emotion`. Parser: fence-strip, split on newlines, regex `^\s*\[(\w+)\]\s*(.+)$`; an
-   untagged line **coalesces into the previous item's text** (a lone untagged line defaults to
-   `dialogue`); **emoji are stripped deterministically** (`_clean_text`/`_EMOJI_RE`) and an item
-   left empty by the scrub is dropped; an empty result raises `GenerationError`. (The prompt + guard
-   also forbid emoji, but the parser scrub guarantees it regardless of the model.)
+   Canonical, per line: a full double-quoted line `"…"`→`dialogue` (outer quotes stripped; single
+   quotes may nest), a line of one or more `*…*` spans→`action` (one item **per span**, so each is
+   its own SFX candidate), and any other non-empty line→`narration`. **Legacy bracket tags** are
+   still accepted as *input/back-compat only* (`say`→`dialogue`, `do`→`action`, `narration`/`feel`
+   and any unknown tag→`narration`). A stray `_underscore-wrapped_` line is normalized to plain
+   narration. Parser: fence-strip, split on newlines; **emoji are stripped deterministically**
+   (`_clean_text`/`_EMOJI_RE`) and an item left empty by the scrub is dropped; an empty result raises
+   `GenerationError`. (The prompt + guard also forbid emoji, but the parser scrub guarantees it
+   regardless of the model.)
 
    *Why not JSON?* Hoodat uses JSON because it assembles a fixed-schema record and can afford an
    assemble-only retry. A chat turn is an **open-ended ordered sequence of short strings** where
@@ -269,8 +272,9 @@ turn in one await) remains for non-streaming callers.
 
 ## Risks / open questions (non-blocking)
 
-1. **Guard scope** — keep the tagged-line *format* rule in the `turn` prompt; guard does hygiene
-   only and must not merge bubbles. The untagged-line→dialogue fallback covers a weak guard.
+1. **Guard scope** — keep the canonical-message *format* rule in the `turn` prompt; guard does
+   hygiene only and must not merge bubbles. The unrecognized-line→narration fallback covers a weak
+   guard.
 2. **No automatic retry in the chat path** — a re-generation changes the reply, so parse-failure →
    `system_error` + manual Retry is intentional.
 3. **Context window unit is turns, not tokens** — fine for Phase 1; the token-budget pass is
