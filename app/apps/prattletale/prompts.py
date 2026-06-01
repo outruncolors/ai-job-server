@@ -198,6 +198,18 @@ _TAG_TO_TYPE = {
     "feel": ItemType.narration.value,
 }
 
+# A stray section label ("Dialogue:", "Action:", "Narration:") that a weak guard
+# or model echoes from the format spec (the guard's VALID FORMAT block lists them
+# as headers). We drop the bare label and parse only the content that follows —
+# which carries its own canonical decoration — and fall back to the label's type
+# when an inline ``Label: text`` unit is left undecorated.
+_SECTION_LABEL_RE = re.compile(r"^(dialogue|action|narration)\s*:\s*(.*)$", re.IGNORECASE)
+_SECTION_TO_TYPE = {
+    "dialogue": ItemType.dialogue.value,
+    "action": ItemType.action.value,
+    "narration": ItemType.narration.value,
+}
+
 # Legacy ``[tag] text`` line (back-compat input only).
 _LEGACY_TAG_RE = re.compile(r"^\s*\[(\w+)\]\s*(.+)$")
 # A full double-quoted unit -> dialogue. The inner text may contain single
@@ -263,7 +275,10 @@ def parse_items(raw: str) -> list[dict]:
 
     Legacy bracket tags (``[say]``/``[do]``/``[narration]``/``[feel]``) are still
     accepted as input; ``[feel]`` and any unknown tag map to narration. A stray
-    ``_underscore-wrapped_`` line is normalized to plain narration. Emoji are
+    ``_underscore-wrapped_`` line is normalized to plain narration. A stray
+    ``Dialogue:``/``Action:``/``Narration:`` section label (which a weak guard can
+    echo from the format spec) is dropped, leaving the decorated content that
+    follows it. Emoji are
     stripped from every item (and an item left empty by the scrub is dropped).
     Raises :class:`GenerationError` on empty / whitespace-only input or when
     nothing survives the scrub.
@@ -273,6 +288,15 @@ def parse_items(raw: str) -> list[dict]:
         stripped = line.strip()
         if not stripped:
             continue
+        # Drop a stray "Dialogue:/Action:/Narration:" section label; keep its type
+        # as a fallback for an inline ``Label: text`` unit that arrives undecorated.
+        label_type = None
+        label = _SECTION_LABEL_RE.match(stripped)
+        if label:
+            label_type = _SECTION_TO_TYPE[label.group(1).lower()]
+            stripped = label.group(2).strip()
+            if not stripped:
+                continue  # bare label line on its own -> drop entirely
         # Legacy bracket tag (back-compat input only).
         legacy = _LEGACY_TAG_RE.match(stripped)
         if legacy:
@@ -294,8 +318,9 @@ def parse_items(raw: str) -> list[dict]:
         if underscore:
             items.append({"type": ItemType.narration.value, "text": underscore.group(1).strip()})
             continue
-        # Otherwise: plain narration.
-        items.append({"type": ItemType.narration.value, "text": stripped})
+        # Otherwise: narration — or the section label's type if this was an inline
+        # ``Label: text`` unit that arrived without its canonical decoration.
+        items.append({"type": label_type or ItemType.narration.value, "text": stripped})
 
     cleaned = [{"type": it["type"], "text": t}
                for it in items if (t := _clean_text(it["text"]))]

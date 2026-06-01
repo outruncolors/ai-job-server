@@ -106,6 +106,30 @@ def test_underscore_wrapped_line_normalized_to_narration():
     assert parse_items("_she hesitates_") == [{"type": "narration", "text": "she hesitates"}]
 
 
+def test_echoed_section_labels_are_dropped():
+    # A weak guard can echo the "Dialogue:/Action:" headers from the format spec
+    # onto their own lines; the decorated content follows. Drop the bare labels.
+    raw = (
+        'Dialogue:\n"Work? Sounds like a snooze fest to me."\n\n'
+        "Action:\n*Dizzie rolls her eyes.*\n\n"
+        'Dialogue:\n"Don\'t tell me you\'re bored already."'
+    )
+    items = parse_items(raw)
+    assert items == [
+        {"type": "dialogue", "text": "Work? Sounds like a snooze fest to me."},
+        {"type": "action", "text": "Dizzie rolls her eyes."},
+        {"type": "dialogue", "text": "Don't tell me you're bored already."},
+    ]
+
+
+def test_inline_section_label_uses_its_type_when_undecorated():
+    # An inline "Label: text" unit that lost its decoration still parses by label.
+    assert parse_items("Dialogue: hello") == [{"type": "dialogue", "text": "hello"}]
+    assert parse_items("Narration: the sun set") == [
+        {"type": "narration", "text": "the sun set"}
+    ]
+
+
 def test_canonical_mix_parses_in_order():
     raw = '*She slides the menu across the table.*\n"Where else would I be."\nRain streaks the window.'
     items = parse_items(raw)

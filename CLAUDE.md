@@ -96,6 +96,10 @@ The project-wide home for the internal LLM prompts apps use for creative input.
 - A **guard** is an optional second "editor" LLM pass attached to a prompt: it references the main
   output via `{{previous}}` and rewrites it to meet requirements. To apply one, a caller appends the
   guard text as a second `llm` chain step (see Hoodat's `_run_single_step`).
+- **Whenever you tweak a prompt that has a guard, check the guard too.** The guard restates the
+  prompt's format/requirements to repair the output, so a prompt change usually means the guard needs
+  the matching change — otherwise it will "repair" valid output back to the old format (or, like the
+  Prattletale `turn` guard once did, leak its own format-spec headers into the output).
 
 ## Cruddables, Packs & the unified envelope
 
