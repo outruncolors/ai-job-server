@@ -38,6 +38,9 @@ Quick orientation, not a substitute for the module map:
 - `app/chain/` — the chain executor and step types (see Chain jobs below)
 - `app/prompt_pal/` — app-agnostic prompt registry (see Prompt Pal below)
 - `app/cruddables/` + `app/packs/` — the unified envelope + curated bundles (see Cruddables below)
+- `app/memory/` — app-agnostic, file-first memory subsystem (Markdown source of truth under
+  `config/memory/`, plain keyword backend + optional memsearch behind an adapter, `/v1/memory`
+  routes, `{{memory}}` chain token, `/memory-lab/` test bench). See `docs/memory/index.md`.
 - `app/comfyui/`, `app/llamacpp/`, `app/omnivoice/` — long-lived/ephemeral generation backends
 - `app/server.py`, `app/peer_health.py` — multi-machine config, capability gating, peer polling
 

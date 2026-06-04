@@ -1,0 +1,44 @@
+{
+  "id": "memory_demo",
+  "name": "Memory Demo",
+  "description": "A one-step chain that retrieves relevant memories before answering. Demonstrates the per-step memory config + the {{memory}} template token. Seed some memories first (e.g. via Memory Lab, scope project/ai-job-server).",
+  "tags": ["Pack", "memory", "demo"],
+  "items": [
+    {
+      "schema_version": 1,
+      "type": "chain_sequence",
+      "id": "memory_demo",
+      "name": "Memory Demo",
+      "description": "Answer the input using relevant project memories injected via {{memory}}.",
+      "tags": ["Pack", "memory", "demo"],
+      "data": {
+        "content_version": 2,
+        "variables": [],
+        "steps": [
+          {
+            "number": 1,
+            "id": "answer_with_memory",
+            "name": "Answer with memory",
+            "type": "llm",
+            "visit_cap": 100,
+            "alternatives": [
+              {
+                "weight": 1,
+                "prompt": "You are answering a question using any relevant remembered facts.\n\n{{memory}}\n\nQuestion: {{input}}\n\nAnswer concisely. If the memories above are relevant, ground your answer in them; otherwise answer from general knowledge and note that nothing specific was remembered.",
+                "memory": {
+                  "enabled": true,
+                  "query": "{{input}}",
+                  "scopes": [
+                    { "scope_type": "project", "scope_id": "ai-job-server" }
+                  ],
+                  "top_k": 5,
+                  "inject_as": "memory"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

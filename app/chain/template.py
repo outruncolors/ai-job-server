@@ -17,6 +17,7 @@ def render_template(
     step_inputs: Optional[dict[int, list[str]]] = None,
     step_outputs: Optional[dict[int, list[str]]] = None,
     variables: Optional[dict[str, str]] = None,
+    extra: Optional[dict[str, str]] = None,
 ) -> str:
     """Substitute {{token}} expressions in `template`.
 
@@ -29,11 +30,14 @@ def render_template(
       - {{N_input}}          rendered prompt fed to step number N (last invocation)
       - {{N_output}}         text output of step number N (last invocation)
       - {{var.NAME}}         caller-provided variable, falling back to its default
+      - extra tokens         any key in `extra` (e.g. {{memory}} from a step's
+                             memory-retrieval config) resolves to its value
     Unknown tokens render as empty strings.
     """
     step_inputs = step_inputs or {}
     step_outputs = step_outputs or {}
     variables = variables or {}
+    extra = extra or {}
 
     def _last(values: list[str]) -> str:
         return values[-1] if values else ""
@@ -51,6 +55,8 @@ def render_template(
             return step_name
         if token.startswith("var."):
             return variables.get(token[4:], "")
+        if token in extra:
+            return extra[token]
         m = re.fullmatch(r"(\d+)_(input|output)", token)
         if m:
             n = int(m.group(1))

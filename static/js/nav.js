@@ -16,6 +16,7 @@
       { href: '/ticks',      label: 'Ticks',     page: 'ticks'     },
       { href: '/mcp',        label: 'MCP',       page: 'mcp'       },
       { href: '/embed-lab/', label: 'Embed Lab', page: 'embed-lab' },
+      { href: '/memory-lab/', label: 'Memory Lab', page: 'memory-lab' },
       { href: '/prompt-pal/', label: 'Prompt Pal', page: 'prompt-pal' },
       { href: '/packs/',     label: 'Packs',      page: 'packs'      },
     ]},

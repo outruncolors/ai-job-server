@@ -48,6 +48,7 @@ _ALTERNATIVE_FIELDS = {
     "ticket_file_hints",
     "target_step",
     "fall_through",
+    "memory",
 }
 
 
@@ -67,6 +68,19 @@ class SequenceVariable(BaseModel):
     name: str
     default: str = ""
     choices: list[str] = []
+
+
+class MemoryStepConfig(BaseModel):
+    """Optional per-LLM-step memory retrieval. When enabled, the runner searches the
+    memory subsystem before rendering and exposes the formatted block as ``{{<inject_as>}}``
+    (``{{memory}}`` by default). ``query`` and each scope's ``scope_id`` are templated."""
+
+    enabled: bool = True
+    query: str = "{{input}}"
+    scopes: list[dict] = Field(default_factory=list)
+    top_k: int = Field(default=5, ge=1)
+    inject_as: str = "memory"
+    max_chars: int = Field(default=1200, ge=1)
 
 
 class Alternative(BaseModel):
@@ -104,6 +118,8 @@ class Alternative(BaseModel):
     # goto
     target_step: Optional[int] = None
     fall_through: bool = False
+    # optional memory retrieval (llm steps): populates {{memory}} before rendering
+    memory: Optional[MemoryStepConfig] = None
 
 
 class ChainStep(BaseModel):

@@ -1,0 +1,170 @@
+/* Memory Lab — atomic test bench for the /v1/memory API. */
+
+#page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #888;
+  font-size: 0.8rem;
+  padding: 0 4px;
+}
+
+.lab-card {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lab-card h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #ddd;
+}
+
+.lab-card .hint {
+  color: #888;
+  font-size: 0.8rem;
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+
+.count {
+  color: #777;
+  font-size: 0.72rem;
+  margin-left: 6px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+textarea, input[type="text"], input[type="number"], select {
+  flex: 1;
+  background: #111;
+  color: #ddd;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+textarea { width: 100%; resize: vertical; }
+input[type="number"] { flex: 0 0 70px; }
+select.scope-type { flex: 0 0 130px; }
+
+.chk {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #aaa;
+  font-size: 0.8rem;
+  flex: 0 0 auto;
+}
+.chk input { flex: 0 0 auto; }
+
+button {
+  background: #2a4;
+  border: none;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+button:disabled { background: #444; cursor: not-allowed; }
+
+button.danger-btn { background: #722; }
+button.ghost-btn {
+  background: transparent;
+  color: #888;
+  border: 1px solid #333;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+
+.msg { color: #888; font-size: 0.8rem; }
+.msg.err  { color: #e44; }
+.msg.ok   { color: #2a6; }
+.msg.busy { color: #fa0; }
+
+pre.raw {
+  background: #0d0d0d;
+  border: 1px solid #222;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 0;
+  font-size: 0.72rem;
+  color: #888;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+}
+pre.raw:empty { display: none; }
+
+/* ── result cards ─────────────────────────────────────────────────── */
+
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.result-card {
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 4px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.result-card .rc-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.result-card .rc-title { color: #ddd; font-weight: 500; }
+.result-card .rc-score { color: #2a6; flex: 0 0 auto; font-size: 0.78rem; }
+.result-card .rc-snippet { color: #aaa; font-size: 0.8rem; line-height: 1.35; }
+.result-card .rc-meta { color: #666; font-size: 0.72rem; }
+.result-card .rc-path { color: #555; font-size: 0.7rem; word-break: break-all; }
+
+.demo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+.demo-row .badge { flex: 0 0 auto; padding: 1px 7px; border-radius: 3px; font-size: 0.72rem; }
+.demo-row .badge.pass { background: #1b3a1b; color: #6c6; }
+.demo-row .badge.fail { background: #3a1b1b; color: #e66; }
+.demo-row .dq { color: #ccc; flex: 0 0 200px; }
+.demo-row .da { color: #999; flex: 1; }
+
+.kv { color: #aaa; font-size: 0.82rem; line-height: 1.5; }
+.kv b { color: #ddd; font-weight: 500; }
+.empty { color: #555; font-size: 0.8rem; text-align: center; padding: 12px; }

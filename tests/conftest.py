@@ -80,6 +80,22 @@ def patch_hoodat_dirs(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def patch_memory_base(tmp_path, monkeypatch):
+    """Redirect memory storage to a temp dir; reset the config + service singletons.
+
+    Keeps memory tests isolated and ensures the rest of the suite never writes real
+    memory files. Defaults to the plain backend (no external services)."""
+    import app.memory.config as mcfg
+    import app.memory.service as msvc
+    monkeypatch.setattr(mcfg, "BASE_DIR", tmp_path / "memory")
+    mcfg.reset_config()
+    msvc.reset_service()
+    yield
+    mcfg.reset_config()
+    msvc.reset_service()
+
+
+@pytest.fixture(autouse=True)
 def patch_server_config(tmp_path, monkeypatch):
     """Redirect server config to tmp dir and reset cache.
 

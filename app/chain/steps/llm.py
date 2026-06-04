@@ -156,6 +156,68 @@ async def _stream_assistant_turn(
     return output
 
 
+async def _retrieve_memory_block(
+    mem_cfg: Any,
+    *,
+    request: Any,
+    text_output: str,
+    context: str,
+    step: Any,
+    step_index: int,
+    step_inputs: Optional[dict],
+    step_outputs: Optional[dict],
+    variables: Optional[dict],
+) -> str:
+    """Search the memory subsystem for an LLM step and return a formatted block.
+
+    Fail-soft: a disabled subsystem, no matches, or any error yields an empty block —
+    memory absence is never a step failure (per the runner-isolation contract).
+    """
+    from ..template import render_template
+    from ...memory import (
+        MemoryScope,
+        MemorySearchRequest,
+        get_service,
+    )
+
+    def _render(text: str) -> str:
+        return render_template(
+            text,
+            input=request.input,
+            previous=text_output,
+            context=context,
+            step_index=step_index,
+            step_name=step.name,
+            step_inputs=step_inputs,
+            step_outputs=step_outputs,
+            variables=variables,
+        )
+
+    try:
+        query = _render(mem_cfg.query or "")
+        scopes = []
+        for raw in mem_cfg.scopes or []:
+            scopes.append(
+                MemoryScope(
+                    scope_type=raw.get("scope_type"),
+                    scope_id=_render(str(raw.get("scope_id", "global"))),
+                    app_id=raw.get("app_id"),
+                    user_id=raw.get("user_id"),
+                    session_id=raw.get("session_id"),
+                )
+            )
+        svc = get_service()
+        resp = await svc.search(
+            MemorySearchRequest(query=query, scopes=scopes, top_k=mem_cfg.top_k)
+        )
+        return svc.format_memory_block(resp.results, max_chars=mem_cfg.max_chars)
+    except Exception:  # pragma: no cover - defensive; memory is best-effort
+        import logging
+
+        logging.getLogger(__name__).warning("memory retrieval failed", exc_info=True)
+        return ""
+
+
 async def run_llm_step(
     step_dir: Path,
     step: Any,
@@ -183,6 +245,23 @@ async def run_llm_step(
     context = resolve_context_ids(alt.context_ids)
     (step_dir / "context.txt").write_text(context, encoding="utf-8")
 
+    extra: dict[str, str] = {}
+    mem_cfg = getattr(alt, "memory", None)
+    if mem_cfg is not None and getattr(mem_cfg, "enabled", False):
+        block = await _retrieve_memory_block(
+            mem_cfg,
+            request=request,
+            text_output=text_output,
+            context=context,
+            step=step,
+            step_index=step_index,
+            step_inputs=step_inputs,
+            step_outputs=step_outputs,
+            variables=variables,
+        )
+        extra[mem_cfg.inject_as] = block
+        (step_dir / "memory.txt").write_text(block, encoding="utf-8")
+
     rendered = render_template(
         alt.prompt,
         input=request.input,
@@ -193,6 +272,7 @@ async def run_llm_step(
         step_inputs=step_inputs,
         step_outputs=step_outputs,
         variables=variables,
+        extra=extra,
     )
     if context and "{{context}}" not in alt.prompt:
         prompt = f"<START CONTEXT>\n{context}\n<END CONTEXT>\n\n{rendered}"

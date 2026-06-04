@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Memory Lab · AI Job Server</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav id="topnav"></nav>
+
+<div id="page">
+  <div class="status-bar">
+    <span id="status-text">Loading…</span>
+    <button class="ghost-btn" onclick="refreshHealth()">↻</button>
+  </div>
+
+  <!-- ── 1. Health ─────────────────────────────────────────────────── -->
+  <section class="lab-card">
+    <h2>1 · Health</h2>
+    <p class="hint">Verify the backend is reachable. Plain backend needs no external services.</p>
+    <div class="row">
+      <button onclick="refreshHealth()" id="health-btn">Check memory health</button>
+      <span id="health-msg" class="msg"></span>
+    </div>
+    <div id="health-result"></div>
+    <pre class="raw" id="health-raw"></pre>
+  </section>
+
+  <!-- ── 2. Write one memory ───────────────────────────────────────── -->
+  <section class="lab-card">
+    <h2>2 · Write one memory</h2>
+    <div class="row">
+      <input id="w-title" type="text" placeholder="title">
+    </div>
+    <textarea id="w-body" rows="3" placeholder="body (markdown)"></textarea>
+    <div class="row">
+      <select id="w-scope-type" class="scope-type"></select>
+      <input id="w-scope-id" type="text" value="ai-job-server" placeholder="scope id">
+      <input id="w-tags" type="text" placeholder="tags (comma separated)">
+    </div>
+    <div class="row">
+      <button onclick="writeMemory()" id="write-btn">Write memory</button>
+      <span id="write-msg" class="msg"></span>
+    </div>
+    <pre class="raw" id="write-raw"></pre>
+  </section>
+
+  <!-- ── 3. Search ─────────────────────────────────────────────────── -->
+  <section class="lab-card">
+    <h2>3 · Search</h2>
+    <div class="row">
+      <input id="s-query" type="text" placeholder="query">
+    </div>
+    <div class="row">
+      <select id="s-scope-type" class="scope-type"></select>
+      <input id="s-scope-id" type="text" value="ai-job-server" placeholder="scope id (blank = all)">
+      <input id="s-topk" type="number" min="1" max="50" value="5" title="top_k">
+      <button onclick="searchMemory()" id="search-btn">Search</button>
+    </div>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="s-allscopes"> search all scopes</label>
+      <span id="search-msg" class="msg"></span>
+    </div>
+    <div id="search-result"></div>
+    <pre class="raw" id="search-raw"></pre>
+  </section>
+
+  <!-- ── 4. Read exact memory ──────────────────────────────────────── -->
+  <section class="lab-card">
+    <h2>4 · Read by id</h2>
+    <div class="row">
+      <input id="r-id" type="text" placeholder="memory id (mem_…)">
+      <button onclick="readMemory()" id="read-btn">Read</button>
+      <span id="read-msg" class="msg"></span>
+    </div>
+    <div id="read-result"></div>
+    <pre class="raw" id="read-raw"></pre>
+  </section>
+
+  <!-- ── 5. Reindex ────────────────────────────────────────────────── -->
+  <section class="lab-card">
+    <h2>5 · Reindex</h2>
+    <p class="hint">Rebuild the search index from Markdown source files. No-op for the plain backend.</p>
+    <div class="row">
+      <select id="ri-scope-type" class="scope-type"></select>
+      <input id="ri-scope-id" type="text" placeholder="scope id (blank = all)">
+      <label class="chk"><input type="checkbox" id="ri-force"> force</label>
+      <button onclick="reindexMemory()" id="reindex-btn">Reindex</button>
+      <span id="reindex-msg" class="msg"></span>
+    </div>
+    <pre class="raw" id="reindex-raw"></pre>
+  </section>
+
+  <!-- ── 6. Demo fixtures ──────────────────────────────────────────── -->
+  <section class="lab-card">
+    <h2>6 · Demo fixtures <span class="count">scope test/memory_demo</span></h2>
+    <p class="hint">
+      The fastest way to see memory work end to end: create four controlled memories, then
+      run four fixed queries and check expected vs actual top result.
+    </p>
+    <div class="row">
+      <button onclick="seedDemo()" id="seed-btn">Create demo memories</button>
+      <button onclick="runDemo()" id="demo-run-btn">Run demo searches</button>
+      <span id="demo-msg" class="msg"></span>
+    </div>
+    <div id="demo-result"></div>
+    <pre class="raw" id="demo-raw"></pre>
+  </section>
+
+  <!-- ── 7. Reset demo ─────────────────────────────────────────────── -->
+  <section class="lab-card">
+    <h2>7 · Clear demo memories</h2>
+    <p class="hint">Only ever affects the dedicated <code>test/memory_demo</code> scope — real app memory is never touched.</p>
+    <div class="row">
+      <button class="danger-btn" onclick="resetDemo()" id="reset-btn">Clear demo memories</button>
+      <span id="reset-msg" class="msg"></span>
+    </div>
+    <pre class="raw" id="reset-raw"></pre>
+  </section>
+</div>
+
+<script src="/js/nav.js"></script>
+<script src="/js/profiles-widget.js"></script>
+<script src="/js/peer-status-widget.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/escape.js"></script>
+<script src="memory-lab.js"></script>
+<script src="/js/nav-mobile.js"></script>
+</body>
+</html>
