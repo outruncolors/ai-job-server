@@ -204,6 +204,11 @@ def build_turn_request(
         "scopes": [
             {"scope_type": "character", "scope_id": "{{var.counterpart_id}}"},
             {"scope_type": "session", "scope_id": "{{var.session_id}}"},
+            # Broader buckets so universal user facts (name, pronouns, preferences)
+            # reach every character: app:prattletale is shared across all of this
+            # app's chats; global is shared across the whole server.
+            {"scope_type": "app", "scope_id": "prattletale"},
+            {"scope_type": "global", "scope_id": "global"},
         ],
         "inject_as": "memory",
         "top_k": 6,

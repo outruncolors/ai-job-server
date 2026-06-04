@@ -80,6 +80,9 @@ def test_turn_request_carries_memory_config_scoped_to_character_and_session():
     scope_ids = {(s["scope_type"], s["scope_id"]) for s in cfg.scopes}
     assert ("character", "{{var.counterpart_id}}") in scope_ids
     assert ("session", "{{var.session_id}}") in scope_ids
+    # Broader buckets: app-wide + global facts (e.g. the user's name) reach every character.
+    assert ("app", "prattletale") in scope_ids
+    assert ("global", "global") in scope_ids
     # The caller-side variables resolve those templates at run time.
     assert req.variables["counterpart_id"] == "mara-okafor"
     assert req.variables["session_id"] == "conv-123"
@@ -109,6 +112,35 @@ async def test_turn_retrieval_surfaces_seeded_character_memory():
     )
     assert "Pixel" in block
     assert "character/mara-okafor" in block
+
+
+async def test_turn_retrieval_surfaces_global_memory():
+    # A global fact (e.g. the user's name) reaches a character via the turn's
+    # broadened scope set, even with no character/session memory of its own.
+    svc = get_service()
+    await svc.write(MemoryWriteRequest(
+        title="User name", body="The user's name is Jason.",
+        scope=MemoryScope(scope_type="global", scope_id="global"),
+    ))
+    cfg = MemoryStepConfig(
+        enabled=True, query="{{var.mem_query}}",
+        scopes=[
+            {"scope_type": "character", "scope_id": "{{var.counterpart_id}}"},
+            {"scope_type": "session", "scope_id": "{{var.session_id}}"},
+            {"scope_type": "app", "scope_id": "prattletale"},
+            {"scope_type": "global", "scope_id": "global"},
+        ],
+    )
+    block = await _retrieve_memory_block(
+        cfg,
+        request=SimpleNamespace(input="what's my name"),
+        text_output="", context="",
+        step=SimpleNamespace(name="turn"), step_index=1,
+        step_inputs={}, step_outputs={},
+        variables={"mem_query": "name", "counterpart_id": _CHARACTER["id"], "session_id": "conv-x"},
+    )
+    assert "Jason" in block
+    assert "global/global" in block
 
 
 async def test_turn_retrieval_fail_soft_when_empty():

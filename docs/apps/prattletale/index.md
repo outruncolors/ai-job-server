@@ -119,8 +119,9 @@ chance roll and any prior final state), `clear-item`.
 **Remember** (default-on) is Prattletale's [memory](../../memory/index.md) integration — the
 first shipped end-to-end use of the app-agnostic memory subsystem. **Retrieval** is automatic
 and invisible: every turn's chain step carries a `{{memory}}` config scoped to
-`character:<counterpart>` + `session:<conversation>`, queried by what the user just said, so
-relevant long-term facts are recalled into the `TURN` prompt's `<memory>` section (written to
+`character:<counterpart>` + `session:<conversation>` + `app:prattletale` + `global` (so a
+universal fact like the user's name reaches every character), queried by what the user just
+said, so relevant long-term facts are recalled into the `TURN` prompt's `<memory>` section (written to
 `steps/001_turn/memory.txt` for the trace). It's fail-soft — empty/disabled memory changes
 nothing. **Writing** is always an explicit user action (never auto-extracted from turns):
 the **🧠 Remember** composer mode (type a fact → pick scope → Save), and a per-bubble **🧠
