@@ -13,7 +13,9 @@
  *   - bubble: {types:[...], render(item, turn) -> html}  — how to render plugin item types
  *   - onModelTurn(turn, ctx) — fired once when a freshly committed turn (user or
  *     model) is rendered, so a plugin can resolve side content ASAP (e.g. SFX).
- * The core (prattletale.js) consults composerModes()/panel()/bubbleRenderer()/turnHooks()
+ *   - onRender(ctx) — fired after every thread render, so a plugin can keep header
+ *     chrome in sync with the transcript (e.g. the Command active-commands button).
+ * The core (prattletale.js) consults composerModes()/panel()/bubbleRenderer()/turnHooks()/renderHooks()
  * — nothing plugin-specific is hard-coded there. register() is idempotent (last spec per id wins). */
 (function () {
   const _specs = {};            // id -> spec
@@ -70,6 +72,18 @@
       ids.forEach((id) => {
         const s = _specs[id];
         if (s && typeof s.onModelTurn === 'function') out.push({ pluginId: id, fn: s.onModelTurn });
+      });
+      return out;
+    },
+
+    // [{pluginId, fn}] for enabled plugins exposing onRender(ctx). The core fires
+    // these after each thread render so a plugin can refresh header chrome.
+    renderHooks(enabledIds) {
+      const ids = enabledIds || Object.keys(_specs);
+      const out = [];
+      ids.forEach((id) => {
+        const s = _specs[id];
+        if (s && typeof s.onRender === 'function') out.push({ pluginId: id, fn: s.onRender });
       });
       return out;
     },

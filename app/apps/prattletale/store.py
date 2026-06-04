@@ -310,6 +310,20 @@ def append_summary_turn(conversation_id: str, text: str) -> Optional[dict]:
     )
 
 
+def append_command_turn(conversation_id: str, text: str) -> Optional[dict]:
+    """Append a **user**-authored turn carrying one ``command`` item — an
+    out-of-character order the model must obey on its next reply (even against its
+    character). Committed; rendered as a distinct blue-bordered card and, in the
+    flattened transcript, as a self-describing directive line. None if the
+    conversation is missing."""
+    return _append_turn(
+        conversation_id,
+        Author.user,
+        [{"type": ItemType.command.value, "text": text}],
+        status=ItemStatus.committed,
+    )
+
+
 def replace_turn(
     conversation_id: str,
     turn_id: str,

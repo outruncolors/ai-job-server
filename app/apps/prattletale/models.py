@@ -42,6 +42,7 @@ class ItemType(str, Enum):
     narration_emotion = "narration_emotion"  # narration of the counterpart's inner state
     system_error = "system_error"  # a failed model turn, never fed back into context
     summary = "summary"  # a plugin-posted recap of earlier turns (kept in context)
+    command = "command"  # a user-issued out-of-character order the model must obey
 
 
 class Author(str, Enum):

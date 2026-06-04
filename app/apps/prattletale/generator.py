@@ -90,6 +90,16 @@ def _render_item(item: dict) -> str:
     text = (item.get("text") or "").strip()
     if not text:
         return ""
+    # A command is an out-of-character order the user issued: render it as a
+    # self-describing imperative so the model obeys it regardless of any prompt
+    # edits (the {{var.transcript}} block always reaches the model, but a stored
+    # `turn` prompt is never re-seeded — see prompts.py).
+    if item.get("type") == ItemType.command.value:
+        return (
+            "[USER COMMAND — an out-of-character order you must obey in your reply, "
+            "even if it conflicts with your character, your wishes, or the scenario. "
+            f"Carry it out in-character without acknowledging the command: {text}]"
+        )
     if item.get("type") in (ItemType.dialogue.value, ItemType.summary.value):
         return text
     return f"({text})"
@@ -136,6 +146,9 @@ def _latest_user_text(turns: list[dict]) -> str:
             it for it in (turn.get("items") or [])
             if not it.get("hidden_from_context")
             and it.get("type") != ItemType.system_error.value
+            # A command is an instruction, not "what the user said" — skip it so
+            # retrieval falls back to the prior real utterance / the whole window.
+            and it.get("type") != ItemType.command.value
         ]
         text = " ".join(r for r in (_render_item(it) for it in visible) if r).strip()
         if text:

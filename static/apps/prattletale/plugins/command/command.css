@@ -1,0 +1,61 @@
+/* Command plugin styles.
+ *
+ * The command bubble is deliberately NOT a chat bubble: a dark-gray card with a
+ * blue border and blue text + a ⚡ badge, so it reads as an out-of-character
+ * directive, clearly distinct from the (already blue) normal user dialogue bubble.
+ * Also styles the header ⚡ N indicator and the active-commands manager modal. */
+
+:root {
+  --pt-command-blue: #3a8cff;
+  --pt-command-bg-top: #2f3033;
+  --pt-command-bg-bot: #232427;
+}
+
+/* ---- composer panel ---- */
+.pt-command-panel { display: flex; flex-direction: column; gap: var(--gap-sm); }
+.pt-cmd-explainer { font-size: var(--font-size-sm); color: var(--color-text-sub); line-height: 1.4; }
+.pt-cmd-explainer b { color: var(--pt-command-blue); }
+.pt-cmd-msg { font-size: var(--font-size-sm); color: var(--color-text-sub); }
+.pt-cmd-msg.pt-cmd-err { color: var(--color-danger, #ff6b6b); }
+
+/* ---- command bubble (both sides; it sits in the user turn) ---- */
+.pt-bubble--command {
+  background: linear-gradient(180deg, var(--pt-command-bg-top), var(--pt-command-bg-bot));
+  border: 1.5px solid var(--pt-command-blue);
+  border-radius: 12px;
+  color: var(--pt-command-blue);
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px;
+  box-shadow: 0 0 0 1px rgba(58, 140, 255, 0.15), 0 0 10px rgba(58, 140, 255, 0.12);
+}
+.pt-cmd-badge { font-size: 1.05em; line-height: 1; }
+.pt-cmd-bubble-label {
+  font-size: var(--font-size-xs); font-weight: bold; letter-spacing: 0.08em;
+  text-transform: uppercase; opacity: 0.85;
+}
+.pt-cmd-bubble-text { color: var(--pt-command-blue); width: 100%; white-space: pre-wrap; }
+
+/* ---- header ⚡ N indicator ---- */
+.pt-commands-btn {
+  color: var(--pt-command-blue);
+  border-color: var(--pt-command-blue);
+  font-weight: bold; white-space: nowrap;
+}
+
+/* ---- active-commands manager modal ---- */
+#pt-commands-dialog { width: min(560px, 94vw); max-height: 80vh; overflow-y: auto; }
+.pt-commands-list { display: flex; flex-direction: column; gap: var(--gap-sm); margin-top: var(--gap-sm); }
+.pt-cmd-row {
+  display: flex; align-items: flex-start; gap: var(--gap-md);
+  border: 1px solid var(--pt-command-blue); border-radius: 8px;
+  padding: var(--gap-sm) var(--gap-md);
+  background: linear-gradient(180deg, var(--pt-command-bg-top), var(--pt-command-bg-bot));
+}
+.pt-cmd-row-text { flex: 1; color: var(--pt-command-blue); white-space: pre-wrap; word-break: break-word; }
+.pt-cmd-row-actions { display: flex; gap: var(--gap-sm); flex-shrink: 0; }
+.pt-cmd-row-actions button { padding: 4px 8px; font-size: var(--font-size-sm); }
+.pt-cmd-row.pt-cmd-editing { flex-direction: column; align-items: stretch; }
+.pt-cmd-edit-input {
+  width: 100%; resize: vertical; font: inherit;
+  background: var(--color-bg-input); color: var(--color-text);
+  border: 1px solid var(--color-border-mid); border-radius: 4px; padding: 6px;
+}

@@ -356,6 +356,7 @@
     const turns = (_current.transcript && _current.transcript.turns) || [];
     if (!turns.length) {
       thread.innerHTML = '<div class="pt-empty pt-thread-empty">Say something to get started.</div>';
+      firePluginRender();
       return;
     }
     thread.innerHTML = buildSegments(turns)
@@ -365,6 +366,7 @@
     wirePlay();
     wireThreadControls();
     scrollToBottom();
+    firePluginRender();
   }
 
   // One avatar + bubble-stack group for a run of non-narration items from a turn.
@@ -588,6 +590,19 @@
         const r = fn(turn, pluginCtx(pluginId));
         if (r && r.catch) r.catch(() => {});
       } catch (_) { /* a plugin hook must never break turn rendering */ }
+    });
+  }
+
+  // Fire each enabled plugin's onRender hook after a thread render so it can keep
+  // header chrome in sync with the transcript (e.g. Command's active-commands
+  // button). Best-effort — a hook must never break rendering.
+  function firePluginRender() {
+    if (!window.PtPlugins) return;
+    PtPlugins.renderHooks(enabledPluginIds()).forEach(({ pluginId, fn }) => {
+      try {
+        const r = fn(pluginCtx(pluginId));
+        if (r && r.catch) r.catch(() => {});
+      } catch (_) { /* ignore */ }
     });
   }
 
@@ -857,6 +872,7 @@
     const convId = _current.conversation.id;
     return {
       conversation: _current.conversation,
+      transcript: _current.transcript,
       api,
       invokeAction: (action, params) => api(
         `${APP}/conversations/${encodeURIComponent(convId)}` +
@@ -866,6 +882,12 @@
       appendTurn: (turn) => { _current.transcript.turns.push(turn); appendTurn(turn); scrollToBottom(); },
       markHidden: (ids) => markItemsHidden(ids),
       applySfx: (turnId, itemId, sfx) => applyItemSfx(turnId, itemId, sfx),
+      // Resolve side content (e.g. SFX) for a turn produced outside the normal
+      // send path, so plugin-generated model turns reach the turn hooks too.
+      fireTurn: (turn) => firePluginTurn(turn),
+      // Re-fetch the conversation + transcript and re-render — used after a plugin
+      // edits/deletes transcript items via the core REST endpoints.
+      reload: () => loadChat(convId),
       close: () => { _modeIdx = _lastTextModeIdx; renderMode(); },
       panelEl: $('pt-plugin-panel'),
       primaryValue: () => $('pt-input').value.trim(),

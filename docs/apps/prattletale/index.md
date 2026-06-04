@@ -131,3 +131,18 @@ durable fact via the guarded `memory.gist` prompt) / **Cancel** — using the re
 this recap to memory"* toggle. Plugin actions: `remember`, `gist`. Inspect or seed memories in
 the [Memory Lab](../../memory/index.md) (`/memory-lab/`); they live as Markdown under
 `config/memory/characters/<id>/` and `config/memory/sessions/<id>/`.
+
+**Command** (default-on) is an **out-of-character override channel**. The **⚡ Command** composer
+mode posts a user `command` item: an order the partner **must obey on its next reply, even if it
+contradicts their character, wishes, or the scenario**. The bubble is a distinct dark card with a
+blue border + ⚡ badge (not a normal chat bubble). The `send` action persists the command turn and
+runs the model reply in one call (returning both turns). Compliance does **not** depend on the
+editable `turn` prompt: `generator._render_item` renders every command as a self-describing
+`[USER COMMAND — … you must obey …: <text>]` directive in the flattened transcript, which always
+reaches the model (the in-code `TURN` prompt also carries a matching rule for fresh installs, but
+seed-if-absent means it never reaches an already-stored prompt). Commands are **persistent** — every
+non-hidden command stays in force. A header **⚡ N** button (shown only when ≥1 command is active)
+opens a manager modal where active commands can be **edited or deleted in place**, reusing the core
+per-item `PATCH`/`DELETE …/items/{item_id}` endpoints. Commands are skipped as the memory-retrieval
+query (an instruction, not "what the user said"). The plugin relies on two generic frontend hooks
+(`onRender` + `ctx.transcript`/`ctx.fireTurn`/`ctx.reload`) added alongside it. Plugin action: `send`.
