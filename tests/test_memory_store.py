@@ -78,6 +78,15 @@ def test_global_scope_is_flat():
     assert path.parent.name == "global"
 
 
+def test_global_list_is_scope_id_agnostic():
+    # global is one flat namespace, so a global query matches every global record
+    # regardless of the scope_id it was filed under.
+    store.write_record(_record(id="mem_g1", scope_type="global", scope_id="global"))
+    store.write_record(_record(id="mem_g2", scope_type="global", scope_id="ai-job-server"))
+    found = store.list_records([MemoryScope(scope_type="global", scope_id="global")])
+    assert {r.id for r, _ in found} == {"mem_g1", "mem_g2"}
+
+
 def test_reject_unsafe_memory_id():
     with pytest.raises(UnsafeMemoryId):
         store.validate_memory_id("../escape")

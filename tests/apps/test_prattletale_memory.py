@@ -116,11 +116,13 @@ async def test_turn_retrieval_surfaces_seeded_character_memory():
 
 async def test_turn_retrieval_surfaces_global_memory():
     # A global fact (e.g. the user's name) reaches a character via the turn's
-    # broadened scope set, even with no character/session memory of its own.
+    # broadened scope set, even with no character/session memory of its own — and
+    # even when the global memory was filed under a different scope_id (global is
+    # one flat namespace, so retrieval is scope_id-agnostic for it).
     svc = get_service()
     await svc.write(MemoryWriteRequest(
         title="User name", body="The user's name is Jason.",
-        scope=MemoryScope(scope_type="global", scope_id="global"),
+        scope=MemoryScope(scope_type="global", scope_id="ai-job-server"),
     ))
     cfg = MemoryStepConfig(
         enabled=True, query="{{var.mem_query}}",
@@ -140,7 +142,8 @@ async def test_turn_retrieval_surfaces_global_memory():
         variables={"mem_query": "name", "counterpart_id": _CHARACTER["id"], "session_id": "conv-x"},
     )
     assert "Jason" in block
-    assert "global/global" in block
+    # Retrieved despite the global memory's scope_id differing from the query's.
+    assert "global/ai-job-server" in block
 
 
 async def test_turn_retrieval_fail_soft_when_empty():

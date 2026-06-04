@@ -162,14 +162,26 @@ def list_records(
 ) -> list[tuple[MemoryRecord, Path]]:
     """List records, optionally restricted to one or more scopes.
 
-    An empty/None ``scopes`` lists everything. Scope matching is by (scope_type, scope_id).
+    An empty/None ``scopes`` lists everything. Scope matching is by
+    (scope_type, scope_id) — **except** ``global``, which is one flat namespace
+    (see :func:`scope_dir`): requesting any ``global`` scope matches every global
+    record regardless of its scope_id, so a global fact is reachable without
+    knowing the exact id it was filed under.
     """
     if not scopes:
         return list(iter_records(include_deleted=include_deleted))
-    wanted = {(s.scope_type, slugify(s.scope_id or "default")) for s in scopes}
+    want_global = any(s.scope_type == "global" for s in scopes)
+    wanted = {
+        (s.scope_type, slugify(s.scope_id or "default"))
+        for s in scopes
+        if s.scope_type != "global"
+    }
     out: list[tuple[MemoryRecord, Path]] = []
     for record, path in iter_records(include_deleted=include_deleted):
-        if (record.scope_type, slugify(record.scope_id or "default")) in wanted:
+        if record.scope_type == "global":
+            if want_global:
+                out.append((record, path))
+        elif (record.scope_type, slugify(record.scope_id or "default")) in wanted:
             out.append((record, path))
     return out
 
