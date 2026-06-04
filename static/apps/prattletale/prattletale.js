@@ -1385,29 +1385,65 @@
     if (idx >= 0) turns[idx] = updatedTurn;
   }
 
-  // Wrap each non-error bubble with edit / hide / delete, and each turn's avatar
-  // with delete-turn (+ trace on model turns). Idempotent — FieldControls skips
-  // already-wrapped slots, so re-rendered turns get fresh wrapping.
+  // Save a message to long-term memory (character scope) via the Remember plugin.
+  // `verbatim` stores the message text as-is; `gist` distills it server-side.
+  // Memory is side data (no transcript change), so feedback is a toast.
+  async function memorizeOp(kind, turnId, itemId) {
+    const t = (window.toast || function () {});
+    const convId = _current.conversation.id;
+    const base = `${APP}/conversations/${encodeURIComponent(convId)}/plugins/memory/actions`;
+    try {
+      let res;
+      if (kind === 'verbatim') {
+        const it = findItem(turnId, itemId);
+        const text = (it && it.text) || '';
+        if (!text.trim()) { t('warning', 'Nothing to remember in this message.'); return; }
+        res = await api(`${base}/remember`, 'POST', { text, scope: 'character' });
+      } else {
+        t('info', 'Distilling a memory…');
+        res = await api(`${base}/gist`, 'POST', { turn_id: turnId, item_id: itemId, scope: 'character' });
+      }
+      t('success', 'Remembered: ' + (res && res.title ? res.title : 'saved to memory'));
+    } catch (err) {
+      t('error', 'Memorize failed: ' + ((err && err.message) || err));
+    }
+  }
+
+  // Wrap each non-error bubble with edit / hide / delete (+ Memorize when the
+  // Remember plugin is on), and each turn's avatar with delete-turn (+ trace on
+  // model turns). Idempotent — FieldControls skips already-wrapped slots, so
+  // re-rendered turns get fresh wrapping.
   function wireThreadControls() {
     if (!window.FieldControls) return;
     const thread = $('pt-thread');
+    // Per-bubble Memorize is only offered when the Remember plugin is enabled.
+    const memoryOn = enabledPluginIds().includes('memory');
     thread.querySelectorAll('.pt-bubble[data-item]').forEach((el) => {
       if (el.__fcAttached) return;
       const turnId = el.dataset.turn;
       const itemId = el.dataset.item;
       const item0 = findItem(turnId, itemId);
       const hidden = item0 && item0.hidden_from_context;
-      FieldControls.attach(el, {
-        kind: 'field',
-        controls: [
-          { id: 'edit', label: '✏️', title: 'Edit text',
-            onClick: (_ctx, ui) => { const it = findItem(turnId, itemId); if (it) startEditItem(ui.slot, turnId, it); } },
-          { id: 'hide', label: hidden ? '👁' : '🚫', title: hidden ? 'Show in context' : 'Hide from context',
-            onClick: () => { const it = findItem(turnId, itemId); if (it) toggleHiddenOp(turnId, it); } },
-          { id: 'del', label: '🗑', title: 'Delete message',
-            onClick: () => { const it = findItem(turnId, itemId); if (it) deleteItemOp(turnId, it); } },
-        ],
-      });
+      const controls = [
+        { id: 'edit', label: '✏️', title: 'Edit text',
+          onClick: (_ctx, ui) => { const it = findItem(turnId, itemId); if (it) startEditItem(ui.slot, turnId, it); } },
+        { id: 'hide', label: hidden ? '👁' : '🚫', title: hidden ? 'Show in context' : 'Hide from context',
+          onClick: () => { const it = findItem(turnId, itemId); if (it) toggleHiddenOp(turnId, it); } },
+        { id: 'del', label: '🗑', title: 'Delete message',
+          onClick: () => { const it = findItem(turnId, itemId); if (it) deleteItemOp(turnId, it); } },
+      ];
+      if (memoryOn) {
+        // 🧠 Memorize expands (via FieldControls subactions) into Verbatim / Gist
+        // (+ auto Cancel): Verbatim saves the message text as-is; Gist distills it.
+        controls.push({ id: 'memorize', label: '🧠', title: 'Memorize',
+          subactions: [
+            { id: 'verbatim', label: 'Verbatim', title: 'Save this message exactly',
+              onClick: () => memorizeOp('verbatim', turnId, itemId) },
+            { id: 'gist', label: 'Gist', title: 'Distill a fact worth remembering',
+              onClick: () => memorizeOp('gist', turnId, itemId) },
+          ] });
+      }
+      FieldControls.attach(el, { kind: 'field', controls });
     });
     thread.querySelectorAll('.pt-turn[data-turn]').forEach((tEl) => {
       const av = tEl.querySelector('.pt-av');

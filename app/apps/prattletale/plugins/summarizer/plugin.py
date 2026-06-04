@@ -42,13 +42,18 @@ def _covered_item_ids(transcript: dict) -> list[tuple[str, str]]:
 
 async def run_summarize(conversation_id: str, params: dict) -> dict:
     """Validate, summarize, post the recap, optionally purge. Returns
-    ``{summary_turn, hidden_item_ids, mode}``.
+    ``{summary_turn, hidden_item_ids, mode}`` (plus ``memory_id`` when remembered).
 
     ``params``: ``{mode: "keep"|"purge", detail: "brief"|"standard"|"detailed",
-    focus: str}``. Bad values raise :class:`ValueError` (→ 422)."""
+    focus: str, remember?: bool, remember_scope?: "character"|"session"}``. When
+    ``remember`` is set the curated recap is *also* written to long-term memory via
+    the Remember plugin's write path (so the recap recurs in future conversations).
+    Bad values raise :class:`ValueError` (→ 422)."""
     mode = params.get("mode", "keep")
     detail = params.get("detail", "standard")
     focus = params.get("focus", "") or ""
+    remember = bool(params.get("remember", False))
+    remember_scope = params.get("remember_scope", "character")
     if mode not in ("keep", "purge"):
         raise ValueError(f"invalid mode: {mode!r} (expected 'keep' or 'purge')")
     if detail not in summarize.VALID_LEVELS:
@@ -84,7 +89,19 @@ async def run_summarize(conversation_id: str, params: dict) -> dict:
             store.set_item_hidden(conversation_id, tid, iid, True)
             hidden_item_ids.append(iid)
 
-    return {"summary_turn": summary_turn, "hidden_item_ids": hidden_item_ids, "mode": mode}
+    result = {"summary_turn": summary_turn, "hidden_item_ids": hidden_item_ids, "mode": mode}
+    if remember:
+        # Reuse the Remember plugin's write path so the curated recap lands in the
+        # same scopes the turn chain retrieves from (default: this character).
+        from ..memory.plugin import _write  # local import avoids a plugin import cycle
+
+        written = await _write(
+            conversation, summary_text, remember_scope,
+            tags=["summary"], source_type="prattletale_summary",
+        )
+        result["memory_id"] = written["memory_id"]
+        result["memory_scope"] = written["scope"]
+    return result
 
 
 def _seed_prompts() -> None:

@@ -27,6 +27,11 @@
           <label class="pt-sum-opt"><input type="radio" name="pt-sum-detail" value="standard" checked> Standard</label>
           <label class="pt-sum-opt"><input type="radio" name="pt-sum-detail" value="detailed"> Detailed</label>
         </div>
+        <div class="pt-sum-row">
+          <span class="pt-sum-label">Memory</span>
+          <label class="pt-sum-opt"><input type="checkbox" name="pt-sum-remember">
+            <span>Also save this recap to memory <small>recalled in future chats with this character</small></span></label>
+        </div>
         <div class="pt-sum-msg" hidden></div>
       </div>`;
   }
@@ -41,11 +46,14 @@
     if (!modeEl || !detailEl) return;
     const mode = modeEl.value;
     const detail = detailEl.value;
+    const rememberEl = box.querySelector('input[name="pt-sum-remember"]');
+    const remember = !!(rememberEl && rememberEl.checked);
     const focus = ctx.primaryValue();   // the composer input, reused as focus
     if (msg) { msg.hidden = false; msg.className = 'pt-sum-msg'; msg.textContent = 'Summarizing… this may take a moment.'; }
     try {
-      const res = await ctx.invokeAction('summarize', { mode, detail, focus });
+      const res = await ctx.invokeAction('summarize', { mode, detail, focus, remember });
       ctx.onResult(res);   // append the summary card; apply Purge in place
+      if (remember && res && res.memory_id && window.toast) window.toast('success', 'Recap saved to memory.');
       ctx.close();         // back to the previous text mode (panel slides down)
     } catch (err) {
       // Surface the failure inline in the panel — no chat error bubble.

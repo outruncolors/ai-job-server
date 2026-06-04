@@ -1,0 +1,27 @@
+/* Remember plugin styling — the slide-up options (in #pt-plugin-panel) for the
+   🧠 Remember composer mode: a scope chooser + optional tags. The fact itself is
+   the composer input and Save is the composer button. The slide/bounce animation
+   lives in the core styles.css (.pt-plugin-panel / .pt-panel-open). */
+
+.pt-memory {
+  display: flex; flex-direction: column; gap: var(--gap-sm);
+  padding: var(--gap-xs) 2px;
+}
+.pt-mem-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--gap-md);
+}
+.pt-mem-label {
+  flex: 0 0 3.5rem; font-size: var(--font-size-xs); color: var(--color-text-dim);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.pt-mem-opt {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: var(--font-size-sm); color: var(--color-text);
+}
+.pt-mem-opt small { color: var(--color-text-dim); font-size: var(--font-size-micro); }
+.pt-mem-tags {
+  flex: 1 1 12rem; min-width: 8rem; font: inherit;
+  font-size: var(--font-size-sm);
+}
+.pt-mem-msg { font-size: var(--font-size-sm); color: var(--color-text-dim); }
+.pt-mem-err { color: var(--color-danger); }

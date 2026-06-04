@@ -24,7 +24,13 @@ from pathlib import Path
 from typing import Optional
 
 from ...chain.executor import execute_chain_job
-from ...chain.models import Alternative, ChainJobRequest, ChainLLMConfig, ChainStep
+from ...chain.models import (
+    Alternative,
+    ChainJobRequest,
+    ChainLLMConfig,
+    ChainStep,
+    MemoryStepConfig,
+)
 from ...jobs import create_job, find_job_dir
 from ...llm_config import get_default_as_chain_llm_config
 from ...prompt_pal.service import get_guard, get_text
@@ -61,10 +67,17 @@ def _resolve_llm(llm: Optional[ChainLLMConfig]) -> ChainLLMConfig:
     return llm
 
 
-def _llm_step(number: int, step_id: str, name: str, prompt: str) -> ChainStep:
+def _llm_step(
+    number: int, step_id: str, name: str, prompt: str, *, memory: Optional[dict] = None
+) -> ChainStep:
+    """Build a single-alternative ``llm`` step. When ``memory`` is given, the
+    alternative carries a :class:`MemoryStepConfig` so the executor retrieves a
+    memory block and exposes it to the prompt via the ``{{memory}}`` token (and
+    writes ``steps/NNN_<id>/memory.txt`` for the trace)."""
+    alt = Alternative(prompt=prompt, memory=MemoryStepConfig(**memory) if memory else None)
     return ChainStep(
         number=number, id=step_id, name=name, type="llm",
-        alternatives=[Alternative(prompt=prompt)],
+        alternatives=[alt],
     )
 
 
@@ -113,30 +126,58 @@ def _flatten_transcript(turns: list[dict], character: dict) -> str:
     return "\n".join(lines)
 
 
+def _latest_user_text(turns: list[dict]) -> str:
+    """The most recent user turn's visible text — the strongest memory-retrieval
+    signal (what they *just* said). Empty when the user hasn't spoken yet."""
+    for turn in reversed(turns):
+        if turn.get("author") != Author.user.value:
+            continue
+        visible = [
+            it for it in (turn.get("items") or [])
+            if not it.get("hidden_from_context")
+            and it.get("type") != ItemType.system_error.value
+        ]
+        text = " ".join(r for r in (_render_item(it) for it in visible) if r).strip()
+        if text:
+            return text
+    return ""
+
+
 def build_context(conversation: dict, character: dict, transcript: dict) -> dict[str, str]:
     """Build the prompt variable bundle from the conversation, counterpart sheet,
     and transcript. **Pure** (no LLM, no network) so the later token-budget change
     (window unit is currently *turns*) is isolated here.
+
+    Also carries ``_mem_query`` — the memory-retrieval query for the turn step's
+    ``{{memory}}`` config — kept here (not rendered into any prompt) so retrieval
+    targets what the user just said, falling back to the whole window.
     """
     config = conversation.get("config") or {}
     window = config.get("context_window_turns", 12)
     turns = transcript.get("turns") or []
     recent = turns[-window:] if isinstance(window, int) and window > 0 else turns
 
+    transcript_text = _flatten_transcript(recent, character)
     persona = ((conversation.get("device_user") or {}).get("persona") or "").strip()
     return {
         "character": render_character_context(character),
         "scenario": (conversation.get("scenario") or "").strip(),
         "role_instructions": (conversation.get("role_instructions") or "").strip(),
         "user_persona": persona or _EMPTY_PERSONA,
-        "transcript": _flatten_transcript(recent, character),
+        "transcript": transcript_text,
+        "_mem_query": _latest_user_text(recent) or transcript_text,
     }
 
 
 # ---- request shape ---------------------------------------------------------
 
 def build_turn_request(
-    context_vars: dict[str, str], llm: ChainLLMConfig, *, variety: bool = True
+    context_vars: dict[str, str],
+    llm: ChainLLMConfig,
+    *,
+    variety: bool = True,
+    counterpart_id: str = "",
+    session_id: str = "",
 ) -> ChainJobRequest:
     """Build the ``turn`` -> (``variety``) -> ``guard`` chain. Each step's prompt
     comes from Prompt Pal with the context vars substituted; the variety and guard
@@ -146,12 +187,29 @@ def build_turn_request(
     The optional **variety** pass (anti-monotony) sits between the draft and the
     format guard so the guard still has the last word on format. It is skipped
     when ``variety`` is False or the ``(prattletale, variety)`` prompt is empty.
+
+    The **turn** step carries a memory config: the executor searches the
+    ``character:<counterpart>`` and ``session:<conversation>`` scopes for what the
+    user just said and injects the result into the prompt's ``{{memory}}`` token
+    (fail-soft — an empty/disabled subsystem yields an empty block). Only the turn
+    step retrieves; the variety/guard passes run over ``{{previous}}``.
     """
     # resolve_wildcards expands %%name%% tokens (e.g. the per-turn message-shape
     # pick) with a fresh weighted draw each turn — the server-side equivalent of
     # the frontend wildcard pass, which this prompt never goes through.
     turn_prompt = resolve_wildcards(get_text("prattletale", "turn", variables=context_vars))
-    steps = [_llm_step(1, "turn", "Turn", turn_prompt)]
+    memory = {
+        "enabled": True,
+        "query": "{{var.mem_query}}",
+        "scopes": [
+            {"scope_type": "character", "scope_id": "{{var.counterpart_id}}"},
+            {"scope_type": "session", "scope_id": "{{var.session_id}}"},
+        ],
+        "inject_as": "memory",
+        "top_k": 6,
+        "max_chars": 1200,
+    }
+    steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory)]
     number = 2
     if variety:
         variety_prompt = get_text("prattletale", "variety", variables=context_vars)
@@ -166,6 +224,11 @@ def build_turn_request(
         input=context_vars.get("transcript", ""),
         llm=llm,
         steps=steps,
+        variables={
+            "mem_query": context_vars.get("_mem_query", ""),
+            "counterpart_id": counterpart_id,
+            "session_id": session_id,
+        },
     )
 
 
@@ -256,7 +319,13 @@ async def run_model_turn(
         resolved = _resolve_llm(llm)
         context_vars = build_context(conversation, character, transcript)
         variety = bool((conversation.get("config") or {}).get("variety_pass_enabled", True))
-        request = build_turn_request(context_vars, resolved, variety=variety)
+        request = build_turn_request(
+            context_vars,
+            resolved,
+            variety=variety,
+            counterpart_id=conversation["counterpart_character_id"],
+            session_id=conversation_id,
+        )
 
         status = create_job(JOB_TYPE, request.model_dump(), request.input)
         job_id = status["job_id"]

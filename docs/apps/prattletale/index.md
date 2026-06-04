@@ -115,3 +115,18 @@ on speaker-button replay the item's normal voice audio plays first, then the SFX
 interrupts later messages. The config dialog exposes **♪ Sound effects**, **🔞 NSFW SFX (lewd)**, and
 an **SFX chance** field. Plugin actions: `resolve-item`, `resolve-turn`, `reroll-item` (skips the
 chance roll and any prior final state), `clear-item`.
+
+**Remember** (default-on) is Prattletale's [memory](../../memory/index.md) integration — the
+first shipped end-to-end use of the app-agnostic memory subsystem. **Retrieval** is automatic
+and invisible: every turn's chain step carries a `{{memory}}` config scoped to
+`character:<counterpart>` + `session:<conversation>`, queried by what the user just said, so
+relevant long-term facts are recalled into the `TURN` prompt's `<memory>` section (written to
+`steps/001_turn/memory.txt` for the trace). It's fail-soft — empty/disabled memory changes
+nothing. **Writing** is always an explicit user action (never auto-extracted from turns):
+the **🧠 Remember** composer mode (type a fact → pick scope → Save), and a per-bubble **🧠
+Memorize** control that expands into **Verbatim** (save the message text) / **Gist** (distil a
+durable fact via the guarded `memory.gist` prompt) / **Cancel** — using the reusable
+`subactions` affordance in `FieldControls`. The **Summarizer** panel also gains an *"Also save
+this recap to memory"* toggle. Plugin actions: `remember`, `gist`. Inspect or seed memories in
+the [Memory Lab](../../memory/index.md) (`/memory-lab/`); they live as Markdown under
+`config/memory/characters/<id>/` and `config/memory/sessions/<id>/`.

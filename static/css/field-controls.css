@@ -37,6 +37,17 @@
   border-color: var(--color-accent, #2a6);
   color: var(--color-accent, #2a6);
 }
+/* A subaction button (the sub-row a `subactions` control expands into) reads as
+   a follow-up choice rather than a resting control. */
+.fc-btn--sub {
+  background: var(--color-bg, #111);
+  border-color: var(--color-accent, #2a6);
+  color: var(--color-accent, #2a6);
+}
+.fc-btn--sub[data-id="cancel"] {
+  border-color: var(--color-border-hi, #383838);
+  color: var(--color-text-dim, #888);
+}
 
 /* ---- field placement: cluster floats at the top-right of the field ---- */
 .fc-field > .fc-cluster {
