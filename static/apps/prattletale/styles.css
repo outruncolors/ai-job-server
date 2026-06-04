@@ -1,4 +1,14 @@
 /* Prattletale — conversation list + iMessage-style chat, over shared tokens. */
+:root {
+  /* Bubble palette. Dialogue is a vertical gradient per side (iMessage-like);
+     actions share one dark red regardless of who performed them. */
+  --pt-dialogue-user-top: #2f80ed;
+  --pt-dialogue-user-bot: #007aff;
+  --pt-dialogue-model-top: #3a3a3c;
+  --pt-dialogue-model-bot: #2c2c2e;
+  --pt-action-top: #6b1d1d;
+  --pt-action-bot: #4f1414;
+}
 body {
   background: var(--color-bg);
   color: var(--color-text);
@@ -121,29 +131,67 @@ button:disabled { opacity: 0.5; cursor: default; }
   pointer-events: none;
 }
 .pt-progress-fill { width: 0; height: 100%; background: var(--color-accent); }
-.pt-turn--user .pt-progress { background: rgba(0, 0, 0, 0.25); }
-.pt-turn--user .pt-progress-fill { background: rgba(0, 0, 0, 0.55); }
-/* dialogue: classic chat bubble */
-.pt-bubble--dialogue { background: var(--color-bg-raised); border: 1px solid var(--color-border-mid); }
-.pt-turn--user .pt-bubble--dialogue { background: var(--color-accent); color: #000; border-color: transparent; }
-.pt-turn--model .pt-bubble--dialogue { border-bottom-left-radius: 5px; }
-.pt-turn--user .pt-bubble--dialogue { border-bottom-right-radius: 5px; }
+.pt-turn--user .pt-progress { background: rgba(255, 255, 255, 0.25); }
+.pt-turn--user .pt-progress-fill { background: rgba(255, 255, 255, 0.7); }
+/* dialogue: classic chat bubble — vertical gradient, blue for the user / dark
+   grey for the partner. Symbols are stripped; colour alone carries the type. */
+.pt-bubble--dialogue { border: 1px solid transparent; color: #fff; }
+.pt-turn--user .pt-bubble--dialogue {
+  background: linear-gradient(180deg, var(--pt-dialogue-user-top), var(--pt-dialogue-user-bot));
+  border-bottom-right-radius: 5px;
+}
+.pt-turn--model .pt-bubble--dialogue {
+  background: linear-gradient(180deg, var(--pt-dialogue-model-top), var(--pt-dialogue-model-bot));
+  color: #e6e6ea; border-bottom-left-radius: 5px;
+}
 
-/* action: squared, italic physical beat */
+/* action: dark red physical beat (same for both sides), italic */
 .pt-bubble--action {
-  background: transparent; border: 1px dashed var(--color-border-hi);
-  border-radius: 8px; font-style: italic; color: var(--color-text-sub);
+  background: linear-gradient(180deg, var(--pt-action-top), var(--pt-action-bot));
+  border: 1px solid transparent; border-radius: 8px;
+  font-style: italic; color: #f1d4d4;
 }
 
-/* narration: centered, understated scene text */
-.pt-bubble--narration {
-  background: var(--color-bg-panel); border: 1px solid var(--color-border);
-  border-radius: 8px; color: var(--color-text-muted); font-size: var(--font-size-sm);
-}
-/* narration_emotion: like narration but warm-tinted */
+/* narration is pulled out of the side bubbles entirely (see the narration
+   segment below); this base style only shows during the live reveal cadence
+   before renderThread() normalizes it into a centered segment. */
+.pt-bubble--narration,
 .pt-bubble--narration_emotion {
-  background: var(--color-bg-panel); border: 1px solid var(--color-warn);
-  border-radius: 8px; color: var(--color-text-sub); font-size: var(--font-size-sm); font-style: italic;
+  background: transparent; border: none; color: var(--color-text-sub);
+  font-size: var(--font-size-sm); font-style: italic; text-align: center;
+}
+
+/* ===== narration segment: full-width centered beat between two dividers =====
+   Consecutive narrations (from either party) are grouped into one segment that
+   splits the chat — white rules above and below with ample breathing room, and
+   the narration itself brightened and glowing so it reads as a scene beat. */
+.pt-narration-seg {
+  display: flex; flex-direction: column; align-items: stretch;
+  gap: var(--gap-lg); margin: var(--gap-xl) var(--gap-lg);
+}
+/* dimmer than the text, with a slow, subtle colour pulse */
+@keyframes pt-narration-pulse {
+  0%, 100% { background: rgba(255, 255, 255, 0.26); }
+  50%      { background: rgba(150, 180, 255, 0.5); }
+}
+.pt-narration-rule {
+  border: 0; height: 1px; width: 100%; margin: 0;
+  background: rgba(255, 255, 255, 0.26);
+  animation: pt-narration-pulse 3.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pt-narration-rule { animation: none; }
+}
+.pt-narration-body {
+  display: flex; flex-direction: column; align-items: center; gap: var(--gap-sm);
+  padding: 0 var(--gap-xl);
+}
+.pt-narration-seg .pt-bubble {
+  background: transparent; border: none; border-radius: 0; padding: 4px 0;
+  color: #fff; font-style: italic; text-align: center; line-height: 1.55;
+  font-size: 1.05rem; letter-spacing: 0.04em;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.22);
+  max-width: min(86%, 640px);
 }
 
 /* error bubble + retry */

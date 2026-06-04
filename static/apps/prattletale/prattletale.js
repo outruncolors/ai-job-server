@@ -318,6 +318,39 @@
     }
   }
 
+  // Narration (and the legacy narration_emotion) break the thread into segments:
+  // they render full-width and centered between dividers rather than as a side
+  // bubble, and consecutive narrations — even across a turn boundary or a switch
+  // of author — merge into one segment. "Narration splits up chat segments."
+  function isNarrationType(type) {
+    return type === 'narration' || type === 'narration_emotion';
+  }
+
+  // Walk every item across all turns (in order) into render segments:
+  //   {kind:'narration', items:[{turn,item}…]}  — one merged narration run, or
+  //   {kind:'turn', turnId, author, items:[…]}   — a run of non-narration items
+  //                                                from one turn (avatar + stack).
+  // A turn with narration in the middle thus yields several segments.
+  function buildSegments(turns) {
+    const segs = [];
+    let cur = null;
+    for (const turn of turns) {
+      for (const item of (turn.items || [])) {
+        if (isNarrationType(item.type)) {
+          if (!cur || cur.kind !== 'narration') { cur = { kind: 'narration', items: [] }; segs.push(cur); }
+          cur.items.push({ turn, item });
+        } else {
+          if (!cur || cur.kind !== 'turn' || cur.turnId !== turn.id) {
+            cur = { kind: 'turn', turnId: turn.id, author: turn.author, items: [] };
+            segs.push(cur);
+          }
+          cur.items.push(item);
+        }
+      }
+    }
+    return segs;
+  }
+
   function renderThread() {
     const thread = $('pt-thread');
     const turns = (_current.transcript && _current.transcript.turns) || [];
@@ -325,23 +358,27 @@
       thread.innerHTML = '<div class="pt-empty pt-thread-empty">Say something to get started.</div>';
       return;
     }
-    thread.innerHTML = turns.map(turnHtml).join('');
+    thread.innerHTML = buildSegments(turns)
+      .map((seg) => (seg.kind === 'narration' ? narrationSegmentHtml(seg) : turnSegmentHtml(seg)))
+      .join('');
     wireRetry();
     wirePlay();
     wireThreadControls();
     scrollToBottom();
   }
 
-  function turnHtml(turn) {
+  // One avatar + bubble-stack group for a run of non-narration items from a turn.
+  function turnSegmentHtml(seg) {
     const conv = _current.conversation;
+    const turn = { id: seg.turnId, author: seg.author, items: seg.items };
     // A system turn (e.g. a Summarizer recap) is avatar-less and centered.
-    if (turn.author === 'system') {
-      const sysBubbles = (turn.items || []).map((it) => bubbleHtml(it, turn)).join('');
-      return `<div class="pt-turn pt-turn--system" data-turn="${_escHtml(turn.id)}">
+    if (seg.author === 'system') {
+      const sysBubbles = seg.items.map((it) => bubbleHtml(it, turn)).join('');
+      return `<div class="pt-turn pt-turn--system" data-turn="${_escHtml(seg.turnId)}">
         <div class="pt-stack pt-stack--system">${sysBubbles}</div>
       </div>`;
     }
-    const isUser = turn.author === 'user';
+    const isUser = seg.author === 'user';
     const cp = counterpartOf(conv);
     const name = isUser ? (conv.device_user && conv.device_user.display_name) || 'You'
                         : (cp ? cp.name : 'Character');
@@ -349,12 +386,39 @@
                           : (cp && cp.avatar_path);
     const avId = isUser ? 'device-user' : conv.counterpart_character_id;
     const av = avatarHtml(name, avPath, avId, 'pt-av pt-av-sm');
-    const bubbles = (turn.items || []).map((it) => bubbleHtml(it, turn)).join('');
-    return `<div class="pt-turn pt-turn--${isUser ? 'user' : 'model'}" data-turn="${_escHtml(turn.id)}">
+    const bubbles = seg.items.map((it) => bubbleHtml(it, turn)).join('');
+    return `<div class="pt-turn pt-turn--${isUser ? 'user' : 'model'}" data-turn="${_escHtml(seg.turnId)}">
       ${isUser ? '' : av}
       <div class="pt-stack">${bubbles}</div>
       ${isUser ? av : ''}
     </div>`;
+  }
+
+  // A full-width centered narration block bracketed by two horizontal dividers.
+  // Each line is still a bubbleHtml item (data-turn/data-item) so the per-item
+  // controls, play button and SFX badge keep working; CSS restyles it centered.
+  function narrationSegmentHtml(seg) {
+    const lines = seg.items.map(({ turn, item }) => bubbleHtml(item, turn)).join('');
+    return `<div class="pt-narration-seg">
+      <hr class="pt-narration-rule">
+      <div class="pt-narration-body">${lines}</div>
+      <hr class="pt-narration-rule">
+    </div>`;
+  }
+
+  // The visible text for a bubble: strip the canonical decoration so both sides
+  // read the same (colour/shape carries the type). dialogue -> drop the wrapping
+  // double quotes; action -> drop the wrapping asterisks; narration is plain.
+  function displayText(item) {
+    const t = item.text || '';
+    if (item.type === 'dialogue') {
+      const m = t.match(/^"([\s\S]*)"$/);
+      if (m) return m[1];
+    } else if (item.type === 'action') {
+      const m = t.match(/^\*([\s\S]*)\*$/);
+      if (m) return m[1];
+    }
+    return t;
   }
 
   function bubbleHtml(item, turn) {
@@ -391,7 +455,7 @@
     const cls = `pt-bubble pt-bubble--${_escHtml(type)}${hidden ? ' pt-bubble--hidden' : ''}`;
     const tag = hidden ? '<span class="pt-hidden-tag" title="Hidden from context">🚫 hidden</span>' : '';
     return `<div class="${cls}" data-turn="${_escHtml(turn.id)}" data-item="${_escHtml(item.id)}">` +
-      `${_escHtml(item.text || '')}${play}${sfxBadge}${tag}</div>`;
+      `${_escHtml(displayText(item))}${play}${sfxBadge}${tag}</div>`;
   }
 
   function scrollToBottom() {
@@ -595,7 +659,8 @@
     const conv = _current.conversation;
     const timing = conv.config && conv.config.typing_timing_enabled;
     const isErr = (turn.items || []).some((i) => i.type === 'system_error');
-    if (!timing || isErr) { appendTurn(turn); scrollToBottom(); return; }
+    // Caller renders non-animated turns via renderThread(); nothing to do here.
+    if (!timing || isErr) return;
 
     const convId = conv.id;
     const thread = $('pt-thread');
@@ -987,35 +1052,48 @@
 
     // clear the composer and show the user's message right away — the POST runs
     // the model turn synchronously and can take a while, so the user shouldn't
-    // wait on the network to see what they just sent. The optimistic turn is
-    // visually identical to the server echo, so we don't re-render it on success.
+    // wait on the network to see what they just sent. We stage an optimistic
+    // user turn into the transcript so renderThread() lays out its segments
+    // (incl. narration) exactly as the committed turn will.
     _draft = [];
     _editing = -1;
     renderDraft();
 
     const id = _current.conversation.id;
-    const optimisticEl = appendUserTurnOptimistic(items);
+    const turns = _current.transcript.turns;
+    const optimistic = { id: '__pending__', author: 'user',
+      items: items.map((d, i) => ({ ...d, id: `__p${i}` })) };
+    turns.push(optimistic);
+    renderThread();
     const typingEl = showTyping();
     try {
       const res = await api(
         `${APP}/conversations/${encodeURIComponent(id)}/turns`, 'POST', { items });
       typingEl.remove();
-      _current.transcript.turns.push(res.user_turn, res.model_turn);
-      // Reconcile the optimistic turn to the persisted one so its bubbles carry
-      // real ids (the per-message edit/hide/delete controls target them).
-      optimisticEl.outerHTML = turnHtml(res.user_turn);
-      wireThreadControls();
-      // Kick off SFX resolution for both turns ASAP (plugins, best-effort). The
-      // user turn is already rendered; the model turn resolves during its reveal.
+      // Replace the optimistic user turn with the persisted one (real ids).
+      const pi = turns.findIndex((t) => t.id === '__pending__');
+      if (pi >= 0) turns.splice(pi, 1, res.user_turn); else turns.push(res.user_turn);
+      renderThread();
+
+      // Reveal the model turn message-by-message when timing is on, then add it
+      // to the transcript and re-render so its narration merges into segments.
+      const isErr = (res.model_turn.items || []).some((i) => i.type === 'system_error');
+      const timing = _current.conversation.config && _current.conversation.config.typing_timing_enabled;
+      if (timing && !isErr) await revealModelTurn(res.model_turn);
+      turns.push(res.model_turn);
+      renderThread();
+
+      // Kick off SFX resolution for both turns (plugins, best-effort).
       firePluginTurn(res.user_turn);
       firePluginTurn(res.model_turn);
-      await revealModelTurn(res.model_turn);
     } catch (err) {
       // hard failure (network / 5xx): undo the optimistic turn and restore the
       // draft so the user can resend. (Model-side failures come back as a 200
       // system_error turn and flow through the success path instead.)
       typingEl.remove();
-      optimisticEl.remove();
+      const pi = turns.findIndex((t) => t.id === '__pending__');
+      if (pi >= 0) turns.splice(pi, 1);
+      renderThread();
       _draft = items;
       renderDraft();
       const thread = $('pt-thread');
@@ -1031,25 +1109,10 @@
     }
   }
 
-  function appendTurn(turn) {
-    const thread = $('pt-thread');
-    const empty = thread.querySelector('.pt-thread-empty');
-    if (empty) empty.remove();
-    thread.insertAdjacentHTML('beforeend', turnHtml(turn));
-    wireRetry();
-    wirePlay();
-    wireThreadControls();
-  }
-
-  // Render the user's turn immediately (before the server echoes ids back) and
-  // return the element so a hard send failure can roll it back.
-  function appendUserTurnOptimistic(items) {
-    const thread = $('pt-thread');
-    const empty = thread.querySelector('.pt-thread-empty');
-    if (empty) empty.remove();
-    thread.insertAdjacentHTML('beforeend', turnHtml({ id: '__pending__', author: 'user', items }));
-    scrollToBottom();
-    return thread.lastElementChild;
+  // The turn is already in _current.transcript; re-render the whole thread so
+  // narration segments merge correctly across turn boundaries.
+  function appendTurn() {
+    renderThread();
   }
 
   function showTyping() {
@@ -1102,15 +1165,7 @@
       const turns = _current.transcript.turns;
       const idx = turns.findIndex((t) => t.id === turnId);
       if (idx >= 0) turns[idx] = newTurn;
-      if (turnEl) {
-        turnEl.outerHTML = turnHtml(newTurn);
-        wireRetry();
-        wirePlay();
-        wireThreadControls();
-      } else {
-        renderThread();
-      }
-      scrollToBottom();
+      renderThread();
     } catch (err) {
       if (stack) {
         stack.innerHTML = `<div class="pt-bubble pt-bubble--error" data-turn="${_escHtml(turnId)}">
@@ -1238,27 +1293,15 @@
     return t ? (t.items || []).find((i) => i.id === itemId) || null : null;
   }
 
-  function findTurnEl(turnId) {
-    return $('pt-thread').querySelector(`.pt-turn[data-turn="${CSS.escape(turnId)}"]`);
+  // A turn can be split across several segments (narration breaks it up), so per-
+  // turn edits re-render the whole thread from the in-memory transcript rather
+  // than swapping one DOM node — segments and dividers recompute correctly.
+  function rerenderTurn() {
+    renderThread();
   }
 
-  // Re-render one turn in place from the in-memory transcript (mirrors the retry
-  // path's DOM swap), then re-wire the thread's per-bubble + per-turn affordances.
-  function rerenderTurn(turnId) {
-    const turn = getTurn(turnId);
-    const el = findTurnEl(turnId);
-    if (!turn || !el) { renderThread(); return; }
-    el.outerHTML = turnHtml(turn);
-    wireRetry();
-    wirePlay();
-    wireThreadControls();
-  }
-
-  function removeTurnFromDom(turnId) {
-    const el = findTurnEl(turnId);
-    if (el) el.remove();
-    const turns = (_current.transcript && _current.transcript.turns) || [];
-    if (!turns.length) renderThread();  // restore the empty-state hint
+  function removeTurnFromDom() {
+    renderThread();
   }
 
   function startEditItem(bubbleEl, turnId, item) {
