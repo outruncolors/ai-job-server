@@ -1,9 +1,17 @@
 /* Memory Lab — atomic test bench for the /v1/memory API. */
 
+/* This is a single-column document, not the two-panel app layout, so let the
+   page scroll normally. components.css locks html/body to height:100%;
+   overflow:hidden for the panel layout (where #panel-left/#panel-right scroll
+   internally) — without an inner scroll container that would clip this page on
+   desktop. styles.css loads last, so this override wins. */
+html, body { height: auto; overflow: auto; }
+
 #page {
   max-width: 980px;
   margin: 0 auto;
-  padding: 16px;
+  /* top padding clears the fixed 44px topnav */
+  padding: calc(44px + 16px) 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 20px;
