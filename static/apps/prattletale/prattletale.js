@@ -1512,12 +1512,30 @@
     return `<pre class="pt-trace-pre">${_escHtml(text || '')}</pre>`;
   }
 
+  // The {{memory}} block format_memory_block produces numbers each entry "N. ".
+  function memoryCount(block) {
+    return ((block || '').match(/^\d+\.\s/gm) || []).length;
+  }
+  function memoryTitle(block) {
+    return `🧠 Memories in context (${memoryCount(block)})`;
+  }
+  function memoryHtml(block) {
+    return (block || '').trim()
+      ? pre(block)
+      : '<div class="pt-empty">No memories matched for this turn.</div>';
+  }
+
   function renderTrace(body, trace) {
     _traceSteps = trace.steps || [];
     const parts = [];
 
     // node-graph of the pipeline (turn -> variety? -> guard)
     parts.push(nodeGraphHtml(_traceSteps));
+
+    // Which long-term memories the turn pulled into context (the {{memory}} block
+    // from the step that did retrieval). Surfaced up top so it's easy to see.
+    const memStep = _traceSteps.find((s) => s.memory != null);
+    if (memStep) parts.push(traceSection(memoryTitle(memStep.memory), memoryHtml(memStep.memory)));
 
     // error first when present, so a failed turn is debuggable
     if (trace.error) parts.push(traceSection('Error', pre(trace.error)));
@@ -1579,6 +1597,9 @@
     btn.classList.add('on');
     const link = promptPalLink(step.id);
     const out = step.output != null ? pre(step.output) : '<div class="pt-empty">(output not captured)</div>';
+    const memRow = step.memory != null
+      ? `<div class="pt-ctx-row"><span class="pt-ctx-key">memory</span>${memoryHtml(step.memory)}</div>`
+      : '';
     detail.hidden = false;
     detail.innerHTML =
       `<div class="pt-node-head">
@@ -1586,6 +1607,7 @@
          <a href="${link}" target="_blank" rel="noopener" class="pt-node-link">Edit prompt ↗</a>
        </div>
        <div class="pt-ctx-row"><span class="pt-ctx-key">prompt</span>${pre(step.prompt)}</div>
+       ${memRow}
        <div class="pt-ctx-row"><span class="pt-ctx-key">output</span>${out}</div>`;
   }
 

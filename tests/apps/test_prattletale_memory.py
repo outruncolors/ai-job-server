@@ -146,6 +146,34 @@ async def test_turn_retrieval_surfaces_global_memory():
     assert "global/ai-job-server" in block
 
 
+def test_collect_steps_captures_memory_for_trace(tmp_path):
+    # The turn trace ("tracker") surfaces which memories a turn pulled into
+    # context: _collect_steps reads each step's memory.txt. None = no retrieval,
+    # "" = searched/none matched, a block = injected memories.
+    from app.chain.models import ChainJobRequest, ChainLLMConfig
+
+    req = ChainJobRequest(
+        title="t", input="", llm=ChainLLMConfig(api_base="http://x", model="m"),
+        steps=[
+            generator._llm_step(1, "turn", "Turn", "p", memory={"enabled": True}),
+            generator._llm_step(2, "guard", "Guard", "g"),
+        ],
+    )
+    job_dir = tmp_path / "job"
+    turn_dir = job_dir / "steps" / "001_turn"
+    turn_dir.mkdir(parents=True)
+    (turn_dir / "memory.txt").write_text(
+        "Relevant memories:\n\n1. User name\nScope: global/global\nMemory: Jason\n",
+        encoding="utf-8",
+    )
+    (job_dir / "steps" / "002_guard").mkdir(parents=True)  # no memory.txt
+
+    steps = generator._collect_steps(job_dir, req)
+    by_id = {s["id"]: s for s in steps}
+    assert "Jason" in by_id["turn"]["memory"]      # injected memories captured
+    assert by_id["guard"]["memory"] is None        # step without retrieval
+
+
 async def test_turn_retrieval_fail_soft_when_empty():
     cfg = MemoryStepConfig(
         enabled=True, query="{{var.mem_query}}",

@@ -256,6 +256,10 @@ def _collect_steps(job_dir: Path, request: ChainJobRequest) -> list[dict]:
         alt = step.alternatives[0] if step.alternatives else None
         rendered_prompt = alt.prompt if alt is not None else None
         output: Optional[str] = None
+        # ``None`` = the step had no memory retrieval; ``""`` = it searched and
+        # nothing matched; a block = the memories injected into context. Lets the
+        # trace UI show exactly which memories a turn pulled in.
+        memory: Optional[str] = None
         step_dir = steps_dir / f"{step.number:03d}_{step.id}"
         if step_dir.is_dir():
             prompt_file = step_dir / "prompt.txt"
@@ -264,12 +268,16 @@ def _collect_steps(job_dir: Path, request: ChainJobRequest) -> list[dict]:
             output_file = step_dir / "output.txt"
             if output_file.exists():
                 output = output_file.read_text(encoding="utf-8")
+            memory_file = step_dir / "memory.txt"
+            if memory_file.exists():
+                memory = memory_file.read_text(encoding="utf-8")
         collected.append({
             "number": step.number,
             "id": step.id,
             "name": step.name,
             "prompt": rendered_prompt,
             "output": output,
+            "memory": memory,
         })
     return collected
 
