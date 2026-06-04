@@ -12,122 +12,198 @@
 
 <nav id="topnav"></nav>
 
-<div id="page">
-  <div class="status-bar">
-    <span id="status-text">Loading…</span>
-    <button class="ghost-btn" onclick="refreshHealth()">↻</button>
+<div id="tab-bar">
+  <button class="tab-btn active" data-tab="memories" onclick="switchTab('memories')">Memories</button>
+  <button class="tab-btn"        data-tab="health"   onclick="switchTab('health')">Health</button>
+  <button class="tab-btn"        data-tab="write"    onclick="switchTab('write')">Write</button>
+  <button class="tab-btn"        data-tab="search"   onclick="switchTab('search')">Search</button>
+  <button class="tab-btn"        data-tab="read"     onclick="switchTab('read')">Read</button>
+  <button class="tab-btn"        data-tab="reindex"  onclick="switchTab('reindex')">Reindex</button>
+  <button class="tab-btn"        data-tab="demo"     onclick="switchTab('demo')">Demo</button>
+</div>
+
+<!-- ===== Memories table (jobs-style list + detail) ===== -->
+<div id="tab-memories" class="tab-pane active" role="tabpanel">
+  <div id="panels">
+
+    <!-- Left: memory table -->
+    <div id="panel-left">
+      <div id="mem-toolbar">
+        <span class="toolbar-label">Memories</span>
+        <select id="mem-filter-type" class="scope-type" onchange="firstMemPage()"></select>
+        <input type="text" id="mem-filter-id" placeholder="scope id (optional)" onkeydown="if(event.key==='Enter')firstMemPage()">
+        <button class="secondary" onclick="loadMemories()">Refresh</button>
+      </div>
+      <div id="mem-table-wrap">
+        <table id="mem-table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Scope</th>
+              <th>Tags</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody id="mem-body">
+            <tr><td colspan="4" class="td-dim">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="mem-pagination"></div>
+    </div>
+
+    <!-- Right: memory detail -->
+    <div id="panel-right">
+      <div id="mem-detail-empty" class="empty">Select a memory to view its content.</div>
+      <div id="mem-detail-view">
+        <div class="detail-meta" id="mem-detail-meta"></div>
+        <div class="detail-section">
+          <p class="section-label">Content</p>
+          <div class="artifact-pre" id="mem-detail-body"></div>
+        </div>
+        <div class="detail-section">
+          <p class="section-label">Frontmatter</p>
+          <pre class="raw" id="mem-detail-raw"></pre>
+        </div>
+        <div id="mem-detail-actions">
+          <button class="danger" id="mem-delete-btn" onclick="deleteCurrentMemory()">Delete memory</button>
+        </div>
+      </div>
+    </div>
+
   </div>
+</div>
 
-  <!-- ── 1. Health ─────────────────────────────────────────────────── -->
-  <section class="lab-card">
-    <h2>1 · Health</h2>
-    <p class="hint">Verify the backend is reachable. Plain backend needs no external services.</p>
-    <div class="row">
-      <button onclick="refreshHealth()" id="health-btn">Check memory health</button>
-      <span id="health-msg" class="msg"></span>
+<!-- ===== Health ===== -->
+<div id="tab-health" class="tab-pane tool-pane" role="tabpanel">
+  <div class="tool-col">
+    <div class="status-bar">
+      <span id="status-text">Loading…</span>
+      <button class="ghost-btn" onclick="refreshHealth()">↻</button>
     </div>
-    <div id="health-result"></div>
-    <pre class="raw" id="health-raw"></pre>
-  </section>
+    <section class="lab-card">
+      <h2>Health</h2>
+      <p class="hint">Verify the backend is reachable. The plain backend needs no external services.</p>
+      <div class="row">
+        <button onclick="refreshHealth()" id="health-btn">Check memory health</button>
+        <span id="health-msg" class="msg"></span>
+      </div>
+      <div id="health-result"></div>
+      <pre class="raw" id="health-raw"></pre>
+    </section>
+  </div>
+</div>
 
-  <!-- ── 2. Write one memory ───────────────────────────────────────── -->
-  <section class="lab-card">
-    <h2>2 · Write one memory</h2>
-    <div class="row">
-      <input id="w-title" type="text" placeholder="title">
-    </div>
-    <textarea id="w-body" rows="3" placeholder="body (markdown)"></textarea>
-    <div class="row">
-      <select id="w-scope-type" class="scope-type"></select>
-      <input id="w-scope-id" type="text" value="ai-job-server" placeholder="scope id">
-      <input id="w-tags" type="text" placeholder="tags (comma separated)">
-    </div>
-    <div class="row">
-      <button onclick="writeMemory()" id="write-btn">Write memory</button>
-      <span id="write-msg" class="msg"></span>
-    </div>
-    <pre class="raw" id="write-raw"></pre>
-  </section>
+<!-- ===== Write ===== -->
+<div id="tab-write" class="tab-pane tool-pane" role="tabpanel">
+  <div class="tool-col">
+    <section class="lab-card">
+      <h2>Write one memory</h2>
+      <div class="row">
+        <input type="text" id="w-title" placeholder="title">
+      </div>
+      <div class="row">
+        <textarea id="w-body" rows="4" placeholder="body (Markdown; the searchable content)"></textarea>
+      </div>
+      <div class="row">
+        <select id="w-scope-type" class="scope-type"></select>
+        <input type="text" id="w-scope-id" placeholder="scope id (e.g. ai-job-server)">
+      </div>
+      <div class="row">
+        <input type="text" id="w-tags" placeholder="tags, comma-separated">
+      </div>
+      <div class="row">
+        <button onclick="writeMemory()">Write memory</button>
+        <span id="write-msg" class="msg"></span>
+      </div>
+      <pre class="raw" id="write-raw"></pre>
+    </section>
+  </div>
+</div>
 
-  <!-- ── 3. Search ─────────────────────────────────────────────────── -->
-  <section class="lab-card">
-    <h2>3 · Search</h2>
-    <div class="row">
-      <input id="s-query" type="text" placeholder="query">
-    </div>
-    <div class="row">
-      <select id="s-scope-type" class="scope-type"></select>
-      <input id="s-scope-id" type="text" value="ai-job-server" placeholder="scope id (blank = all)">
-      <input id="s-topk" type="number" min="1" max="50" value="5" title="top_k">
-      <button onclick="searchMemory()" id="search-btn">Search</button>
-    </div>
-    <div class="row">
-      <label class="chk"><input type="checkbox" id="s-allscopes"> search all scopes</label>
-      <span id="search-msg" class="msg"></span>
-    </div>
-    <div id="search-result"></div>
-    <pre class="raw" id="search-raw"></pre>
-  </section>
+<!-- ===== Search ===== -->
+<div id="tab-search" class="tab-pane tool-pane" role="tabpanel">
+  <div class="tool-col">
+    <section class="lab-card">
+      <h2>Search</h2>
+      <div class="row">
+        <input type="text" id="s-query" placeholder="query">
+      </div>
+      <div class="row">
+        <select id="s-scope-type" class="scope-type"></select>
+        <input type="text" id="s-scope-id" placeholder="scope id">
+        <input type="number" id="s-topk" value="5" min="1">
+      </div>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="s-allscopes"> search all scopes</label>
+        <button onclick="searchMemory()">Search</button>
+        <span id="search-msg" class="msg"></span>
+      </div>
+      <div id="search-result"></div>
+      <pre class="raw" id="search-raw"></pre>
+    </section>
+  </div>
+</div>
 
-  <!-- ── 4. Read exact memory ──────────────────────────────────────── -->
-  <section class="lab-card">
-    <h2>4 · Read by id</h2>
-    <div class="row">
-      <input id="r-id" type="text" placeholder="memory id (mem_…)">
-      <button onclick="readMemory()" id="read-btn">Read</button>
-      <span id="read-msg" class="msg"></span>
-    </div>
-    <div id="read-result"></div>
-    <pre class="raw" id="read-raw"></pre>
-  </section>
+<!-- ===== Read ===== -->
+<div id="tab-read" class="tab-pane tool-pane" role="tabpanel">
+  <div class="tool-col">
+    <section class="lab-card">
+      <h2>Read by id</h2>
+      <div class="row">
+        <input type="text" id="r-id" placeholder="memory id (mem_…)">
+        <button onclick="readMemory()">Read</button>
+        <span id="read-msg" class="msg"></span>
+      </div>
+      <div id="read-result"></div>
+      <pre class="raw" id="read-raw"></pre>
+    </section>
+  </div>
+</div>
 
-  <!-- ── 5. Reindex ────────────────────────────────────────────────── -->
-  <section class="lab-card">
-    <h2>5 · Reindex</h2>
-    <p class="hint">Rebuild the search index from Markdown source files. No-op for the plain backend.</p>
-    <div class="row">
-      <select id="ri-scope-type" class="scope-type"></select>
-      <input id="ri-scope-id" type="text" placeholder="scope id (blank = all)">
-      <label class="chk"><input type="checkbox" id="ri-force"> force</label>
-      <button onclick="reindexMemory()" id="reindex-btn">Reindex</button>
-      <span id="reindex-msg" class="msg"></span>
-    </div>
-    <pre class="raw" id="reindex-raw"></pre>
-  </section>
+<!-- ===== Reindex ===== -->
+<div id="tab-reindex" class="tab-pane tool-pane" role="tabpanel">
+  <div class="tool-col">
+    <section class="lab-card">
+      <h2>Reindex</h2>
+      <p class="hint">Rebuild the search index from Markdown source files. No-op for the plain backend.</p>
+      <div class="row">
+        <select id="ri-scope-type" class="scope-type"></select>
+        <input type="text" id="ri-scope-id" placeholder="scope id (blank = all)">
+        <label class="chk"><input type="checkbox" id="ri-force"> force</label>
+        <button onclick="reindexMemory()">Reindex</button>
+        <span id="reindex-msg" class="msg"></span>
+      </div>
+      <pre class="raw" id="reindex-raw"></pre>
+    </section>
+  </div>
+</div>
 
-  <!-- ── 6. Demo fixtures ──────────────────────────────────────────── -->
-  <section class="lab-card">
-    <h2>6 · Demo fixtures <span class="count">scope test/memory_demo</span></h2>
-    <p class="hint">
-      The fastest way to see memory work end to end: create four controlled memories, then
-      run four fixed queries and check expected vs actual top result.
-    </p>
-    <div class="row">
-      <button onclick="seedDemo()" id="seed-btn">Create demo memories</button>
-      <button onclick="runDemo()" id="demo-run-btn">Run demo searches</button>
-      <span id="demo-msg" class="msg"></span>
-    </div>
-    <div id="demo-result"></div>
-    <pre class="raw" id="demo-raw"></pre>
-  </section>
-
-  <!-- ── 7. Reset demo ─────────────────────────────────────────────── -->
-  <section class="lab-card">
-    <h2>7 · Clear demo memories</h2>
-    <p class="hint">Only ever affects the dedicated <code>test/memory_demo</code> scope — real app memory is never touched.</p>
-    <div class="row">
-      <button class="danger-btn" onclick="resetDemo()" id="reset-btn">Clear demo memories</button>
+<!-- ===== Demo fixtures ===== -->
+<div id="tab-demo" class="tab-pane tool-pane" role="tabpanel">
+  <div class="tool-col">
+    <section class="lab-card">
+      <h2>Demo fixtures <span class="count">scope test/memory_demo</span></h2>
+      <p class="hint">Seed a handful of demo memories, run fixed searches against them, then reset.
+        Touches only the <code>test/memory_demo</code> scope.</p>
+      <div class="row">
+        <button onclick="seedDemo()">Create demo memories</button>
+        <button onclick="runDemo()">Run demo searches</button>
+        <button class="danger-btn" onclick="resetDemo()">Reset demo</button>
+        <span id="demo-msg" class="msg"></span>
+      </div>
+      <div id="demo-result"></div>
       <span id="reset-msg" class="msg"></span>
-    </div>
-    <pre class="raw" id="reset-raw"></pre>
-  </section>
+      <pre class="raw" id="demo-raw"></pre>
+      <pre class="raw" id="reset-raw"></pre>
+    </section>
+  </div>
 </div>
 
 <script src="/js/nav.js"></script>
-<script src="/js/profiles-widget.js"></script>
-<script src="/js/peer-status-widget.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/escape.js"></script>
+<script src="/js/toast.js"></script>
 <script src="memory-lab.js"></script>
 <script src="/js/nav-mobile.js"></script>
 </body>

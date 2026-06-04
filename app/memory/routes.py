@@ -40,6 +40,44 @@ async def memory_scopes() -> dict:
     }
 
 
+@router.get("/list")
+async def memory_list(
+    scope_type: str | None = None,
+    scope_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Paginated metadata listing for the Memory Lab table (bodies excluded — the
+    table shows metadata; the detail pane reads the body via ``/read/{id}``).
+
+    Optional ``scope_type`` / ``scope_id`` narrow the listing. Newest-updated first.
+    """
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+    records = [r for r, _ in store.list_records()]
+    if scope_type:
+        records = [r for r in records if r.scope_type == scope_type]
+    if scope_id:
+        records = [r for r in records if r.scope_id == scope_id]
+    records.sort(key=lambda r: (r.updated_at or r.created_at or ""), reverse=True)
+    total = len(records)
+    page = records[offset:offset + limit]
+    items = [
+        {
+            "id": r.id,
+            "title": r.title,
+            "scope_type": r.scope_type,
+            "scope_id": r.scope_id,
+            "tags": list(r.tags or []),
+            "source_type": r.source_type,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+        }
+        for r in page
+    ]
+    return {"ok": True, "items": items, "total": total, "limit": limit, "offset": offset}
+
+
 @router.post("/write")
 async def memory_write(req: MemoryWriteRequest) -> dict:
     record, path = await get_service().write(req)

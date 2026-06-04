@@ -25,6 +25,44 @@ def test_write_returns_id_and_path(client):
     assert body["path"].endswith(".md")
 
 
+def test_list_returns_metadata_total_and_no_body(client):
+    client.post("/v1/memory/write",
+                json={"title": "Alpha", "body": "secret body alpha", "scope": _scope(), "tags": ["x"]})
+    client.post("/v1/memory/write",
+                json={"title": "Beta", "body": "secret body beta",
+                      "scope": {"scope_type": "app", "scope_id": "hoodat"}})
+    r = client.get("/v1/memory/list")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] and body["total"] == 2
+    titles = {it["title"] for it in body["items"]}
+    assert titles == {"Alpha", "Beta"}
+    # The table listing carries metadata only — never the body.
+    first = body["items"][0]
+    assert "body" not in first
+    assert set(["id", "title", "scope_type", "scope_id", "tags", "updated_at"]).issubset(first)
+
+
+def test_list_scope_filter(client):
+    client.post("/v1/memory/write",
+                json={"title": "Alpha", "body": "a", "scope": _scope()})
+    client.post("/v1/memory/write",
+                json={"title": "Beta", "body": "b", "scope": {"scope_type": "app", "scope_id": "hoodat"}})
+    r = client.get("/v1/memory/list", params={"scope_type": "app", "scope_id": "hoodat"})
+    body = r.json()
+    assert body["total"] == 1 and body["items"][0]["title"] == "Beta"
+
+
+def test_list_pagination(client):
+    for i in range(3):
+        client.post("/v1/memory/write",
+                    json={"title": f"M{i}", "body": "b", "scope": _scope()})
+    page1 = client.get("/v1/memory/list", params={"limit": 2, "offset": 0}).json()
+    assert page1["total"] == 3 and len(page1["items"]) == 2
+    page2 = client.get("/v1/memory/list", params={"limit": 2, "offset": 2}).json()
+    assert page2["total"] == 3 and len(page2["items"]) == 1
+
+
 def test_write_then_search_scope_filtered(client):
     client.post(
         "/v1/memory/write",
