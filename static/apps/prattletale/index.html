@@ -52,12 +52,15 @@
            active (e.g. Summarizer). Rendered by the plugin's renderPanel. -->
       <div id="pt-plugin-panel" class="pt-plugin-panel"></div>
       <div id="pt-draft" class="pt-draft" hidden></div>
+      <!-- Mode bar — Essentials (Say/Do/Narrate) plus one entry per enabled plugin,
+           selectable by click or ←/→. Hidden when no plugins are enabled. -->
+      <div id="pt-modebar" class="pt-modebar" hidden></div>
       <div class="pt-compose-row">
-        <button type="button" id="pt-mode" class="pt-mode-btn" title="Bubble type — ←/→ or A/D to switch"></button>
+        <button type="button" id="pt-mode" class="pt-mode-btn" title="Bubble type — Tab to switch"></button>
         <textarea id="pt-input" rows="1" placeholder="Say something…" autocomplete="off"></textarea>
         <button type="button" id="pt-send" title="Enter stacks a bubble; Enter on an empty box sends">Send</button>
       </div>
-      <div class="pt-hint">Type then <b>Enter</b> to stack · <b>Enter</b> on an empty box sends · <b>Tab</b> / <b>←→</b> switch type · <b>X</b> removes last · <b>Esc</b> clears all</div>
+      <div class="pt-hint"><b>Enter</b> stacks · <b>Enter</b> on an empty box sends · <b>Tab</b> switches Say/Do/Narrate · <b>←→</b> switch input mode · <b>X</b> removes last · <b>Esc</b> clears all</div>
     </footer>
   </section>
 

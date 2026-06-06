@@ -19,18 +19,21 @@
     { type: 'action', label: '🎬 Do' },
     { type: 'narration', label: '📖 Narrate' },
   ];
-  // Active composer modes (BASE_MODES + enabled plugins' modes), cycled by the mode button.
+  // Active composer modes (BASE_MODES + enabled plugins' modes). The input is split
+  // across two axes: `_sectionIdx` picks the *input mode* (0 = Essentials, which holds
+  // Say/Do/Narrate; 1..N = one section per enabled plugin), shown on the mode bar above
+  // the compose row. `_textModeIdx` picks Say/Do/Narrate *within* Essentials.
   let MODES = BASE_MODES.slice();
 
   let _characters = {};   // id -> character summary
   let _conversations = []; // list summaries
   let _current = null;     // {conversation, transcript} of the open chat
   let _draft = [];         // staged composer items before commit
-  let _modeIdx = 0;
+  let _sectionIdx = 0;     // 0 = Essentials; 1..N = plugin sections (index into the bar)
+  let _textModeIdx = 0;    // 0/1/2 within Essentials = Say/Do/Narrate
   let _editing = -1;       // index of the staged row being inline-edited, or -1
   let _sending = false;
   let _savedTextInput = '';   // in-progress composer text, stashed while a plugin mode reuses the input
-  let _lastTextModeIdx = 0;   // most recent non-plugin mode (where Go returns to)
 
   // ---------- helpers ----------
 
@@ -170,7 +173,7 @@
   function rebuildModes() {
     const extra = window.PtPlugins ? PtPlugins.composerModes(enabledPluginIds()) : [];
     MODES = BASE_MODES.concat(extra);
-    if (_modeIdx >= MODES.length) _modeIdx = 0;
+    if (_sectionIdx >= sectionCount()) _sectionIdx = 0;
     renderMode();
   }
 
@@ -844,12 +847,30 @@
     return (MODES.find((m) => m.type === type) || {}).label || type;
   }
 
+  // The mode currently driving the composer, resolved from the two axes: in Essentials
+  // it's the chosen Say/Do/Narrate; in a plugin section it's that plugin's composer mode.
+  function activeMode() {
+    if (_sectionIdx === 0) return BASE_MODES[_textModeIdx] || BASE_MODES[0];
+    return MODES[BASE_MODES.length + (_sectionIdx - 1)] || BASE_MODES[0];
+  }
+
+  // Number of mode-bar sections: Essentials + one per plugin-contributed mode.
+  function sectionCount() {
+    return 1 + (MODES.length - BASE_MODES.length);
+  }
+
+  // A plugin mode's bar label: its `label` with any leading emoji/symbol run stripped
+  // ("📋 Summarize" -> "Summarize"); the bar uppercases via CSS.
+  function sectionBarLabel(mode) {
+    return mode.label.replace(/^[^\p{L}\p{N}]+/u, '').trim() || mode.label;
+  }
+
   function resetComposer() {
     _draft = [];
-    _modeIdx = 0;
+    _sectionIdx = 0;
+    _textModeIdx = 0;
     _editing = -1;
     _savedTextInput = '';
-    _lastTextModeIdx = 0;
     // Force the plugin panel closed (a stale one from a previous chat shouldn't leak).
     _panelMode = null;
     $('pt-composer').classList.remove('pt-panel-open');
@@ -861,9 +882,10 @@
   }
 
   function renderMode() {
-    const mode = MODES[_modeIdx] || BASE_MODES[0];
+    const mode = activeMode();
     const input = $('pt-input');
-    const panel = window.PtPlugins ? PtPlugins.panel(mode.type) : null;
+    const isPlugin = _sectionIdx !== 0;
+    const panel = isPlugin && window.PtPlugins ? PtPlugins.panel(mode.type) : null;
     $('pt-mode').textContent = mode.label;
 
     const wasPanel = _panelMode !== null;
@@ -880,23 +902,51 @@
       closePluginPanel();
       input.value = _savedTextInput;
       input.placeholder = PLACEHOLDERS[mode.type] || 'Message…';
-      _lastTextModeIdx = _modeIdx;
     } else if (!panel) {
       // Staying in a text mode (no plugin panel).
-      _lastTextModeIdx = _modeIdx;
       input.placeholder = PLACEHOLDERS[mode.type] || 'Message…';
     }
     // (staying in the same panel mode: leave the input + panel as-is so a typed
     // focus and the option selections persist.)
+    renderModeBar();
     autoGrow();
     updateSendBtn();
   }
 
-  // Cycle the *compose* mode. `step` is +1 (next) or -1 (prev); wraps both ways.
-  function cycleMode(step) {
-    const n = MODES.length;
-    _modeIdx = (_modeIdx + (step || 1) + n) % n;
+  // Render the mode bar above the compose row: Essentials + one entry per plugin
+  // section. Hidden entirely when no plugins are enabled (no lone "Essentials").
+  function renderModeBar() {
+    const bar = $('pt-modebar');
+    const pluginModes = MODES.slice(BASE_MODES.length);
+    if (!pluginModes.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    const labels = ['Essentials'].concat(pluginModes.map(sectionBarLabel));
+    bar.innerHTML = labels.map((label, i) =>
+      `<button type="button" class="pt-modebar-item${i === _sectionIdx ? ' pt-modebar-item--active' : ''}"`
+      + ` tabindex="-1" data-idx="${i}">${_escHtml(label)}</button>`
+    ).join('');
+  }
+
+  // Cycle Say/Do/Narrate within Essentials. `step` is +1 (next) or -1 (prev).
+  function cycleTextMode(step) {
+    const n = BASE_MODES.length;
+    _textModeIdx = (_textModeIdx + (step || 1) + n) % n;
     renderMode();
+  }
+
+  // Move between mode-bar sections (Essentials <-> plugins). `step` wraps both ways.
+  function cycleSection(step) {
+    const n = sectionCount();
+    _sectionIdx = (_sectionIdx + (step || 1) + n) % n;
+    renderMode();
+  }
+
+  // Jump directly to a bar section (click handler), keeping the caret in the composer.
+  function selectSection(i) {
+    if (i < 0 || i >= sectionCount()) return;
+    _sectionIdx = i;
+    renderMode();
+    $('pt-input').focus();
   }
 
   // ---------- plugin composer panel ----------
@@ -922,7 +972,7 @@
   // the staged draft — the pending bubbles survive a Go untouched. The plugin
   // reads its own options from ctx.panelEl and the focus from ctx.primaryValue().
   async function runPluginGo() {
-    const panel = window.PtPlugins && PtPlugins.panel(MODES[_modeIdx].type);
+    const panel = window.PtPlugins && PtPlugins.panel(activeMode().type);
     if (!panel || !panel.submit || _sending) return;
     _sending = true;
     setComposerEnabled(false);
@@ -966,7 +1016,7 @@
       // Re-fetch the conversation + transcript and re-render — used after a plugin
       // edits/deletes transcript items via the core REST endpoints.
       reload: () => loadChat(convId),
-      close: () => { _modeIdx = _lastTextModeIdx; renderMode(); },
+      close: () => { _sectionIdx = 0; renderMode(); },
       panelEl: $('pt-plugin-panel'),
       primaryValue: () => $('pt-input').value.trim(),
     };
@@ -1003,7 +1053,7 @@
     const btn = $('pt-send');
     if (_panelMode) {
       // In a plugin mode the button runs the action; its free-text is optional.
-      const panel = window.PtPlugins && PtPlugins.panel(MODES[_modeIdx].type);
+      const panel = window.PtPlugins && PtPlugins.panel(activeMode().type);
       btn.textContent = (panel && panel.goLabel) || 'Go';
       btn.disabled = _sending;
       return;
@@ -1123,7 +1173,7 @@
     const inp = $('pt-input');
     const text = inp.value.trim();
     if (!text) return false;
-    _draft.push({ type: MODES[_modeIdx].type, text });
+    _draft.push({ type: activeMode().type, text });
     inp.value = '';
     autoGrow();
     renderDraft();
@@ -1791,7 +1841,11 @@
     $('pt-voice-toggle').addEventListener('click', () => toggleConfig('voice_enabled'));
     $('pt-timing-toggle').addEventListener('click', () => toggleConfig('typing_timing_enabled'));
     $('pt-variety-toggle').addEventListener('click', () => toggleConfig('variety_pass_enabled'));
-    $('pt-mode').addEventListener('click', () => cycleMode(1));
+    $('pt-mode').addEventListener('click', () => { if (_sectionIdx === 0) cycleTextMode(1); });
+    $('pt-modebar').addEventListener('click', (e) => {
+      const btn = e.target.closest('.pt-modebar-item');
+      if (btn) selectSection(parseInt(btn.dataset.idx, 10));
+    });
     $('pt-send').addEventListener('click', submitOrStack);
 
     $('pt-delete-mode').addEventListener('click', toggleDeleteMode);
@@ -1818,14 +1872,22 @@
   // stacks); on an empty box the same keys become *commands* so single letters
   // don't get eaten mid-message.
   //   Enter        text -> stack a bubble · empty -> send the chain
-  //   ←/A  →/D     (empty) switch the bubble type back / forward
+  //   Tab/⇧Tab     cycle Say/Do/Narrate (in Essentials); from a plugin, jump back to
+  //                Essentials (Tab -> Say, ⇧Tab -> Do)
+  //   ←  →         (empty) move between mode-bar sections (Essentials <-> plugins)
   //   X            (empty) remove the most recent staged bubble
   //   Esc          clear all staged bubbles (and the box)
   function onComposerKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitOrStack(); return; }
-    // Tab always switches type (forward; Shift+Tab back) — it types no character,
-    // so unlike A/D it works mid-message too.
-    if (e.key === 'Tab') { e.preventDefault(); cycleMode(e.shiftKey ? -1 : 1); return; }
+    // Tab switches Say/Do/Narrate within Essentials (it types no character, so it works
+    // mid-message too). From a plugin section it jumps back to Essentials: Tab -> Say,
+    // Shift+Tab -> Do.
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (_sectionIdx !== 0) { _sectionIdx = 0; _textModeIdx = e.shiftKey ? 1 : 0; renderMode(); }
+      else cycleTextMode(e.shiftKey ? -1 : 1);
+      return;
+    }
     if (e.key === 'Escape') {
       if (_draft.length || $('pt-input').value) {
         e.preventDefault();
@@ -1836,8 +1898,8 @@
       return;
     }
     if ($('pt-input').value !== '') return;   // below here: empty-box command mode
-    if (e.key === 'ArrowLeft') { e.preventDefault(); cycleMode(-1); }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); cycleMode(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); cycleSection(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); cycleSection(1); }
     else if (e.key === 'x' || e.key === 'X') { e.preventDefault(); if (_draft.length) removeStaged(_draft.length - 1); }
   }
 
