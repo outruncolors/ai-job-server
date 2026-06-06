@@ -146,6 +146,11 @@ class ConversationConfig(BaseModel):
     # blocks simply collapse to empty when nothing is configured.
     dialogue_feel_enabled: bool = True
     dialogue_feel_roll_enabled: bool = True
+    # Opt-in: when on (and rolls enabled), a small "director" LLM picks the per-turn
+    # feel from conversation context instead of the blind weighted wildcard draw —
+    # one extra LLM call per turn. Off by default. Falls back to the wildcard draw
+    # if the director call fails or yields nothing usable.
+    dialogue_feel_director_enabled: bool = False
     dialogue_feel: DialogueFeel = Field(default_factory=DialogueFeel)
 
 

@@ -26,6 +26,8 @@ wildcard RNG and is computed per turn in :func:`generator.build_turn_request`.
 
 from __future__ import annotations
 
+import re
+
 from ...wildcards import list_wildcards, resolve_wildcards
 from .seed import (
     CADENCE_WILDCARD_NAME,
@@ -130,6 +132,48 @@ def render_voice_examples(character: dict, conversation: dict) -> str:
 
 # ---- per-turn feel roll -----------------------------------------------------
 
+# Canonical order + accepted labels for a feel roll, shared by the wildcard draw
+# and the LLM director so both emit an identical <dialogue_feel_roll> block.
+_ROLL_ORDER = ["Emotional shade", "Move", "Cadence"]
+_ROLL_LABEL_ALIASES = {
+    "emotional shade": "Emotional shade", "shade": "Emotional shade",
+    "move": "Move", "cadence": "Cadence",
+}
+_DIRECTOR_LINE_RE = re.compile(r"^\s*([A-Za-z ]+?)\s*:\s*(.+?)\s*$")
+
+
+def wrap_feel_roll(lines: list[str]) -> str:
+    """Wrap pre-rendered ``"Label: value"`` lines in the canonical
+    ``<dialogue_feel_roll>`` block (the exact shape the turn/variety prompts
+    expect). ``""`` for no lines, so an empty roll vanishes from the prompt."""
+    if not lines:
+        return ""
+    body = "\n".join(lines)
+    return (
+        "THIS TURN'S DIALOGUE FEEL — obey without mentioning it:\n"
+        f"<dialogue_feel_roll>\n{body}\n</dialogue_feel_roll>"
+    )
+
+
+def parse_director_roll(raw: str) -> str:
+    """Parse the feel-director LLM's output into a ``<dialogue_feel_roll>`` block.
+
+    Keeps only lines whose label is one of Emotional shade / Move / Cadence
+    (aliases accepted, first wins), re-ordered canonically — so stray preamble or
+    extra lines are dropped. ``""`` when nothing usable parsed, which lets the
+    caller fall back to the wildcard draw."""
+    seen: dict[str, str] = {}
+    for line in (raw or "").splitlines():
+        m = _DIRECTOR_LINE_RE.match(line)
+        if not m:
+            continue
+        label = _ROLL_LABEL_ALIASES.get(m.group(1).strip().lower())
+        value = m.group(2).strip()
+        if label and value and label not in seen:
+            seen[label] = value
+    return wrap_feel_roll([f"{lab}: {seen[lab]}" for lab in _ROLL_ORDER if lab in seen])
+
+
 def _resolve_category(base_name: str, character_id: str, existing_lower: set[str]) -> str:
     """Resolve one feel-roll category to a weighted pick. Prefer the
     character-specific wildcard ``"<base>:<character_id>"`` when it exists and has
@@ -162,10 +206,4 @@ def resolve_dialogue_feel_roll(character_id: str, *, enabled: bool = True) -> st
         value = _resolve_category(base_name, character_id, existing_lower)
         if value:
             lines.append(f"{label}: {value}")
-    if not lines:
-        return ""
-    body = "\n".join(lines)
-    return (
-        "THIS TURN'S DIALOGUE FEEL — obey without mentioning it:\n"
-        f"<dialogue_feel_roll>\n{body}\n</dialogue_feel_roll>"
-    )
+    return wrap_feel_roll(lines)

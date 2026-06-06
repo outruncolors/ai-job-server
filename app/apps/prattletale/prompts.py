@@ -252,6 +252,46 @@ register(
 )
 
 
+# ---- feel director (context-aware per-turn roll) ---------------------------
+
+# An optional pre-pass (opt-in: config.dialogue_feel_director_enabled): instead of
+# a blind weighted wildcard draw, a small LLM reads the conversation + the
+# character's stable fingerprint and *chooses* this turn's micro-style. Its output
+# is parsed into the same <dialogue_feel_roll> block the turn/variety steps expect
+# (feel.parse_director_roll), so nothing downstream changes; on any failure the
+# caller falls back to the wildcard draw. Pick the FEEL, never the words.
+FEEL_DIRECTOR = (
+    "You are the dialogue director for a live text-message roleplay. Read the "
+    "conversation and decide how the character should play THIS ONE next reply — "
+    "the feel only, never the actual words.\n\n"
+    "THE CHARACTER'S STABLE VOICE (keep your choice consistent with it; may be "
+    "empty):\n{{var.voice_feel}}\n\n"
+    "THE CONVERSATION SO FAR (oldest first; react to the last line):\n"
+    "<transcript>\n{{var.transcript}}\n</transcript>\n\n"
+    "Choose, fitting what was just said and where the scene is:\n"
+    "- an emotional shade the character is in right now,\n"
+    "- one conversational move for this reply (deflect-then-reveal, ask a pointed "
+    "question, push back on the premise, admit something indirectly, change the "
+    "subject — or another that fits),\n"
+    "- a cadence for the typing rhythm.\n\n"
+    "Keep them specific to this moment and in character — not generic. Output "
+    "EXACTLY these three lines and nothing else (no preamble, no quotes):\n"
+    "Emotional shade: <2-6 words>\n"
+    "Move: <one short instruction>\n"
+    "Cadence: <a few words>"
+)
+
+register(
+    "prattletale",
+    "feel_director",
+    title="Chat turn — feel director",
+    prompt=FEEL_DIRECTOR,
+    tags=("turn", "chat", "feel"),
+    variables={},
+    description="Pick this turn's dialogue feel (shade/move/cadence) from conversation context.",
+)
+
+
 # ---- prompt migration (update-if-unmodified) -------------------------------
 
 # (Prompt Pal key, frozen v1 default, current default). Prompt Pal seeds

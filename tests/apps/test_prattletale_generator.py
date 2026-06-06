@@ -81,6 +81,49 @@ async def test_run_model_turn_commits_a_typed_turn_and_trace(monkeypatch):
     assert '[User] "you actually showed up"' in trace["context_input"]["transcript"]
 
 
+# ---- feel director (context-aware roll) ------------------------------------
+
+async def test_director_enabled_injects_its_roll_into_the_turn_prompt(monkeypatch):
+    conv_id = _seed_conversation()
+    store.update_conversation(conv_id, {"config": {"dialogue_feel_director_enabled": True}})
+    store.append_user_turn(conv_id, [{"type": "dialogue", "text": "you came back"}])
+
+    captured = {}
+
+    async def fake(job_id, job_dir, request, event_bus=None):
+        if request.steps[0].id == "feel_director":
+            (job_dir / "final_output.txt").write_text(
+                "Emotional shade: DIRECTOR-SHADE\nMove: DIRECTOR-MOVE\nCadence: DIRECTOR-CADENCE",
+                encoding="utf-8")
+        else:  # the turn job — capture the rendered turn-step prompt
+            captured["turn_prompt"] = request.steps[0].alternatives[0].prompt
+            (job_dir / "final_output.txt").write_text('[say] hey', encoding="utf-8")
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    turn, _ = await generator.run_model_turn(conv_id)
+    assert turn["items"][0]["text"] == "hey"
+    # the director's chosen feel (not a wildcard draw) reached the turn prompt
+    assert "DIRECTOR-SHADE" in captured["turn_prompt"]
+    assert "DIRECTOR-MOVE" in captured["turn_prompt"]
+
+
+async def test_director_failure_falls_back_without_sinking_the_reply(monkeypatch):
+    conv_id = _seed_conversation()
+    store.update_conversation(conv_id, {"config": {"dialogue_feel_director_enabled": True}})
+    store.append_user_turn(conv_id, [{"type": "dialogue", "text": "hi"}])
+
+    async def fake(job_id, job_dir, request, event_bus=None):
+        if request.steps[0].id == "feel_director":
+            raise RuntimeError("director LLM exploded")
+        (job_dir / "final_output.txt").write_text('[say] still here', encoding="utf-8")
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    turn, _ = await generator.run_model_turn(conv_id)
+    # director blew up but the reply still committed (wildcard fallback / no roll)
+    assert turn["items"][0]["text"] == "still here"
+    assert turn["items"][0]["status"] == "committed"
+
+
 # ---- failure path ----------------------------------------------------------
 
 async def test_empty_output_yields_a_system_error_turn(monkeypatch):

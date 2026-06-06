@@ -219,6 +219,54 @@ def test_migration_noop_when_absent():
     assert prompts.migrate_turn_variety_prompts() == []
 
 
+# ---- feel director (context-aware roll) ------------------------------------
+
+def test_parse_director_roll_extracts_and_orders():
+    raw = ("Sure! Here you go:\n"
+           "Move: deflect, then admit one thing\n"
+           "Emotional shade: guarded but curious\n"
+           "Cadence: clipped, one beat\n"
+           "(that's my pick)")
+    block = feel.parse_director_roll(raw)
+    # preamble/extra dropped; canonical order shade -> move -> cadence
+    assert block == (
+        "THIS TURN'S DIALOGUE FEEL — obey without mentioning it:\n"
+        "<dialogue_feel_roll>\n"
+        "Emotional shade: guarded but curious\n"
+        "Move: deflect, then admit one thing\n"
+        "Cadence: clipped, one beat\n"
+        "</dialogue_feel_roll>"
+    )
+
+
+def test_parse_director_roll_empty_when_unusable():
+    assert feel.parse_director_roll("no labels here, just prose") == ""
+    assert feel.parse_director_roll("") == ""
+
+
+def test_build_turn_request_uses_director_override_verbatim():
+    # an explicit roll override is used as-is (no wildcard draw needed)
+    override = feel.parse_director_roll("Emotional shade: cold\nMove: end it\nCadence: flat")
+    req = generator.build_turn_request(
+        _ctx(), ChainLLMConfig(api_base="http://x", model="m"),
+        dialogue_feel_roll=override, counterpart_id="mara")
+    tp = req.steps[0].alternatives[0].prompt
+    assert "Emotional shade: cold" in tp and "Move: end it" in tp
+
+
+async def test_director_roll_runs_one_step_job_and_parses(monkeypatch):
+    # stub the LLM: the director job writes three labeled lines
+    async def fake(job_id, job_dir, request, event_bus=None):
+        assert request.steps[0].id == "feel_director"
+        (job_dir / "final_output.txt").write_text(
+            "Emotional shade: wary\nMove: ask one sharp question\nCadence: short",
+            encoding="utf-8")
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+    block = await generator.direct_feel_roll(
+        _ctx(), ChainLLMConfig(api_base="http://x", model="m"), counterpart_id="mara")
+    assert "Emotional shade: wary" in block and "Move: ask one sharp question" in block
+
+
 # ---- build_context wires the stable blocks ---------------------------------
 
 def test_build_context_includes_voice_feel_and_examples():

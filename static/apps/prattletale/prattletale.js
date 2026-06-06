@@ -1366,6 +1366,7 @@
     const feel = cfg.dialogue_feel || {};
     $('pt-config-feel').checked = cfg.dialogue_feel_enabled !== false;
     $('pt-config-feel-roll').checked = cfg.dialogue_feel_roll_enabled !== false;
+    $('pt-config-feel-director').checked = !!cfg.dialogue_feel_director_enabled;
     $('pt-config-feel-cadence').value = feel.cadence || '';
     $('pt-config-feel-lexicon').value = feel.lexicon || '';
     $('pt-config-feel-tactic').value = feel.conversational_tactic || '';
@@ -1416,6 +1417,7 @@
       sfx_domains: $('pt-config-sfx-lewd').checked ? ['lewd'] : [],
       dialogue_feel_enabled: $('pt-config-feel').checked,
       dialogue_feel_roll_enabled: $('pt-config-feel-roll').checked,
+      dialogue_feel_director_enabled: $('pt-config-feel-director').checked,
       dialogue_feel: {
         cadence: $('pt-config-feel-cadence').value.trim(),
         lexicon: $('pt-config-feel-lexicon').value.trim(),
