@@ -44,6 +44,23 @@
     <section class="tab-pane" id="tab-speaking_style" hidden>
       <div id="speaking-fields"></div>
       <div id="hd-dialogue"></div>
+      <section class="hd-section" id="hd-voice-feel">
+        <div class="hd-section-head"><h3 class="hd-section-title">Voice Feel</h3></div>
+        <div class="hd-section-body">
+          <label class="hd-check"><input type="checkbox" id="hd-feel-enabled"> Use this character's dialogue feel in chats</label>
+          <p class="hd-section-hint">A conversational fingerprint Prattletale follows when texting as this character. Each field is optional.</p>
+          <label>Cadence<textarea id="hd-feel-cadence" rows="2" placeholder="e.g. clipped, dry; one short sentence then a sharper one"></textarea></label>
+          <label>Lexicon<textarea id="hd-feel-lexicon" rows="2" placeholder="e.g. plain, practical, tactile; avoids poetic abstraction"></textarea></label>
+          <label>Conversational tactic<textarea id="hd-feel-tactic" rows="2" placeholder="e.g. challenge the premise before answering"></textarea></label>
+          <label>Subtext rules<textarea id="hd-feel-subtext" rows="2" placeholder="e.g. anger shows as politeness; fear shows as jokes"></textarea></label>
+          <label>Avoid<textarea id="hd-feel-avoid" rows="2" placeholder="e.g. therapist voice, purple prose, meme slang"></textarea></label>
+          <label>Voice examples (one per line)<textarea id="hd-feel-examples" rows="4" placeholder="no. that's the easy answer, and you're too fond of easy answers."></textarea></label>
+          <div class="hd-voice-sample">
+            <button type="button" id="hd-feel-save">Save voice feel</button>
+            <span id="hd-feel-msg" role="status"></span>
+          </div>
+        </div>
+      </section>
       <section class="hd-section">
         <div class="hd-section-head"><h3 class="hd-section-title">Voice</h3></div>
         <div class="hd-section-body">

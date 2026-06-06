@@ -97,6 +97,23 @@ class DeviceUser(BaseModel):
     avatar_path: Optional[str] = None
 
 
+class DialogueFeel(BaseModel):
+    """Per-conversation **override** layer for the character's VoiceFeel fingerprint.
+
+    Same fields as ``hoodat.models.VoiceFeel`` minus ``enabled`` (the conversation
+    gate lives on ``ConversationConfig.dialogue_feel_enabled``). Every field is
+    empty by default; a non-empty field overrides the character's value, an empty
+    one falls through to the character default. ``examples`` (when non-empty)
+    replaces the character's voice examples for this chat."""
+
+    cadence: str = ""
+    lexicon: str = ""
+    conversational_tactic: str = ""
+    subtext_rules: str = ""
+    avoid: str = ""
+    examples: list[str] = Field(default_factory=list)
+
+
 class ConversationConfig(BaseModel):
     """Forward-compatibility block. Phase 1 reads only ``context_window_turns``.
 
@@ -122,6 +139,14 @@ class ConversationConfig(BaseModel):
     sfx_enabled: bool = False
     sfx_chance: float = 0.65
     sfx_domains: list[str] = Field(default_factory=list)
+    # Dialogue Feel System. ``dialogue_feel_enabled`` gates the stable VoiceFeel
+    # profile block (character default + the ``dialogue_feel`` override below);
+    # ``dialogue_feel_roll_enabled`` gates the per-turn weighted micro-style roll
+    # (Move / Emotional Shade / Cadence wildcards). Both default on; the rendered
+    # blocks simply collapse to empty when nothing is configured.
+    dialogue_feel_enabled: bool = True
+    dialogue_feel_roll_enabled: bool = True
+    dialogue_feel: DialogueFeel = Field(default_factory=DialogueFeel)
 
 
 class Conversation(BaseModel):

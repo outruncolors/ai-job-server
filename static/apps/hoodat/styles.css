@@ -160,6 +160,14 @@ button:disabled { opacity: 0.5; cursor: default; }
 .hd-voice-sample input { flex: 1; min-width: 200px; }
 #hd-voice-audio { width: 100%; max-width: 480px; }
 #hd-voice-msg { color: var(--color-text-muted); font-size: var(--font-size-xs); }
+/* ===== voice feel block ===== */
+#hd-voice-feel .hd-section-body { display: flex; flex-direction: column; gap: var(--gap-sm); }
+#hd-voice-feel label:not(.hd-check) { display: flex; flex-direction: column; gap: 4px; font-size: var(--font-size-label); color: var(--color-text-sub); }
+#hd-voice-feel textarea { width: 100%; box-sizing: border-box; }
+.hd-check { display: flex; align-items: center; gap: var(--gap-sm); font-size: var(--font-size-label); color: var(--color-text-sub); }
+.hd-check input { width: auto; }
+.hd-section-hint { color: var(--color-text-muted); font-size: var(--font-size-xs); margin: 0; }
+#hd-feel-msg { color: var(--color-text-muted); font-size: var(--font-size-xs); align-self: center; }
 .hd-sfx-identity-row { display: flex; gap: var(--gap-sm); max-width: 360px; }
 .hd-sfx-identity-row label { flex: 1 1 50%; display: flex; flex-direction: column; gap: 4px; font-size: var(--font-size-label); color: var(--color-text-sub); }
 .hd-sfx-identity-row select { width: 100%; box-sizing: border-box; }

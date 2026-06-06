@@ -1361,6 +1361,17 @@
     $('pt-config-sfx').checked = !!cfg.sfx_enabled;
     $('pt-config-sfx-chance').value = cfg.sfx_chance != null ? cfg.sfx_chance : 0.65;
     $('pt-config-sfx-lewd').checked = Array.isArray(cfg.sfx_domains) && cfg.sfx_domains.includes('lewd');
+    // Dialogue feel: toggles default on (undefined -> checked); override fields
+    // are blank unless this chat set them (a blank field uses the character default).
+    const feel = cfg.dialogue_feel || {};
+    $('pt-config-feel').checked = cfg.dialogue_feel_enabled !== false;
+    $('pt-config-feel-roll').checked = cfg.dialogue_feel_roll_enabled !== false;
+    $('pt-config-feel-cadence').value = feel.cadence || '';
+    $('pt-config-feel-lexicon').value = feel.lexicon || '';
+    $('pt-config-feel-tactic').value = feel.conversational_tactic || '';
+    $('pt-config-feel-subtext').value = feel.subtext_rules || '';
+    $('pt-config-feel-avoid').value = feel.avoid || '';
+    $('pt-config-feel-examples').value = Array.isArray(feel.examples) ? feel.examples.join('\n') : '';
     renderPluginToggles();
     $('pt-config-msg').textContent = '';
     $('pt-config-save').disabled = false;
@@ -1403,6 +1414,16 @@
       sfx_enabled: $('pt-config-sfx').checked,
       sfx_chance: sfxChance,
       sfx_domains: $('pt-config-sfx-lewd').checked ? ['lewd'] : [],
+      dialogue_feel_enabled: $('pt-config-feel').checked,
+      dialogue_feel_roll_enabled: $('pt-config-feel-roll').checked,
+      dialogue_feel: {
+        cadence: $('pt-config-feel-cadence').value.trim(),
+        lexicon: $('pt-config-feel-lexicon').value.trim(),
+        conversational_tactic: $('pt-config-feel-tactic').value.trim(),
+        subtext_rules: $('pt-config-feel-subtext').value.trim(),
+        avoid: $('pt-config-feel-avoid').value.trim(),
+        examples: $('pt-config-feel-examples').value.split('\n').map((s) => s.trim()).filter(Boolean),
+      },
     };
     const pluginChecks = document.querySelectorAll('.pt-plugin-check');
     if (pluginChecks.length) {

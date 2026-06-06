@@ -439,6 +439,18 @@ dialog input, dialog textarea, dialog select { width: 100%; box-sizing: border-b
   text-transform: uppercase; letter-spacing: 0.04em;
 }
 
+/* config dialog — Dialogue feel section */
+.pt-config-feel { margin: var(--gap-xs) 0; }
+.pt-config-feel > summary {
+  cursor: pointer; font-size: var(--font-size-xs); color: var(--color-text-dim);
+  text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 0;
+}
+.pt-config-feel[open] > summary { margin-bottom: var(--gap-sm); }
+.pt-config-hint {
+  font-size: var(--font-size-xs); color: var(--color-text-dim);
+  margin: 0 0 var(--gap-sm);
+}
+
 @media (max-width: 560px) {
   .pt-stack { max-width: 82%; }
   #pt-chat-view { height: calc(100dvh - 44px); }

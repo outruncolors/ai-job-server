@@ -48,7 +48,7 @@ __all__ = ["GenerationError", "TURN", "TURN_GUARD", "VARIETY", "parse_items"]
 # message-spam (a stack of bubbles per reply), and monotony (every reply the
 # same length / opening / move). So the bulk of the prompt is explicit texting
 # behavior, and the tagged-line output convention is a small section at the end.
-TURN = (
+_LEGACY_TURN_V1 = (
     "You are a real person having a live text-message conversation. You ARE the "
     "character described below — think, feel, want, and react as them. You are "
     "NOT an assistant, narrator, or author; never describe yourself in the third "
@@ -113,6 +113,31 @@ TURN = (
     "[say] where else would i be"
 )
 
+# The Dialogue Feel blocks + a small style floor, spliced into the turn prompt
+# right after the memory section. Each {{var.*}} block is **self-contained** (its
+# own header + tagged section, or empty) because compose() leaves an unresolved
+# var token literal — so an unset profile/roll simply vanishes instead of leaving
+# a dangling header. See app/apps/prattletale/feel.py.
+_FEEL_BLOCKS = (
+    "{{var.voice_feel}}\n\n"
+    "{{var.voice_examples}}\n\n"
+    "{{var.dialogue_feel_roll}}\n\n"
+    "STYLE FLOOR — keep the writing honest:\n"
+    "- Prefer concrete, physical detail over abstract emotion.\n"
+    "- Prefer one sharp line to a paragraph of explanation.\n"
+    "- When emotion rises, make the sentence shorter, not more poetic.\n"
+    "- Let silence, evasion, contradiction, and unfinished thoughts carry the "
+    "subtext.\n\n"
+)
+
+# The live turn prompt: the frozen v1 text with the feel blocks spliced in after
+# the <memory> section. Built by splice (not a second giant literal) so
+# _LEGACY_TURN_V1 stays a faithful copy for the update-if-unmodified migration.
+TURN = _LEGACY_TURN_V1.replace(
+    "<memory>\n{{memory}}\n</memory>\n\n",
+    "<memory>\n{{memory}}\n</memory>\n\n" + _FEEL_BLOCKS,
+)
+
 # A guard is a second "editor" LLM pass over the previous step's output (the
 # chain token {{previous}}). It does FORMAT HYGIENE ONLY — it must not rewrite
 # content or merge bubbles, so the parser stays trivial — plus it scrubs the two
@@ -156,7 +181,7 @@ register(
 # pattern. It keeps the character's voice and the tagged-line format, so the
 # guard + parser downstream are unaffected. Skipped per-conversation when
 # config.variety_pass_enabled is off (the entry can also be emptied in the UI).
-VARIETY = (
+_LEGACY_VARIETY_V1 = (
     "You are an editor improving one reply in an ongoing text-message roleplay so "
     "the conversation does not get monotonous.\n\n"
     "THE CHARACTER speaking:\n<character>\n{{var.character}}\n</character>\n\n"
@@ -184,6 +209,38 @@ VARIETY = (
     "per line). Output only the final tagged lines — nothing else."
 )
 
+# The live variety pass is a **Feel/Variety editor**: it fixes monotony AND weak,
+# generic voice, but stays an *editor*, not a second author — it preserves the
+# message shape (line count + tags) so the guard + parser downstream are
+# unaffected, and outputs the draft unchanged when it is already fresh and in
+# voice. The self-contained {{var.voice_feel}} / {{var.dialogue_feel_roll}} /
+# {{var.voice_examples}} blocks (same ones the turn step saw) give it the voice
+# target to sharpen toward; each is empty when nothing is configured.
+VARIETY = (
+    "You are an editor improving one reply in an ongoing text-message roleplay. "
+    "Fix only two things:\n"
+    "1. monotony — repeated openings, rhythm, length, or conversational move "
+    "versus this character's OWN recent messages in the transcript;\n"
+    "2. weak character voice — a reply so generic it could have been said by "
+    "anyone.\n\n"
+    "Do NOT change the message shape, the number of lines, or the line tags. Do "
+    "NOT make the reply longer or add explanation. Keep it a direct response to "
+    "the other person's last message. No emojis, no markdown.\n\n"
+    "{{var.voice_feel}}\n\n"
+    "{{var.dialogue_feel_roll}}\n\n"
+    "{{var.voice_examples}}\n\n"
+    "THE CONVERSATION SO FAR (oldest first):\n<transcript>\n{{var.transcript}}\n"
+    "</transcript>\n\n"
+    "THE DRAFTED REPLY (tagged lines, one message per line):\n"
+    "<draft>\n{{previous}}\n</draft>\n\n"
+    "If the draft is already fresh and strongly in this character's voice, output "
+    "it UNCHANGED. If it is repetitive or generic, rewrite only the wording to "
+    "sharpen the voice and break the pattern — change the opening, the rhythm, and "
+    "the conversational move — while keeping the same meaning, the same number of "
+    "lines, and the same line tags ([say]/[do]/[narration]/[feel]).\n\n"
+    "Output only the final tagged lines — nothing else."
+)
+
 register(
     "prattletale",
     "variety",
@@ -193,6 +250,41 @@ register(
     variables={},
     description="Rewrite a drafted reply if it repeats the structure of recent messages.",
 )
+
+
+# ---- prompt migration (update-if-unmodified) -------------------------------
+
+# (Prompt Pal key, frozen v1 default, current default). Prompt Pal seeds
+# if-absent and never clobbers, so a default change never reaches an install that
+# already has a stored copy. The migration below closes that gap *without*
+# clobbering edits: it only overwrites a stored copy that still equals the frozen
+# v1 text (i.e. the user never touched it).
+_PROMPT_MIGRATIONS: list[tuple[str, str, str]] = [
+    ("turn", _LEGACY_TURN_V1, TURN),
+    ("variety", _LEGACY_VARIETY_V1, VARIETY),
+]
+
+
+def migrate_turn_variety_prompts() -> list[str]:
+    """Bring **unedited** stored ``turn``/``variety`` prompts forward to the current
+    defaults. For each key with a changed default: if a stored copy exists and its
+    prompt text still equals the frozen v1 default, overwrite it with the new
+    default; otherwise leave it (edited copy kept; absent -> seed-if-absent handles
+    fresh installs). Returns the keys updated. Called once at lifespan."""
+    from ...prompt_pal import store as pp_store
+
+    updated: list[str] = []
+    for key, legacy, current in _PROMPT_MIGRATIONS:
+        if legacy == current:
+            continue  # default unchanged this version
+        entry = pp_store.get_by_app_key("prattletale", key)
+        if entry is None:
+            continue  # fresh install -> seed_registered() seeds the new default
+        stored_prompt = (entry.get("data") or {}).get("prompt") or ""
+        if stored_prompt == legacy:
+            pp_store.update_entry(entry["id"], prompt=current)
+            updated.append(key)
+    return updated
 
 
 # ---- canonical-message parser ----------------------------------------------

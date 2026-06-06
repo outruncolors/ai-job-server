@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from ..hoodat.characters_store import get_character
 from . import settings_store, store, voice
 from .generator import run_model_turn
-from .models import ConversationConfig, DeviceUser
+from .models import ConversationConfig, DeviceUser, DialogueFeel
 from .plugins import registry as plugin_registry
 
 router = APIRouter(prefix="/v1/apps/prattletale", tags=["prattletale"])
@@ -50,6 +50,10 @@ class ConfigPatch(BaseModel):
     sfx_enabled: Optional[bool] = None
     sfx_chance: Optional[float] = None
     sfx_domains: Optional[list[str]] = None
+    dialogue_feel_enabled: Optional[bool] = None
+    dialogue_feel_roll_enabled: Optional[bool] = None
+    # Full replace of the override block (the frontend sends the whole object).
+    dialogue_feel: Optional[DialogueFeel] = None
 
 
 class ConversationUpdate(ConfigPatch):

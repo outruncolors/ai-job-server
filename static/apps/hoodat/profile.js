@@ -859,6 +859,42 @@
     enable.addEventListener('change', save);
   }
 
+  // ---- voice feel ----
+  // The character's stable dialogue fingerprint (consumed by Prattletale). A
+  // simple form with an explicit Save: PUT replaces `speaking_style.voice_feel`
+  // wholesale (nested-section merge keeps the other speaking_style fields).
+  function renderVoiceFeel() {
+    const vf = (character.speaking_style || {}).voice_feel || {};
+    $('hd-feel-enabled').checked = !!vf.enabled;
+    $('hd-feel-cadence').value = vf.cadence || '';
+    $('hd-feel-lexicon').value = vf.lexicon || '';
+    $('hd-feel-tactic').value = vf.conversational_tactic || '';
+    $('hd-feel-subtext').value = vf.subtext_rules || '';
+    $('hd-feel-avoid').value = vf.avoid || '';
+    $('hd-feel-examples').value = Array.isArray(vf.examples) ? vf.examples.join('\n') : '';
+    const msg = $('hd-feel-msg');
+    const save = async () => {
+      const next = {
+        enabled: $('hd-feel-enabled').checked,
+        cadence: $('hd-feel-cadence').value.trim(),
+        lexicon: $('hd-feel-lexicon').value.trim(),
+        conversational_tactic: $('hd-feel-tactic').value.trim(),
+        subtext_rules: $('hd-feel-subtext').value.trim(),
+        avoid: $('hd-feel-avoid').value.trim(),
+        examples: $('hd-feel-examples').value.split('\n').map((s) => s.trim()).filter(Boolean),
+      };
+      if (msg) msg.textContent = 'Saving…';
+      try {
+        await api(`${APP}/characters/${charId}`, 'PUT', { speaking_style: { voice_feel: next } });
+        setLocal('speaking_style', 'voice_feel', next);
+        if (msg) msg.textContent = 'Saved';
+      } catch (err) {
+        if (msg) msg.textContent = 'Save failed: ' + err.message;
+      }
+    };
+    $('hd-feel-save').addEventListener('click', save);
+  }
+
   // Synthesize `text` in the given voice preset and play it through `audio`.
   // Shared by the Speaking Style sample and the per-answer 🔊 button.
   async function playLine(text, audio, msg, presetId) {
@@ -1105,6 +1141,7 @@
     renderExperiences();
     renderSection('speaking_style', $('speaking-fields'));
     renderDialogue();
+    renderVoiceFeel();
     renderQA();
     await loadVoice();
     await loadSfx();

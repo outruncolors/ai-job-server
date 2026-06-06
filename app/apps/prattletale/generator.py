@@ -38,6 +38,7 @@ from ...wildcards import resolve_wildcards
 from ..hoodat.characters_store import get_character
 from ..hoodat.prompts import render_character_context
 from . import store
+from .feel import render_voice_examples, render_voice_feel, resolve_dialogue_feel_roll
 from .models import Author, ItemType
 from .voice import reveal_schedule, synthesize_turn
 
@@ -178,6 +179,11 @@ def build_context(conversation: dict, character: dict, transcript: dict) -> dict
         "role_instructions": (conversation.get("role_instructions") or "").strip(),
         "user_persona": persona or _EMPTY_PERSONA,
         "transcript": transcript_text,
+        # Dialogue Feel System: the stable profile + concrete examples. Each is a
+        # self-contained block (or "") so the turn/variety prompts can drop them in
+        # directly. The per-turn *roll* (RNG) is added later in build_turn_request.
+        "voice_feel": render_voice_feel(character, conversation),
+        "voice_examples": render_voice_examples(character, conversation),
         "_mem_query": _latest_user_text(recent) or transcript_text,
     }
 
@@ -189,6 +195,7 @@ def build_turn_request(
     llm: ChainLLMConfig,
     *,
     variety: bool = True,
+    dialogue_feel_roll_enabled: bool = True,
     counterpart_id: str = "",
     session_id: str = "",
 ) -> ChainJobRequest:
@@ -207,10 +214,16 @@ def build_turn_request(
     (fail-soft — an empty/disabled subsystem yields an empty block). Only the turn
     step retrieves; the variety/guard passes run over ``{{previous}}``.
     """
+    # The per-turn Dialogue Feel roll (a fresh weighted draw of the Move / Shade /
+    # Cadence wildcards, character-override aware) — added to the prompt vars so
+    # both the turn and the variety step see the same roll. Empty when disabled or
+    # the wildcards are absent.
+    roll = resolve_dialogue_feel_roll(counterpart_id, enabled=dialogue_feel_roll_enabled)
+    prompt_vars = {**context_vars, "dialogue_feel_roll": roll}
     # resolve_wildcards expands %%name%% tokens (e.g. the per-turn message-shape
     # pick) with a fresh weighted draw each turn — the server-side equivalent of
     # the frontend wildcard pass, which this prompt never goes through.
-    turn_prompt = resolve_wildcards(get_text("prattletale", "turn", variables=context_vars))
+    turn_prompt = resolve_wildcards(get_text("prattletale", "turn", variables=prompt_vars))
     memory = {
         "enabled": True,
         "query": "{{var.mem_query}}",
@@ -230,7 +243,7 @@ def build_turn_request(
     steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory)]
     number = 2
     if variety:
-        variety_prompt = get_text("prattletale", "variety", variables=context_vars)
+        variety_prompt = get_text("prattletale", "variety", variables=prompt_vars)
         if variety_prompt.strip():
             steps.append(_llm_step(number, "variety", "Variety", resolve_wildcards(variety_prompt)))
             number += 1
@@ -344,11 +357,14 @@ async def run_model_turn(
             )
         resolved = _resolve_llm(llm)
         context_vars = build_context(conversation, character, transcript)
-        variety = bool((conversation.get("config") or {}).get("variety_pass_enabled", True))
+        config = conversation.get("config") or {}
+        variety = bool(config.get("variety_pass_enabled", True))
+        roll_enabled = bool(config.get("dialogue_feel_roll_enabled", True))
         request = build_turn_request(
             context_vars,
             resolved,
             variety=variety,
+            dialogue_feel_roll_enabled=roll_enabled,
             counterpart_id=conversation["counterpart_character_id"],
             session_id=conversation_id,
         )

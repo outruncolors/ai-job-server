@@ -148,6 +148,26 @@ class Background(BaseModel):
     skills: list[str] = Field(default_factory=list)
 
 
+class VoiceFeel(BaseModel):
+    """A character's stable dialogue *fingerprint* — small levers that interact to
+    make the character recognizable in actual text-message dialogue (consumed by
+    Prattletale's turn prompt, which can override any field per-conversation).
+
+    Additive/optional like ``SpeakingStyle.sfx``: absent on existing characters,
+    frontend-owned (PUT wholesale like ``dialogue_examples``), and **not** in
+    ``FIELD_SPECS`` (not LLM-generatable for now). When ``enabled`` is False the
+    character contributes no feel fields (a per-conversation override can still
+    supply them)."""
+
+    enabled: bool = False
+    cadence: str = ""
+    lexicon: str = ""
+    conversational_tactic: str = ""
+    subtext_rules: str = ""
+    avoid: str = ""
+    examples: list[str] = Field(default_factory=list)
+
+
 class SpeakingStyle(BaseModel):
     description: str = ""
     voice_preset_id: Optional[str] = None
@@ -157,6 +177,8 @@ class SpeakingStyle(BaseModel):
     # SFX/Emotes binding: {"emotes_identity": "<Identity value>", "enabled": bool}.
     # Optional — absent on existing characters; not LLM-generatable (not in FIELD_SPECS).
     sfx: Optional[dict] = None
+    # Stable dialogue fingerprint (see VoiceFeel). Optional/additive.
+    voice_feel: Optional[VoiceFeel] = None
 
 
 class Character(BaseModel):

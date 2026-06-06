@@ -231,10 +231,22 @@ async def lifespan(app: FastAPI):
     # Seed Prattletale's default message-style wildcard (seed-if-absent; the user
     # can retune the distribution in the Wildcards UI). Best-effort.
     try:
-        from .apps.prattletale.seed import seed_message_style_wildcard
+        from .apps.prattletale.seed import (
+            seed_dialogue_feel_wildcards,
+            seed_message_style_wildcard,
+        )
         seed_message_style_wildcard()
+        seed_dialogue_feel_wildcards()
     except Exception as exc:
         print(f"prattletale wildcard seeding skipped: {exc}")
+    # Bring unedited stored turn/variety prompts forward to the current defaults
+    # (update-if-unmodified — never clobbers a user's Prompt Pal edits). Runs after
+    # seed_registered() above so fresh installs are already seeded. Best-effort.
+    try:
+        from .apps.prattletale.prompts import migrate_turn_variety_prompts
+        migrate_turn_variety_prompts()
+    except Exception as exc:
+        print(f"prattletale prompt migration skipped: {exc}")
     # Import Prattletale plugin packages (so their register() runs) and seed each
     # plugin's Prompt Pal entries. Seed-if-absent, best-effort. Beside the Prompt
     # Pal + wildcard seeding above so a plugin's prompts are editable in the UI.

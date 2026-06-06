@@ -150,6 +150,20 @@
       <label>SFX chance (0–1)
         <input type="number" id="pt-config-sfx-chance" min="0" max="1" step="0.05">
       </label>
+      <details class="pt-config-feel">
+        <summary>🎭 Dialogue feel</summary>
+        <div class="pt-create-toggles">
+          <label class="pt-check"><input type="checkbox" id="pt-config-feel"> Voice feel profile</label>
+          <label class="pt-check"><input type="checkbox" id="pt-config-feel-roll"> Per-turn feel rolls</label>
+        </div>
+        <p class="pt-config-hint">Overrides for this chat. Leave a field blank to use the character's default.</p>
+        <label>Cadence<textarea id="pt-config-feel-cadence" rows="2"></textarea></label>
+        <label>Lexicon<textarea id="pt-config-feel-lexicon" rows="2"></textarea></label>
+        <label>Conversational tactic<textarea id="pt-config-feel-tactic" rows="2"></textarea></label>
+        <label>Subtext rules<textarea id="pt-config-feel-subtext" rows="2"></textarea></label>
+        <label>Avoid<textarea id="pt-config-feel-avoid" rows="2"></textarea></label>
+        <label>Voice examples (one per line)<textarea id="pt-config-feel-examples" rows="4"></textarea></label>
+      </details>
       <div id="pt-config-plugins" class="pt-config-plugins"></div>
       <div id="pt-config-msg" class="msg"></div>
       <div class="dlg-actions">

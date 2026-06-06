@@ -357,8 +357,9 @@ def render_character_context(doc: dict) -> str:
     for section in ("personality", "background", "speaking_style"):
         block = doc.get(section) or {}
         for field, value in block.items():
-            # voice_preset_id is plumbing; dialogue_examples gets its own block.
-            if field in ("voice_preset_id", "dialogue_examples"):
+            # voice_preset_id is plumbing; dialogue_examples gets its own block;
+            # voice_feel is a structured block Prattletale renders on its own.
+            if field in ("voice_preset_id", "dialogue_examples", "voice_feel"):
                 continue
             emit(f"{section}.{field}", value)
     examples = ((doc.get("speaking_style") or {}).get("dialogue_examples")) or []
