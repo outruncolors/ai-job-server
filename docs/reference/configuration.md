@@ -108,11 +108,12 @@ Managed through [Server / LLM](../management/server/llm.md).
 
 ## System dependencies
 
-- **ffmpeg** — required on the **web** node for the Speech-to-Text feature
-  (`POST /v1/jobs/stt`). Uploaded/recorded audio is transcoded to 16 kHz mono WAV
-  before being sent to the multimodal model. Install with `apt-get install -y ffmpeg`.
-  Without it, an STT job ends in `error` with a clear message in its `logs.txt`; the
-  Vision feature is unaffected.
+- **ffmpeg** — required on the **web** node for Speech-to-Text (`POST /v1/jobs/stt`,
+  audio → 16 kHz mono WAV) and for Vision uploads whose format llama.cpp can't decode
+  natively — notably **WebP**, which is transcoded to PNG first (`POST /v1/jobs/vision`;
+  PNG/JPEG pass through untouched). Install with `apt-get install -y ffmpeg`. Without it,
+  an STT job — or a WebP Vision job — ends in `error` with a clear message in its
+  `logs.txt`; PNG/JPEG Vision jobs are unaffected.
 
 ## Vision / Speech-to-Text (multimodal)
 

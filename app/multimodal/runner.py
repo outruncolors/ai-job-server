@@ -17,7 +17,13 @@ from pathlib import Path
 from typing import Any
 
 from ..jobs import _append_log, _update_artifacts, _write_status
-from .service import run_stt, run_vision, transcode_to_wav
+from .service import (
+    VISION_NATIVE_MIMES,
+    run_stt,
+    run_vision,
+    transcode_image_to_png,
+    transcode_to_wav,
+)
 
 
 async def execute_vision_job(job_id: str, job_dir: Path, request: Any) -> None:
@@ -27,9 +33,16 @@ async def execute_vision_job(job_id: str, job_dir: Path, request: Any) -> None:
 
     try:
         image_bytes = (job_dir / request.input_filename).read_bytes()
+        mime = (request.mime or "").lower()
+        # llama.cpp's image loader can't decode webp (and friends) — transcode to
+        # PNG first, or the model server 400s on "failed to load image".
+        if mime not in VISION_NATIVE_MIMES:
+            _append_log(job_dir, f"[vision] converting {mime or 'image'} → image/png (ffmpeg)…\n")
+            image_bytes = await transcode_image_to_png(image_bytes)
+            mime = "image/png"
         _append_log(job_dir, "[swap] ensuring multimodal model is loaded…\n")
         _append_log(job_dir, "[generate] running vision inference…\n")
-        text = await run_vision(image_bytes, request.mime, request.prompt)
+        text = await run_vision(image_bytes, mime, request.prompt)
 
         output_path = job_dir / "output.txt"
         output_path.write_text(text, encoding="utf-8")

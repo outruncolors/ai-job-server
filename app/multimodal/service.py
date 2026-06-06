@@ -20,6 +20,16 @@ class TranscodeError(RuntimeError):
     """Raised when ffmpeg fails to convert the uploaded audio to WAV."""
 
 
+class ImageTranscodeError(RuntimeError):
+    """Raised when ffmpeg fails to convert an uploaded image to PNG."""
+
+
+# Image mimes llama.cpp's multimodal loader (stb_image) decodes natively. Notably
+# absent: WebP — a data:image/webp URL makes the server 400 with "failed to load
+# image", so anything outside this set is transcoded to PNG first.
+VISION_NATIVE_MIMES = {"image/png", "image/jpeg", "image/jpg"}
+
+
 def _content_text(choice: dict) -> str:
     try:
         content = choice["message"]["content"]
@@ -60,6 +70,40 @@ async def transcode_to_wav(raw: bytes) -> bytes:
     if proc.returncode != 0 or not out:
         msg = (err or b"").decode("utf-8", "replace").strip() or "unknown error"
         raise TranscodeError(f"ffmpeg failed to decode audio: {msg}")
+    return out
+
+
+async def transcode_image_to_png(raw: bytes) -> bytes:
+    """Decode arbitrary image bytes (webp, gif, …) and re-encode the first frame
+    as PNG, which llama.cpp's image loader always accepts.
+
+    Streams via ffmpeg stdin/stdout so nothing touches disk (mirrors
+    :func:`transcode_to_wav`).
+    """
+    if not raw:
+        raise ImageTranscodeError("empty image upload")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel", "error",
+            "-i", "pipe:0",
+            "-frames:v", "1",
+            "-f", "image2pipe",
+            "-vcodec", "png",
+            "pipe:1",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except FileNotFoundError as exc:  # ffmpeg not installed
+        raise ImageTranscodeError(
+            "ffmpeg not found — install it on this node to accept webp/other image formats"
+        ) from exc
+    out, err = await proc.communicate(input=raw)
+    if proc.returncode != 0 or not out:
+        msg = (err or b"").decode("utf-8", "replace").strip() or "unknown error"
+        raise ImageTranscodeError(f"ffmpeg failed to decode image: {msg}")
     return out
 
 

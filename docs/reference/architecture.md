@@ -84,7 +84,8 @@ app/
   multimodal/            Vision (image) + Speech-to-Text via the llm node's multimodal preset
     swap.py              ensure_multimodal_loaded() — swap to multimodal_preset, return chat cfg
     service.py           run_vision()/run_stt() (build image_url/input_audio messages),
-                         transcode_to_wav() (ffmpeg → 16 kHz mono WAV)
+                         transcode_to_wav() (ffmpeg → 16 kHz mono WAV),
+                         transcode_image_to_png() (ffmpeg; webp/etc → PNG for the loader)
     runner.py            execute_vision_job()/execute_stt_job() — JobQueue runners
                          (status/logs/output.txt); routes are POST /v1/jobs/{vision,stt}
                          in app/main.py (not capability-gated)

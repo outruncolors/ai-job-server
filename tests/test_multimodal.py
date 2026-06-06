@@ -56,6 +56,41 @@ async def test_transcode_to_wav_nonzero_returncode(monkeypatch):
         await service.transcode_to_wav(b"data")
 
 
+# ── transcode_image_to_png ──────────────────────────────────────────────────
+
+
+async def test_transcode_image_to_png_ok(monkeypatch):
+    async def fake_exec(*args, **kwargs):
+        return _FakeProc(out=b"\x89PNG\r\n\x1a\n")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    out = await service.transcode_image_to_png(b"RIFF....WEBP")
+    assert out == b"\x89PNG\r\n\x1a\n"
+
+
+async def test_transcode_image_to_png_empty():
+    with pytest.raises(service.ImageTranscodeError):
+        await service.transcode_image_to_png(b"")
+
+
+async def test_transcode_image_to_png_ffmpeg_missing(monkeypatch):
+    async def fake_exec(*args, **kwargs):
+        raise FileNotFoundError("ffmpeg")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    with pytest.raises(service.ImageTranscodeError, match="ffmpeg not found"):
+        await service.transcode_image_to_png(b"data")
+
+
+async def test_transcode_image_to_png_nonzero(monkeypatch):
+    async def fake_exec(*args, **kwargs):
+        return _FakeProc(out=b"", err=b"bad image", returncode=1)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    with pytest.raises(service.ImageTranscodeError, match="bad image"):
+        await service.transcode_image_to_png(b"data")
+
+
 # ── resolve_multimodal_preset ───────────────────────────────────────────────
 
 
@@ -254,6 +289,38 @@ async def test_execute_vision_job_error_marks_status(patch_jobs_base, monkeypatc
     assert "no llm node" in status["error"]
     assert "[error]" in (job_dir / "logs.txt").read_text()
     assert not (job_dir / "output.txt").exists()
+
+
+async def test_execute_vision_job_transcodes_webp(patch_jobs_base, monkeypatch):
+    from app.models import VisionJobRequest
+    from app.multimodal import runner as mm
+    monkeypatch.setattr(mm, "transcode_image_to_png", AsyncMock(return_value=b"\x89PNG-converted"))
+    monkeypatch.setattr(mm, "run_vision", AsyncMock(return_value="a webp cat"))
+
+    requested = {"prompt": "", "mime": "image/webp", "input_filename": "input.webp"}
+    job_id, job_dir = _make_job(patch_jobs_base, "vision", requested, "input.webp", b"RIFFWEBP")
+    await mm.execute_vision_job(job_id, job_dir, VisionJobRequest(**requested))
+
+    mm.transcode_image_to_png.assert_awaited_once_with(b"RIFFWEBP")
+    # run_vision receives the converted PNG bytes + normalized mime, not the webp.
+    assert mm.run_vision.await_args.args[:2] == (b"\x89PNG-converted", "image/png")
+    assert (job_dir / "output.txt").read_text() == "a webp cat"
+    assert "converting image/webp" in (job_dir / "logs.txt").read_text()
+
+
+async def test_execute_vision_job_png_passthrough(patch_jobs_base, monkeypatch):
+    from app.models import VisionJobRequest
+    from app.multimodal import runner as mm
+    monkeypatch.setattr(mm, "transcode_image_to_png", AsyncMock())
+    monkeypatch.setattr(mm, "run_vision", AsyncMock(return_value="ok"))
+
+    requested = {"prompt": "", "mime": "image/png", "input_filename": "input.png"}
+    job_id, job_dir = _make_job(patch_jobs_base, "vision", requested, "input.png", b"\x89PNG")
+    await mm.execute_vision_job(job_id, job_dir, VisionJobRequest(**requested))
+
+    # png is native — no ffmpeg call, original bytes pass straight through.
+    mm.transcode_image_to_png.assert_not_awaited()
+    assert mm.run_vision.await_args.args[:2] == (b"\x89PNG", "image/png")
 
 
 async def test_execute_stt_job_transcodes_and_writes(patch_jobs_base, monkeypatch):
