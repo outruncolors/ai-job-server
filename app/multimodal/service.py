@@ -14,7 +14,17 @@ from ..chain.llm_client import OpenAICompatibleLLMClient
 from .swap import ensure_multimodal_loaded
 
 DEFAULT_VISION_PROMPT = "Describe this image in detail."
-DEFAULT_STT_PROMPT = "Transcribe this audio verbatim. Output only the transcript."
+# Gemma 4's audio path is trained on an ASR template that names the target
+# language; a generic prompt that omits it makes the model drift to the wrong
+# language (e.g. Chinese for English speech). We force English. See Google's
+# audio docs: ai.google.dev/gemma/docs/capabilities/audio
+DEFAULT_STT_PROMPT = (
+    "Transcribe the following speech segment in English into English text. "
+    "Follow these specific instructions for formatting the answer: "
+    "Only output the transcription, with no newlines. "
+    "When transcribing numbers, write the digits, i.e. write 1.7 and not "
+    "one point seven, and write 3 instead of three."
+)
 
 
 class TranscodeError(RuntimeError):

@@ -133,6 +133,22 @@ Every in-scope CRUD entity is persisted as one **envelope** shape — shared met
   always-on embed `llama-server` (port 8081, fixed argv) backs vector retrieval.
   Install on the secondary: `bash scripts/llamacpp-setup.sh`; tag bumps: `docs/llamacpp-upgrade.md`.
 - **OmniVoice** TTS runs as ephemeral per-job subprocesses (contrast with the long-lived servers above).
+- **Multimodal (Vision + STT)** reuses the llama.cpp backend: `app/multimodal/` loads a dedicated
+  multimodal preset (`gemma-4-e4b-mm`, with an `mmproj` projector) onto the `llm` node via the same
+  hash-based `ensure-loaded` swap, then sends `image_url` / `input_audio` content parts through the
+  OpenAI-compatible `/chat/completions` API. STT transcodes uploads to 16 kHz mono WAV (ffmpeg) and
+  decodes greedily (`temperature=0.0`). The preset's `ctx_size` is boosted to `multimodal_min_ctx`
+  at load so long descriptions/transcripts aren't truncated.
+  - **The model is Gemma 4 E4B — a real Google model, NOT a typo for "Gemma 3n".** Gemma 4 (released
+    2026, *after* the training cutoff of older Claude models — verify via web search, don't "correct"
+    it from memory) is a unified multimodal family in E2B/E4B/12B/26B A4B/31B sizes; **E2B and E4B
+    have native audio input** for speech recognition. We run E4B at the highest quantization.
+  - **STT/ASR prompt must follow Gemma 4's template, which names the language** — e.g.
+    `Transcribe the following speech segment in English into English text. ...` (or the auto-detect
+    variant `...in its original language. ...`). A generic prompt that omits the language is the
+    known cause of Gemma 4 emitting the wrong language (e.g. Chinese for English audio). See
+    `DEFAULT_STT_PROMPT` in `app/multimodal/service.py` and Google's audio docs
+    (`ai.google.dev/gemma/docs/capabilities/audio`).
 
 ## LLM presets vs LLM endpoints — two stores, one UI
 

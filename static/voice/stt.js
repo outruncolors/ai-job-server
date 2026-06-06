@@ -80,7 +80,8 @@ async function submitStt() {
 
   const fd = new FormData();
   fd.append('file', _sttBlob, _sttBlob._filename || 'audio.webm');
-  fd.append('prompt', document.getElementById('stt-prompt').value || '');
+  // No prompt field — the server applies its forced-English ASR prompt.
+  fd.append('prompt', '');
 
   if (_sttPoll) { _sttPoll.stop(); _sttPoll = null; }
   btn.disabled = true;
