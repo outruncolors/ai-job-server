@@ -6,5 +6,7 @@ async function api(path, method = 'GET', body = null) {
   if (body !== null) opts.body = JSON.stringify(body);
   const r = await fetch(url, opts);
   if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  if (r.status === 204) return null;          // No Content (e.g. DELETE)
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;      // tolerate empty bodies
 }

@@ -1,0 +1,35 @@
+{
+  "id": "writing_styles",
+  "name": "Writing Styles",
+  "description": "A single Writing Style wildcard with 15 distinct flavors — roll one to retell any situation in a fresh voice.",
+  "tags": ["Pack", "writing-styles"],
+  "items": [
+    {
+      "schema_version": 1,
+      "type": "wildcard",
+      "id": "writing_style_pack_writing_styles",
+      "name": "Writing Style",
+      "description": "Stylistic voice/flavor to render a scene or situation in. Use as 'Writing style: %%Writing Style%%' to retell the same situation different ways.",
+      "tags": ["Pack", "writing-styles"],
+      "data": {
+        "entries": [
+          { "text": "Hardboiled noir — rain-slicked streets, cigarette smoke, and clipped, cynical narration where everyone has an angle" },
+          { "text": "Whimsical fairy tale — once-upon-a-time cadence, threes and repetitions, and a gentle moral humming beneath the surface" },
+          { "text": "Spare Hemingway minimalism — short declarative sentences, concrete nouns, no adverbs, the real feeling left unsaid under the iceberg" },
+          { "text": "Victorian Gothic — long candlelit sentences, dread and decay, crumbling estates and the weight of secrets in every shadow" },
+          { "text": "Breathless tabloid sensationalism — ALL-CAPS shockers, exclamation points, lurid speculation, and a cliffhanger every other line" },
+          { "text": "Dry technical manual — numbered steps, passive voice, precise tolerances, and an utter refusal to acknowledge any human emotion" },
+          { "text": "Epic high-fantasy saga — archaic diction, sweeping prophecy, named swords and ancient bloodlines, the fate of kingdoms in the balance" },
+          { "text": "Beat-poetry stream of consciousness — breathless run-ons, jazz rhythm, lowercase urgency, & sudden holy ampersand epiphanies" },
+          { "text": "Cozy children's bedtime story — warm simple words, soft repetition, friendly animals, and everything turning out gently okay" },
+          { "text": "Cyberpunk pulp — neon-drenched megacity grime, chrome and wetware, corporate dread, and slang that drips with attitude" },
+          { "text": "Shakespearean blank verse — iambic pentameter, thee and thou, soaring metaphor, and asides delivered straight to the audience" },
+          { "text": "Corporate press release — upbeat synergy-speak, bullet-point wins, carefully hedged optimism, and a quote from a smiling executive" },
+          { "text": "Solemn true-crime documentary narration — measured present-tense voiceover, ominous foreshadowing, and 'but what investigators didn't yet know...'" },
+          { "text": "Magical realism — the impossible reported with a shrug, marigolds and memory, time folding softly, the miraculous treated as ordinary weather" },
+          { "text": "Deadpan absurdist comedy — flat understated delivery, escalating nonsense treated as routine, and a punchline that arrives sideways" }
+        ]
+      }
+    }
+  ]
+}

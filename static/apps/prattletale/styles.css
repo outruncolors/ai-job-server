@@ -46,28 +46,70 @@ button:disabled { opacity: 0.5; cursor: default; }
 .pt-av-sm { width: 32px; height: 32px; font-size: 0.9rem; }
 
 /* ===== conversation list ===== */
-#pt-header { padding: var(--gap-lg) var(--panel-pad-h) var(--gap-sm); border-bottom: 1px solid var(--color-border-mid); }
+/* The list view is a flex column pinned to the viewport so the conversation grid
+   (#pt-list) scrolls internally rather than growing the page. */
+#pt-list-view[hidden] { display: none !important; }
+#pt-list-view { display: flex; flex-direction: column; height: calc(100vh - 44px); }
+#pt-header { padding: var(--gap-lg) var(--panel-pad-h) var(--gap-sm); border-bottom: 1px solid var(--color-border-mid); flex: 0 0 auto; }
 #pt-header h1 { margin: 6px 0 0; font-size: 1.3rem; }
-#pt-toolbar { display: flex; gap: var(--gap-sm); padding: var(--gap-md) var(--panel-pad-h); }
+#pt-toolbar { display: flex; gap: var(--gap-sm); padding: var(--gap-md) var(--panel-pad-h); flex: 0 0 auto; }
 
-#pt-list { display: flex; flex-direction: column; padding: 0 var(--panel-pad-h) var(--gap-xl); }
+#pt-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--panel-pad-h) var(--gap-xl); }
 .pt-empty { color: var(--color-text-muted); padding: var(--gap-lg); }
 
-.pt-row {
-  display: flex; align-items: center; gap: var(--gap-md);
-  background: transparent; color: var(--color-text); text-align: left;
-  border: none; border-bottom: 1px solid var(--color-border-mid);
-  border-radius: 0; padding: var(--gap-md) 4px; cursor: pointer; width: 100%;
+/* Delete-mode toolbar toggle, when active */
+#pt-delete-mode.active {
+  background: var(--pt-action-bot); color: #fff;
+  border-color: var(--pt-action-top);
 }
-.pt-row:hover { background: var(--color-bg-panel); }
-.pt-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.pt-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gap-sm); }
-.pt-row-name { font-weight: bold; }
-.pt-row-time { color: var(--color-text-dim); font-size: var(--font-size-xs); flex: 0 0 auto; }
-.pt-row-preview {
-  color: var(--color-text-muted); font-size: var(--font-size-sm);
+
+/* ----- character groups ----- */
+.pt-group { padding: var(--gap-md) 0; border-bottom: 1px solid var(--color-border-mid); }
+.pt-group:last-child { border-bottom: none; }
+.pt-group-head {
+  display: flex; align-items: center; gap: var(--gap-sm);
+  padding: 2px 0 var(--gap-sm); position: sticky; top: 0; z-index: 1;
+  background: var(--color-bg);
+}
+.pt-group-name { font-weight: bold; font-size: 1.05rem; }
+.pt-group-count {
+  color: var(--color-text-dim); font-size: var(--font-size-xs);
+  background: var(--color-bg-raised); border-radius: 999px; padding: 1px 8px;
+}
+
+/* ----- conversation card grid ----- */
+.pt-conv-grid {
+  display: grid; gap: var(--gap-md);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.pt-card {
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--color-bg-panel); color: var(--color-text); text-align: left;
+  border: 1px solid var(--color-border-mid); border-radius: 8px;
+  padding: var(--gap-md); cursor: pointer; min-width: 0;
+}
+.pt-card:hover { background: var(--color-bg-raised); border-color: var(--color-border-hi); }
+.pt-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gap-sm); }
+.pt-card-title {
+  font-weight: bold; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.pt-card-time { color: var(--color-text-dim); font-size: var(--font-size-xs); flex: 0 0 auto; }
+.pt-card-preview {
+  color: var(--color-text-muted); font-size: var(--font-size-sm);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ----- delete mode ----- */
+#pt-list.delete-mode .pt-card { cursor: not-allowed; }
+#pt-list.delete-mode .pt-card:hover { border-color: var(--pt-action-top); }
+#pt-list.delete-mode .pt-card.armed,
+#pt-list.delete-mode .pt-card.armed:hover {
+  background: var(--pt-action-bot); border-color: #ff5b5b; color: #fff;
+}
+#pt-list.delete-mode .pt-card.armed .pt-card-time,
+#pt-list.delete-mode .pt-card.armed .pt-card-preview { color: #ffd6d6; }
 
 /* ===== chat view layout ===== */
 /* `hidden` must stay authoritative — an unguarded `display:flex` would override

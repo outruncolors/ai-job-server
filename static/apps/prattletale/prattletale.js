@@ -186,15 +186,45 @@
     }
   }
 
+  // Delete mode: a toolbar toggle puts the list into a destructive state where the
+  // first click on a card *arms* it (turns red) and the second click deletes it.
+  let _deleteMode = false;
+
   async function loadList() {
     const list = $('pt-list');
     list.setAttribute('aria-busy', 'true');
     await loadCharacters();
     const data = await api(`${APP}/conversations`);
     _conversations = data.conversations || [];
-    _conversations.sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+    setDeleteMode(false);  // never restore the list into delete mode
     renderList();
     list.setAttribute('aria-busy', 'false');
+  }
+
+  // Group conversations by counterpart character. Characters are ordered by their
+  // most-recent conversation; within a character, conversations are most-recent first.
+  function groupConversations() {
+    const ts = (c) => String(c.updated_at || '');
+    const groups = new Map();  // characterId -> {id, name, avatarPath, convs[]}
+    _conversations.forEach((c) => {
+      const id = c.counterpart_character_id || '';
+      let g = groups.get(id);
+      if (!g) {
+        const cp = counterpartOf(c);
+        g = {
+          id,
+          name: cp ? cp.name : (c.title || 'Unknown character'),
+          avatarPath: cp && cp.avatar_path,
+          convs: [],
+        };
+        groups.set(id, g);
+      }
+      g.convs.push(c);
+    });
+    const arr = [...groups.values()];
+    arr.forEach((g) => g.convs.sort((a, b) => ts(b).localeCompare(ts(a))));
+    arr.sort((a, b) => ts(b.convs[0]).localeCompare(ts(a.convs[0])));
+    return arr;
   }
 
   function renderList() {
@@ -203,25 +233,73 @@
       list.innerHTML = '<div class="pt-empty">No conversations yet. Start a new one to begin.</div>';
       return;
     }
-    list.innerHTML = _conversations.map((c) => {
-      const cp = counterpartOf(c);
-      const name = cp ? cp.name : (c.title || 'Conversation');
-      const av = avatarHtml(name, cp && cp.avatar_path, c.counterpart_character_id, 'pt-av');
-      const preview = c.last_item_preview || c.title || '';
-      return `<button type="button" class="pt-row" data-id="${_escHtml(c.id)}">
-        ${av}
-        <span class="pt-row-main">
-          <span class="pt-row-top">
-            <span class="pt-row-name">${_escHtml(name)}</span>
-            <span class="pt-row-time">${_escHtml(fmtTime(c.updated_at))}</span>
+    list.innerHTML = groupConversations().map((g) => {
+      const av = avatarHtml(g.name, g.avatarPath, g.id, 'pt-av pt-av-sm');
+      const cards = g.convs.map((c) => {
+        const title = c.title || 'Untitled chat';
+        const preview = c.last_item_preview || '';
+        return `<button type="button" class="pt-card" data-id="${_escHtml(c.id)}">
+          <span class="pt-card-top">
+            <span class="pt-card-title">${_escHtml(title)}</span>
+            <span class="pt-card-time">${_escHtml(fmtTime(c.updated_at))}</span>
           </span>
-          <span class="pt-row-preview">${_escHtml(preview)}</span>
-        </span>
-      </button>`;
+          <span class="pt-card-preview">${_escHtml(preview)}</span>
+        </button>`;
+      }).join('');
+      return `<section class="pt-group">
+        <header class="pt-group-head">
+          ${av}
+          <span class="pt-group-name">${_escHtml(g.name)}</span>
+          <span class="pt-group-count">${g.convs.length}</span>
+        </header>
+        <div class="pt-conv-grid">${cards}</div>
+      </section>`;
     }).join('');
-    list.querySelectorAll('.pt-row').forEach((row) => {
-      row.addEventListener('click', () => openConversation(row.dataset.id));
+    list.querySelectorAll('.pt-card').forEach((card) => {
+      card.addEventListener('click', () => onCardClick(card));
     });
+  }
+
+  function onCardClick(card) {
+    const id = card.dataset.id;
+    if (!_deleteMode) {
+      openConversation(id);
+      return;
+    }
+    if (!card.classList.contains('armed')) {
+      card.classList.add('armed');  // first click arms; second click deletes
+      return;
+    }
+    removeConversation(id, card);
+  }
+
+  async function removeConversation(id, card) {
+    try {
+      await api(`${APP}/conversations/${encodeURIComponent(id)}`, 'DELETE');
+    } catch (err) {
+      card.classList.remove('armed');
+      toast('error', `Could not delete: ${err.message}`);
+      return;
+    }
+    _conversations = _conversations.filter((c) => c.id !== id);
+    renderList();  // re-group; drops now-empty character groups
+    if (!_conversations.length) setDeleteMode(false);
+  }
+
+  function setDeleteMode(on) {
+    _deleteMode = on;
+    $('pt-list').classList.toggle('delete-mode', on);
+    const btn = $('pt-delete-mode');
+    btn.classList.toggle('active', on);
+    btn.textContent = on ? '✓ Done' : '🗑 Delete';
+    if (!on) {
+      $('pt-list').querySelectorAll('.pt-card.armed')
+        .forEach((c) => c.classList.remove('armed'));
+    }
+  }
+
+  function toggleDeleteMode() {
+    setDeleteMode(!_deleteMode);
   }
 
   // ---------- chat view ----------
@@ -1716,6 +1794,7 @@
     $('pt-mode').addEventListener('click', () => cycleMode(1));
     $('pt-send').addEventListener('click', submitOrStack);
 
+    $('pt-delete-mode').addEventListener('click', toggleDeleteMode);
     $('pt-settings').addEventListener('click', openSettings);
     $('pt-settings-close').addEventListener('click', () => $('pt-settings-dialog').close());
     $('pt-settings-cancel').addEventListener('click', () => $('pt-settings-dialog').close());
