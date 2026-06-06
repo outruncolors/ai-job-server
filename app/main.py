@@ -85,6 +85,8 @@ from .models import (
     JobStatus,
     ServerRestartResponse,
     ServerStatsResponse,
+    SttJobRequest,
+    VisionJobRequest,
     VoiceJobRequest,
 )
 from .server import (
@@ -109,7 +111,7 @@ from .voice_presets_router import router as presets_router
 from .mcp.router import router as mcp_router
 from .embed_lab.router import router as embed_lab_router
 from .prompt_pal.router import router as prompt_pal_router
-from .multimodal.router import router as multimodal_router
+from .multimodal.runner import execute_stt_job, execute_vision_job
 from .profiles import (
     apply_from_zip,
     delete_profile,
@@ -151,6 +153,26 @@ def _build_recovery_runner(entry: dict):
 
         async def runner():
             await execute_voice_job(job_id, job_dir, req, get_config(), get_manager())
+
+        return runner
+    if job_type == "vision":
+        try:
+            req = VisionJobRequest(**requested)
+        except Exception:
+            return None
+
+        async def runner():
+            await execute_vision_job(job_id, job_dir, req)
+
+        return runner
+    if job_type == "stt":
+        try:
+            req = SttJobRequest(**requested)
+        except Exception:
+            return None
+
+        async def runner():
+            await execute_stt_job(job_id, job_dir, req)
 
         return runner
     if job_type == "chain":
@@ -262,9 +284,6 @@ app.include_router(blaboratory_router)
 app.include_router(hoodat_router)
 app.include_router(prattletale_router)
 app.include_router(prompt_pal_router)
-# Vision + Speech-to-Text. Not capability-gated: runs on the web node and routes
-# to the llm node internally (see app/multimodal/router.py).
-app.include_router(multimodal_router)
 
 from app.cruddables.router import router as cruddables_router  # noqa: E402
 from app.packs.router import router as packs_router  # noqa: E402
@@ -352,6 +371,79 @@ async def create_chain_job(req: ChainJobRequest):
             queue.close_bus(job_id)
 
     await queue.enqueue(job_id, runner)
+    return JobCreatedResponse(**data)
+
+
+# Vision + Speech-to-Text run as JobQueue jobs (job dir, logs, recovery) like
+# image/voice. Not capability-gated: they run on the web node and route to the
+# llm node internally (see app/multimodal/swap.py) — gating on ``llm`` would
+# wrongly 503 the web node. A missing/unreachable llm node surfaces inside the
+# runner as an errored job instead.
+_ALLOWED_VISION_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+_VISION_CT_EXT = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+}
+
+
+def _input_ext(filename: Optional[str], content_type: str, ct_map: dict[str, str], default: str) -> str:
+    """Pick a safe file extension for a saved upload — from the original name
+    when it has a sane suffix, else mapped from the content type, else default."""
+    if filename and "." in filename:
+        ext = filename.rsplit(".", 1)[1].lower()
+        if ext.isalnum() and len(ext) <= 5:
+            return ext
+    return ct_map.get((content_type or "").lower(), default)
+
+
+@app.post("/v1/jobs/vision", response_model=JobCreatedResponse, status_code=202)
+async def create_vision_job(file: UploadFile = File(...), prompt: str = Form("")):
+    content_type = (file.content_type or "").lower()
+    if content_type not in _ALLOWED_VISION_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"unsupported image content_type: {content_type or 'unknown'}",
+        )
+    image_bytes = await file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=422, detail="empty image upload")
+
+    input_filename = f"input.{_input_ext(file.filename, content_type, _VISION_CT_EXT, 'png')}"
+    requested = {"prompt": prompt, "mime": content_type, "input_filename": input_filename}
+    data = create_job("vision", requested, input_text=prompt)
+    job_id = data["job_id"]
+    job_dir = find_job_dir(job_id)
+    (job_dir / input_filename).write_bytes(image_bytes)
+    req = VisionJobRequest(**requested)
+
+    async def runner():
+        await execute_vision_job(job_id, job_dir, req)
+
+    await get_job_queue().enqueue(job_id, runner)
+    return JobCreatedResponse(**data)
+
+
+@app.post("/v1/jobs/stt", response_model=JobCreatedResponse, status_code=202)
+async def create_stt_job(file: UploadFile = File(...), prompt: str = Form("")):
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=422, detail="empty audio upload")
+
+    content_type = (file.content_type or "").lower()
+    input_filename = f"input.{_input_ext(file.filename, content_type, {}, 'webm')}"
+    requested = {"prompt": prompt, "content_type": content_type, "input_filename": input_filename}
+    data = create_job("stt", requested, input_text=prompt)
+    job_id = data["job_id"]
+    job_dir = find_job_dir(job_id)
+    (job_dir / input_filename).write_bytes(raw)
+    req = SttJobRequest(**requested)
+
+    async def runner():
+        await execute_stt_job(job_id, job_dir, req)
+
+    await get_job_queue().enqueue(job_id, runner)
     return JobCreatedResponse(**data)
 
 

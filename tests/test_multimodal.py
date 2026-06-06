@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -147,61 +148,151 @@ async def test_run_vision_empty_content_raises(monkeypatch):
         await service.run_vision(b"img", "image/png", "x")
 
 
-# ── routes ──────────────────────────────────────────────────────────────────
+# ── job routes (POST /v1/jobs/{vision,stt}) ─────────────────────────────────
+#
+# Vision/STT now run through the JobQueue like image/voice. The route saves the
+# upload and enqueues a runner; we patch the runner to a no-op AsyncMock so the
+# route test stays offline and just asserts the job-creation contract.
 
 
-def test_vision_route_ok(client, monkeypatch):
-    import app.multimodal.router as r
-    monkeypatch.setattr(r, "run_vision", AsyncMock(return_value="a dog"))
+def test_vision_job_route_creates_job(client, monkeypatch, patch_jobs_base):
+    import app.main as m
+    from app.jobs import find_job_dir
+    monkeypatch.setattr(m, "execute_vision_job", AsyncMock())
     resp = client.post(
-        "/v1/multimodal/vision",
-        files={"file": ("cat.png", b"\x89PNG", "image/png")},
-        data={"prompt": "what?"},
+        "/v1/jobs/vision",
+        files={"file": ("cat.png", b"\x89PNG-bytes", "image/png")},
+        data={"prompt": "what is this?"},
     )
-    assert resp.status_code == 200
-    assert resp.json() == {"text": "a dog"}
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["job_type"] == "vision"
+    job_dir = find_job_dir(body["job_id"])
+    assert (job_dir / "input.png").read_bytes() == b"\x89PNG-bytes"
+    req = json.loads((job_dir / "request.json").read_text())["requested"]
+    assert req == {"prompt": "what is this?", "mime": "image/png", "input_filename": "input.png"}
 
 
-def test_vision_route_rejects_non_image(client):
+def test_vision_job_route_rejects_non_image(client):
     resp = client.post(
-        "/v1/multimodal/vision",
+        "/v1/jobs/vision",
         files={"file": ("note.txt", b"hi", "text/plain")},
     )
     assert resp.status_code == 415
 
 
-def test_vision_route_swap_error_503(client, monkeypatch):
-    import app.multimodal.router as r
-    monkeypatch.setattr(r, "run_vision", AsyncMock(side_effect=LLMSwapError("no llm node")))
+def test_vision_job_route_rejects_empty(client, monkeypatch):
+    import app.main as m
+    monkeypatch.setattr(m, "execute_vision_job", AsyncMock())
     resp = client.post(
-        "/v1/multimodal/vision",
-        files={"file": ("cat.png", b"\x89PNG", "image/png")},
-    )
-    assert resp.status_code == 503
-    assert "no llm node" in resp.json()["detail"]
-
-
-def test_stt_route_ok(client, monkeypatch):
-    import app.multimodal.router as r
-    monkeypatch.setattr(r, "transcode_to_wav", AsyncMock(return_value=b"RIFFWAVE"))
-    monkeypatch.setattr(r, "run_stt", AsyncMock(return_value="transcript here"))
-    resp = client.post(
-        "/v1/multimodal/stt",
-        files={"file": ("rec.webm", b"webmbytes", "audio/webm")},
-        data={"prompt": ""},
-    )
-    assert resp.status_code == 200
-    assert resp.json() == {"text": "transcript here"}
-
-
-def test_stt_route_transcode_error_422(client, monkeypatch):
-    import app.multimodal.router as r
-    monkeypatch.setattr(
-        r, "transcode_to_wav", AsyncMock(side_effect=service.TranscodeError("ffmpeg not found"))
-    )
-    resp = client.post(
-        "/v1/multimodal/stt",
-        files={"file": ("rec.webm", b"webmbytes", "audio/webm")},
+        "/v1/jobs/vision",
+        files={"file": ("cat.png", b"", "image/png")},
     )
     assert resp.status_code == 422
-    assert "ffmpeg" in resp.json()["detail"]
+
+
+def test_stt_job_route_creates_job(client, monkeypatch, patch_jobs_base):
+    import app.main as m
+    from app.jobs import find_job_dir
+    monkeypatch.setattr(m, "execute_stt_job", AsyncMock())
+    resp = client.post(
+        "/v1/jobs/stt",
+        files={"file": ("recording.webm", b"webmbytes", "audio/webm")},
+        data={"prompt": ""},
+    )
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["job_type"] == "stt"
+    job_dir = find_job_dir(body["job_id"])
+    assert (job_dir / "input.webm").read_bytes() == b"webmbytes"
+    req = json.loads((job_dir / "request.json").read_text())["requested"]
+    assert req["content_type"] == "audio/webm"
+    assert req["input_filename"] == "input.webm"
+
+
+# ── runners (execute_vision_job / execute_stt_job) ──────────────────────────
+
+
+def _make_job(jobs_base, job_type, requested, input_filename, input_bytes):
+    """Create a job on disk (per create_job) and drop the input file in place."""
+    from app.jobs import create_job, find_job_dir
+    data = create_job(job_type, requested, input_text=requested.get("prompt", ""))
+    job_dir = find_job_dir(data["job_id"])
+    (job_dir / input_filename).write_bytes(input_bytes)
+    return data["job_id"], job_dir
+
+
+async def test_execute_vision_job_writes_output(patch_jobs_base, monkeypatch):
+    from app.models import VisionJobRequest
+    from app.multimodal import runner as mm
+    monkeypatch.setattr(mm, "run_vision", AsyncMock(return_value="a sleeping cat"))
+
+    requested = {"prompt": "describe", "mime": "image/png", "input_filename": "input.png"}
+    job_id, job_dir = _make_job(patch_jobs_base, "vision", requested, "input.png", b"\x89PNG")
+    await mm.execute_vision_job(job_id, job_dir, VisionJobRequest(**requested))
+
+    assert (job_dir / "output.txt").read_text() == "a sleeping cat"
+    status = json.loads((job_dir / "status.json").read_text())
+    assert status["status"] == "done"
+    artifacts = json.loads((job_dir / "artifacts.json").read_text())
+    assert any(a["filename"] == "output.txt" for a in artifacts)
+    # run_vision got the saved image bytes + mime.
+    assert mm.run_vision.await_args.args[:2] == (b"\x89PNG", "image/png")
+
+
+async def test_execute_vision_job_error_marks_status(patch_jobs_base, monkeypatch):
+    from app.models import VisionJobRequest
+    from app.multimodal import runner as mm
+    monkeypatch.setattr(mm, "run_vision", AsyncMock(side_effect=LLMSwapError("no llm node")))
+
+    requested = {"prompt": "", "mime": "image/png", "input_filename": "input.png"}
+    job_id, job_dir = _make_job(patch_jobs_base, "vision", requested, "input.png", b"\x89PNG")
+    await mm.execute_vision_job(job_id, job_dir, VisionJobRequest(**requested))
+
+    status = json.loads((job_dir / "status.json").read_text())
+    assert status["status"] == "error"
+    assert "no llm node" in status["error"]
+    assert "[error]" in (job_dir / "logs.txt").read_text()
+    assert not (job_dir / "output.txt").exists()
+
+
+async def test_execute_stt_job_transcodes_and_writes(patch_jobs_base, monkeypatch):
+    from app.models import SttJobRequest
+    from app.multimodal import runner as mm
+    monkeypatch.setattr(mm, "transcode_to_wav", AsyncMock(return_value=b"RIFFWAVE"))
+    monkeypatch.setattr(mm, "run_stt", AsyncMock(return_value="hello world"))
+
+    requested = {"prompt": "", "content_type": "audio/webm", "input_filename": "input.webm"}
+    job_id, job_dir = _make_job(patch_jobs_base, "stt", requested, "input.webm", b"webmbytes")
+    await mm.execute_stt_job(job_id, job_dir, SttJobRequest(**requested))
+
+    assert (job_dir / "output.txt").read_text() == "hello world"
+    assert json.loads((job_dir / "status.json").read_text())["status"] == "done"
+    # transcode got the raw upload; run_stt got the transcoded wav.
+    assert mm.transcode_to_wav.await_args.args[0] == b"webmbytes"
+    assert mm.run_stt.await_args.args[0] == b"RIFFWAVE"
+
+
+# ── recovery rebuilds runners for vision/stt ────────────────────────────────
+
+
+def test_recovery_builds_vision_runner():
+    from app.main import _build_recovery_runner
+    entry = {
+        "job_type": "vision",
+        "job_id": "abc",
+        "job_dir": object(),
+        "request": {"requested": {"prompt": "x", "mime": "image/png", "input_filename": "input.png"}},
+    }
+    assert _build_recovery_runner(entry) is not None
+
+
+def test_recovery_builds_stt_runner():
+    from app.main import _build_recovery_runner
+    entry = {
+        "job_type": "stt",
+        "job_id": "abc",
+        "job_dir": object(),
+        "request": {"requested": {"prompt": "", "content_type": "audio/webm", "input_filename": "input.webm"}},
+    }
+    assert _build_recovery_runner(entry) is not None

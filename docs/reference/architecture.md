@@ -85,7 +85,9 @@ app/
     swap.py              ensure_multimodal_loaded() — swap to multimodal_preset, return chat cfg
     service.py           run_vision()/run_stt() (build image_url/input_audio messages),
                          transcode_to_wav() (ffmpeg → 16 kHz mono WAV)
-    router.py            POST /v1/multimodal/{vision,stt} (inline; not capability-gated)
+    runner.py            execute_vision_job()/execute_stt_job() — JobQueue runners
+                         (status/logs/output.txt); routes are POST /v1/jobs/{vision,stt}
+                         in app/main.py (not capability-gated)
   ticks/
     persistence.py       Tick CRUD (config/ticks/index.json)
     scheduler.py         Async loop, 10s poll, overlap guard

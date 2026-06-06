@@ -70,6 +70,8 @@ async function sttToggleRecord() {
   status.textContent = 'recording…';
 }
 
+let _sttPoll = null;
+
 async function submitStt() {
   if (!_sttBlob) return;
   const btn    = document.getElementById('stt-submit');
@@ -80,25 +82,43 @@ async function submitStt() {
   fd.append('file', _sttBlob, _sttBlob._filename || 'audio.webm');
   fd.append('prompt', document.getElementById('stt-prompt').value || '');
 
+  if (_sttPoll) { _sttPoll.stop(); _sttPoll = null; }
   btn.disabled = true;
-  status.textContent = 'Transcribing… (the model may need a moment to load on first use)';
+  status.textContent = 'Submitting…';
   result.textContent = '';
   const tid = toast('info', 'Transcribing audio…', { persistent: true });
 
   try {
-    const r = await fetch('/v1/multimodal/stt', { method: 'POST', body: fd });
+    // Raw fetch — api() is JSON-only and the job routes take multipart.
+    const r = await fetch('/v1/jobs/stt', { method: 'POST', body: fd });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       const detail = (data && data.detail) ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : r.statusText;
       throw new Error(detail);
     }
-    result.textContent = data.text || '(empty transcript)';
-    status.textContent = '';
-    toast('success', 'Done', { id: tid });
+    const jobId = data.job_id;
+    status.textContent = 'Job ' + jobId + ' — queued';
+    _sttPoll = pollJob(jobId, {
+      intervalMs: 800,
+      onUpdate(j) { status.textContent = 'Job ' + jobId + ' — ' + j.status; },
+      async onDone() {
+        try {
+          const resp = await fetch('/v1/jobs/' + jobId + '/files/output.txt');
+          result.textContent = resp.ok ? (await resp.text()) : '(empty transcript)';
+        } catch (_) { result.textContent = '(empty transcript)'; }
+        status.textContent = '';
+        toast('success', 'Done', { id: tid });
+        btn.disabled = false;
+      },
+      onError(j) {
+        status.textContent = 'Error: ' + (j.error || 'unknown');
+        toast('error', 'Transcription failed: ' + (j.error || 'unknown'), { id: tid });
+        btn.disabled = false;
+      },
+    });
   } catch (e) {
     status.textContent = 'Error: ' + e.message;
     toast('error', 'Transcription failed: ' + e.message, { id: tid });
-  } finally {
     btn.disabled = false;
   }
 }

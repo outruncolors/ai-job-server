@@ -48,6 +48,8 @@ function initVisionTab() {
   });
 }
 
+let _visionPoll = null;
+
 async function submitVision() {
   if (!_visionFile) return;
   const btn    = document.getElementById('vision-submit');
@@ -58,25 +60,43 @@ async function submitVision() {
   fd.append('file', _visionFile);
   fd.append('prompt', document.getElementById('vision-prompt').value || '');
 
+  if (_visionPoll) { _visionPoll.stop(); _visionPoll = null; }
   btn.disabled = true;
-  status.textContent = 'Analyzing… (the model may need a moment to load on first use)';
+  status.textContent = 'Submitting…';
   result.textContent = '';
   const tid = toast('info', 'Analyzing image…', { persistent: true });
 
   try {
-    const r = await fetch('/v1/multimodal/vision', { method: 'POST', body: fd });
+    // Raw fetch — api() is JSON-only and the job routes take multipart.
+    const r = await fetch('/v1/jobs/vision', { method: 'POST', body: fd });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       const detail = (data && data.detail) ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : r.statusText;
       throw new Error(detail);
     }
-    result.textContent = data.text || '(empty response)';
-    status.textContent = '';
-    toast('success', 'Done', { id: tid });
+    const jobId = data.job_id;
+    status.textContent = 'Job ' + jobId + ' — queued';
+    _visionPoll = pollJob(jobId, {
+      intervalMs: 800,
+      onUpdate(j) { status.textContent = 'Job ' + jobId + ' — ' + j.status; },
+      async onDone() {
+        try {
+          const resp = await fetch('/v1/jobs/' + jobId + '/files/output.txt');
+          result.textContent = resp.ok ? (await resp.text()) : '(no output)';
+        } catch (_) { result.textContent = '(no output)'; }
+        status.textContent = '';
+        toast('success', 'Done', { id: tid });
+        btn.disabled = false;
+      },
+      onError(j) {
+        status.textContent = 'Error: ' + (j.error || 'unknown');
+        toast('error', 'Vision failed: ' + (j.error || 'unknown'), { id: tid });
+        btn.disabled = false;
+      },
+    });
   } catch (e) {
     status.textContent = 'Error: ' + e.message;
     toast('error', 'Vision failed: ' + e.message, { id: tid });
-  } finally {
     btn.disabled = false;
   }
 }

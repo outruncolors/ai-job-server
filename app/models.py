@@ -53,6 +53,26 @@ class VoiceJobRequest(BaseModel):
         return self
 
 
+class VisionJobRequest(BaseModel):
+    """Reconstructed from ``request.json``'s ``requested`` block by the runner
+    and by recovery. The uploaded image is saved beside it as
+    ``input_filename`` in the job dir."""
+
+    prompt: str = ""
+    mime: str
+    input_filename: str
+
+
+class SttJobRequest(BaseModel):
+    """Reconstructed from ``request.json``'s ``requested`` block by the runner
+    and by recovery. The uploaded/recorded audio is saved beside it as
+    ``input_filename`` in the job dir (the runner transcodes it to WAV)."""
+
+    prompt: str = ""
+    content_type: str
+    input_filename: str
+
+
 class JobStatus(BaseModel):
     job_id: str
     job_type: str
