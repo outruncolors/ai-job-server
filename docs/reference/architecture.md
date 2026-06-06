@@ -81,6 +81,11 @@ app/
     workflows.py         list_workflows(), validate, inject_params()
     runner.py            execute_image_job() — submit, poll, fetch outputs
     router.py            /v1/comfyui/{status,start,stop,restart,config,workflows,system_stats}
+  multimodal/            Vision (image) + Speech-to-Text via the llm node's multimodal preset
+    swap.py              ensure_multimodal_loaded() — swap to multimodal_preset, return chat cfg
+    service.py           run_vision()/run_stt() (build image_url/input_audio messages),
+                         transcode_to_wav() (ffmpeg → 16 kHz mono WAV)
+    router.py            POST /v1/multimodal/{vision,stt} (inline; not capability-gated)
   ticks/
     persistence.py       Tick CRUD (config/ticks/index.json)
     scheduler.py         Async loop, 10s poll, overlap guard

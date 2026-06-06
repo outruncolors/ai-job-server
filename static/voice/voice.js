@@ -50,14 +50,17 @@
       }
     }
 
-    // ── L1 nav: Voice ↔ SFX ──────────────────────────────────────────
+    // ── L1 nav: Text-to-Speech ↔ Speech-to-Text ↔ SFX ─────────────────
+    let _sttInited = false;
     function switchL1(view) {
       document.querySelectorAll('#audio-l1-nav .l1-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.l1 === view)
       );
       document.getElementById('voice-view').style.display = view === 'voice' ? '' : 'none';
+      document.getElementById('stt-view').style.display   = view === 'stt'   ? '' : 'none';
       document.getElementById('sfx-view').style.display   = view === 'sfx'   ? '' : 'none';
       if (view === 'sfx') initSfxBrowser();
+      if (view === 'stt' && !_sttInited) { initSttTab(); _sttInited = true; }
     }
 
     // ── L2 tabs (within Voice) ───────────────────────────────────────

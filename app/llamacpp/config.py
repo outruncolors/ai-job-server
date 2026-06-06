@@ -24,6 +24,10 @@ class LlamaCppConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8080
     default_preset: Optional[str] = None
+    # Preset (in config/llm_presets/) holding the multimodal model + mmproj used
+    # by the Vision and Speech-to-Text features. The same preset serves both, so
+    # switching between them never reloads the model. None → those features 503.
+    multimodal_preset: Optional[str] = "gemma-4-e4b-mm"
     models_dir: str = "/opt/ai-stack/models"
     # Embed server (D1): a second, always-on llama-server serving /v1/embeddings.
     # Managed by LlamaCppEmbedManager on llm-capable nodes (default bge-small,

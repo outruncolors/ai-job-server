@@ -14,9 +14,10 @@
 
   <div id="panels">
 
-    <!-- ── L1 nav: Voice ↔ SFX ── -->
+    <!-- ── L1 nav: Text-to-Speech ↔ Speech-to-Text ↔ SFX ── -->
     <div id="audio-l1-nav">
-      <button class="l1-btn active" data-l1="voice" onclick="switchL1('voice')">Voice</button>
+      <button class="l1-btn active" data-l1="voice" onclick="switchL1('voice')">Text-to-Speech</button>
+      <button class="l1-btn"        data-l1="stt"   onclick="switchL1('stt')">Speech-to-Text</button>
       <button class="l1-btn"        data-l1="sfx"   onclick="switchL1('sfx')">SFX</button>
     </div>
 
@@ -336,6 +337,38 @@
 
     </div><!-- /voice-view -->
 
+    <!-- ════════════ Speech-to-Text view ════════════ -->
+    <div id="stt-view" style="display:none;">
+      <!-- Left: audio source -->
+      <div id="panel-left">
+        <label>Record</label>
+        <div class="stt-record-row">
+          <button id="stt-record-btn" type="button" class="secondary" onclick="sttToggleRecord()">● Record</button>
+          <span id="stt-record-status" class="hint"></span>
+        </div>
+
+        <label style="margin-top:16px;">…or upload an audio file</label>
+        <input id="stt-file" type="file" accept="audio/*">
+
+        <div id="stt-audio-wrap" style="display:none;margin-top:12px;">
+          <audio id="stt-audio" controls style="width:100%;"></audio>
+        </div>
+
+        <label style="margin-top:16px;">Prompt <span class="hint">(optional)</span></label>
+        <textarea id="stt-prompt" rows="2" placeholder="Transcribe this audio verbatim."></textarea>
+
+        <button id="stt-submit" onclick="submitStt()" disabled style="margin-top:20px;">
+          Transcribe
+        </button>
+      </div>
+      <!-- Right: transcript -->
+      <div id="panel-right">
+        <p class="section-label">TRANSCRIPT</p>
+        <div id="stt-status" class="msg"></div>
+        <div id="stt-result" class="mm-result"></div>
+      </div>
+    </div><!-- /stt-view -->
+
     <!-- ════════════ SFX view ════════════ -->
     <div id="sfx-view" style="display:none;">
 
@@ -418,6 +451,7 @@
   <script src="/js/poll.js"></script>
   <script src="/js/toast.js"></script>
   <script src="sfx.js"></script>
+  <script src="stt.js"></script>
   <script src="voice.js"></script>
   <script src="/js/nav-mobile.js"></script>
 </body>

@@ -1,6 +1,42 @@
+/* ── L1 nav (Image ↔ Vision) — fixed under the topnav (canonical pattern) ── */
+#visual-l1-nav {
+  position: fixed; top: 44px; left: 0; right: 0; height: 44px;
+  display: flex; gap: 2px; align-items: stretch;
+  padding: 0 24px; background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border-mid); z-index: 95;
+}
+.l1-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--color-text-muted); font: inherit; font-size: 0.82rem;
+  padding: 11px 16px; border-bottom: 2px solid transparent; margin: 0;
+}
+.l1-btn:hover  { color: #999; }
+.l1-btn.active { color: var(--color-text); border-bottom-color: var(--color-accent); }
+
+/* Image view: tab-bar fixed below the L1 nav; panels clear nav+L1+tab-bar (132px) */
+#image-view #tab-bar {
+  position: fixed; top: 88px; left: 0; right: 0;
+  display: flex; background: var(--color-bg);
+  border-bottom: 1px solid #1a1a1a; z-index: 90;
+}
+#image-view #panels { padding-top: 132px; }
+
+/* Vision view: panels clear topnav + L1 nav (88px) */
+#vision-view #panels { display: flex; padding-top: 88px; }
+
 /* ── Panels ── */
 #panel-left  { flex: 1; padding: 20px 24px; }
 #panel-right { flex: 1; padding: 20px 24px; }
+
+/* ── Vision view ── */
+.vision-pickrow { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; margin-top: 4px; }
+.vision-pickrow input[type="file"] { flex: 0 0 auto; }
+#vision-preview-wrap { margin-top: 12px; }
+#vision-preview { max-width: 100%; max-height: 320px; border: 1px solid #333; border-radius: 3px; }
+.mm-result {
+  white-space: pre-wrap; line-height: 1.6; color: var(--color-text);
+  font-size: 0.86rem; margin-top: 8px;
+}
 
 /* Prompts tab uses a narrower list panel like the Context page. */
 #tab-prompts #panel-left  { flex: 0 0 var(--panel-w-md); padding: 20px 22px; }

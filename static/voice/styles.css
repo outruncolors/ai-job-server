@@ -6,6 +6,16 @@
 #panel-left  { flex: 1; padding: 24px 28px; }
 #panel-right { flex: 1; padding: 24px 28px; }
 
+#stt-view    { display: flex; flex: 1; min-height: 0; }
+
+/* ── Speech-to-Text view ── */
+.stt-record-row { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+#stt-record-btn.recording { background: var(--color-danger-bg); }
+.mm-result {
+  white-space: pre-wrap; line-height: 1.6; color: var(--color-text);
+  font-size: 0.86rem; margin-top: 8px;
+}
+
 /* ── L1 nav (Voice ↔ SFX) ── */
 #audio-l1-nav {
   display: flex; gap: 2px; flex: 0 0 auto;

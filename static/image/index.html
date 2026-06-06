@@ -12,6 +12,15 @@
 
   <nav id="topnav"></nav>
 
+  <!-- ── L1 nav: Image ↔ Vision ── -->
+  <div id="visual-l1-nav">
+    <button class="l1-btn active" data-l1="image"  onclick="switchL1('image')">Image</button>
+    <button class="l1-btn"        data-l1="vision" onclick="switchL1('vision')">Vision</button>
+  </div>
+
+  <!-- ════════════ Image view ════════════ -->
+  <div id="image-view">
+
   <div id="tab-bar">
     <button class="tab-btn active" data-tab="generate" onclick="switchTab('generate')">Generate</button>
     <button class="tab-btn"        data-tab="prompts"  onclick="switchTab('prompts')">Prompts</button>
@@ -116,6 +125,38 @@
     </div>
   </div>
 
+  </div><!-- /image-view -->
+
+  <!-- ════════════ Vision view ════════════ -->
+  <div id="vision-view" style="display:none;">
+    <div id="panels">
+      <!-- Left: image + prompt -->
+      <div id="panel-left">
+        <label>Image</label>
+        <div class="vision-pickrow">
+          <input id="vision-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <div id="vision-paste" class="image-param-paste" tabindex="0">click & paste, or drop an image</div>
+        </div>
+        <div id="vision-preview-wrap" style="display:none;">
+          <img id="vision-preview" alt="selected image">
+        </div>
+
+        <label style="margin-top:16px;">Prompt</label>
+        <textarea id="vision-prompt" rows="4" placeholder="Describe this image in detail."></textarea>
+
+        <button id="vision-submit" onclick="submitVision()" disabled style="margin-top:20px;">
+          Analyze
+        </button>
+      </div>
+      <!-- Right: result -->
+      <div id="panel-right">
+        <p class="section-label">OUTPUT</p>
+        <div id="vision-status" class="msg"></div>
+        <div id="vision-result" class="mm-result"></div>
+      </div>
+    </div>
+  </div><!-- /vision-view -->
+
   <script src="/js/nav.js"></script>
   <script src="/js/profiles-widget.js"></script>
   <script src="/js/peer-status-widget.js"></script>
@@ -127,6 +168,7 @@
   <script src="/js/toast.js"></script>
   <script src="generate-tab.js"></script>
   <script src="prompts-tab.js"></script>
+  <script src="vision-tab.js"></script>
   <script src="image.js"></script>
   <script src="/js/nav-mobile.js"></script>
 </body>

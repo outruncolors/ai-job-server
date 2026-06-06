@@ -106,6 +106,37 @@ Managed through [Server / LLM](../management/server/llm.md).
 | OmniVoice | subprocess via `infer_base_command` | Spawned per voice job |
 | ComfyUI | `http://127.0.0.1:8188` | Managed by `ComfyUIManager`; adopted if already running |
 
+## System dependencies
+
+- **ffmpeg** — required on the **web** node for the Speech-to-Text feature
+  (`/v1/multimodal/stt`). Uploaded/recorded audio is transcoded to 16 kHz mono WAV
+  before being sent to the multimodal model. Install with `apt-get install -y ffmpeg`.
+  Without it, STT requests return `422` with a clear message; the Vision feature is
+  unaffected.
+
+## Vision / Speech-to-Text (multimodal)
+
+Both features run the **same** multimodal preset on the `llm` node (one model + mmproj
+serves vision *and* audio, so switching between them never reloads). Configure:
+
+- `config/llamacpp.json` → `multimodal_preset` — name of the preset to load (default
+  `"gemma-4-e4b-mm"`). Set to `null` to disable the features (they 503).
+- `config/llm_presets/<name>.json` (on the `llm` node) — the model + mmproj. Example:
+
+```json
+{
+  "name": "gemma-4-e4b-mm",
+  "model_path": "/abs/path/Gemma-4-E4B-…-Q8_K_P.gguf",
+  "args": { "ctx_size": 16384, "n_gpu_layers": 99, "flash_attn": "on", "jinja": true,
+            "mmproj": "/abs/path/mmproj-Gemma-4-E4B-…-f16.gguf" },
+  "capabilities": ["text", "vision"]
+}
+```
+
+`model_path`/`mmproj` must be **absolute** (no `~` expansion). A Vision/STT request swaps
+the `llm` node's `llama-server` to this preset via the existing hash-based `ensure-loaded`
+and leaves it resident; the next normal chain LLM step swaps back to `default_preset`.
+
 ## Development
 
 ```bash

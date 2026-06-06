@@ -109,6 +109,7 @@ from .voice_presets_router import router as presets_router
 from .mcp.router import router as mcp_router
 from .embed_lab.router import router as embed_lab_router
 from .prompt_pal.router import router as prompt_pal_router
+from .multimodal.router import router as multimodal_router
 from .profiles import (
     apply_from_zip,
     delete_profile,
@@ -261,6 +262,9 @@ app.include_router(blaboratory_router)
 app.include_router(hoodat_router)
 app.include_router(prattletale_router)
 app.include_router(prompt_pal_router)
+# Vision + Speech-to-Text. Not capability-gated: runs on the web node and routes
+# to the llm node internally (see app/multimodal/router.py).
+app.include_router(multimodal_router)
 
 from app.cruddables.router import router as cruddables_router  # noqa: E402
 from app.packs.router import router as packs_router  # noqa: E402
