@@ -1,0 +1,32 @@
+# Caddyfile — HTTPS reverse proxy for LAN access to the ai-job-server.
+#
+# Why this exists: the Voice/STT page records the mic via getUserMedia(), which
+# browsers only permit in a secure context. http://localhost qualifies, but
+# http://<LAN-IP>:8090 (from a phone/other device) does not. Caddy terminates
+# TLS here on :8443 and proxies to the plain-HTTP uvicorn on :8090.
+#
+# uvicorn keeps serving plain HTTP on :8090 unchanged — peers still talk to it
+# directly over HTTP. Only the browser→app leg is encrypted.
+#
+# Setup (one-time):  bash scripts/tls-setup.sh   (generates config/tls/{cert,key}.pem)
+# Run:               caddy run --config Caddyfile
+# Guide:             docs/reference/https-localhost.md
+{
+	# We supply our own mkcert cert below; do not attempt ACME / Let's Encrypt.
+	auto_https off
+}
+
+# Bind :8443 on all interfaces (non-privileged; served by the packaged caddy.service).
+:8443 {
+	# Certs live in caddy's own home: the repo tree (/opt/ai-stack/...) is private
+	# (0700/2770), so the caddy system user can't traverse into it. tls-setup.sh
+	# deploys the mkcert cert here with caddy ownership.
+	tls /var/lib/caddy/tls/cert.pem /var/lib/caddy/tls/key.pem
+
+	reverse_proxy 127.0.0.1:8090 {
+		# Stream Server-Sent Events immediately (the chain job timeline at
+		# /v1/jobs/<id>/stream). Caddy auto-flushes text/event-stream, but this
+		# makes the no-buffering behaviour explicit for all responses.
+		flush_interval -1
+	}
+}

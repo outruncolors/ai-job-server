@@ -1,0 +1,46 @@
+# ai-job-server-tls — systemd **user** unit (Caddy HTTPS proxy)
+#
+# Terminates TLS on :8443 and proxies to the plain-HTTP uvicorn on :8090, so LAN
+# devices (e.g. a phone) get a secure context and can use the mic on the Voice/STT
+# page. See Caddyfile + docs/reference/https-localhost.md.
+#
+# Prerequisites (one-time):
+#   1. Install Caddy:        sudo apt install -y caddy   (or the official Caddy apt repo)
+#   2. Generate the cert:    bash /opt/ai-stack/claude-work/ai-job-server/scripts/tls-setup.sh
+#
+# Install (one-time):
+#
+#   mkdir -p ~/.config/systemd/user
+#   cp /opt/ai-stack/claude-work/ai-job-server/scripts/systemd/ai-job-server-tls.service \
+#      ~/.config/systemd/user/ai-job-server-tls.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now ai-job-server-tls
+#
+# After install:
+#
+#   systemctl --user status  ai-job-server-tls
+#   systemctl --user restart ai-job-server-tls
+#   journalctl --user -u ai-job-server-tls -f
+#
+# Notes:
+# - User unit (no root), matching ai-job-server.service. :8443 is non-privileged.
+# - To survive logout: sudo loginctl enable-linger "$USER" (once per machine).
+# - Adjust the two absolute paths below if your checkout lives elsewhere.
+
+[Unit]
+Description=AI Job Server TLS proxy (Caddy on :8443 → uvicorn :8090)
+After=network-online.target ai-job-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ai-stack/claude-work/ai-job-server
+ExecStart=/usr/bin/caddy run --config /opt/ai-stack/claude-work/ai-job-server/Caddyfile
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ai-job-server-tls
+
+[Install]
+WantedBy=default.target

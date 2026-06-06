@@ -23,6 +23,8 @@ Cross-machine wiring:
 
 See [`reference/multi-machine-plan.md`](reference/multi-machine-plan.md) for the full design discussion — capability vs role enum, swap-key hashing, why pull-based health, what's deliberately deferred (auth, idle eviction, cancel-while-running).
 
+> **HTTPS note:** peer-to-peer traffic is plain HTTP on `:8090` (and `:8080` for llama-server) — unchanged. The optional [HTTPS for LAN access](reference/https-localhost.md) setup adds a Caddy TLS proxy on `:8443` for *browsers only* (so phones get a secure context for the mic); it does not touch peer wiring.
+
 ## Bare repo bootstrap
 
 The canonical repo lives as a bare repository on the primary at `/srv/git/ai-job-server.git`. The primary's working checkout (`/opt/ai-stack/claude-work/ai-job-server`) and the secondary's checkout (`~/ai-job-server`) both push/pull against it. No GitHub, no Forgejo — single source of truth on the LAN.
