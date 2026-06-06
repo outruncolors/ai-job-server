@@ -26,6 +26,25 @@ from .service import (
 )
 
 
+def _log_generation_meta(job_dir: Path, meta: dict) -> None:
+    """Record why generation stopped, in logs.txt (and the OutputConsole). A
+    ``finish_reason=length`` with completion_tokens well under the requested
+    max_tokens means the model server hit its own ctx_size/n_predict limit."""
+    fr = (meta or {}).get("finish_reason")
+    usage = (meta or {}).get("usage") or {}
+    bits = [f"finish_reason={fr or 'unknown'}"]
+    for key in ("completion_tokens", "prompt_tokens", "total_tokens"):
+        if usage.get(key) is not None:
+            bits.append(f"{key}={usage[key]}")
+    _append_log(job_dir, "[generate] " + " ".join(bits) + "\n")
+    if fr == "length":
+        _append_log(
+            job_dir,
+            "[warn] output truncated (finish_reason=length) — raise the multimodal "
+            "preset's ctx_size (and/or n_predict) on the llm node\n",
+        )
+
+
 async def execute_vision_job(job_id: str, job_dir: Path, request: Any) -> None:
     """Answer ``request.prompt`` about the saved image. Writes ``output.txt``."""
     _write_status(job_dir, "running")
@@ -42,7 +61,10 @@ async def execute_vision_job(job_id: str, job_dir: Path, request: Any) -> None:
             mime = "image/png"
         _append_log(job_dir, "[swap] ensuring multimodal model is loaded…\n")
         _append_log(job_dir, "[generate] running vision inference…\n")
-        text = await run_vision(image_bytes, mime, request.prompt)
+        text = await run_vision(
+            image_bytes, mime, request.prompt,
+            on_meta=lambda m: _log_generation_meta(job_dir, m),
+        )
 
         output_path = job_dir / "output.txt"
         output_path.write_text(text, encoding="utf-8")
@@ -65,7 +87,10 @@ async def execute_stt_job(job_id: str, job_dir: Path, request: Any) -> None:
         wav_bytes = await transcode_to_wav(raw)
         _append_log(job_dir, "[swap] ensuring multimodal model is loaded…\n")
         _append_log(job_dir, "[generate] transcribing…\n")
-        text = await run_stt(wav_bytes, request.prompt)
+        text = await run_stt(
+            wav_bytes, request.prompt,
+            on_meta=lambda m: _log_generation_meta(job_dir, m),
+        )
 
         output_path = job_dir / "output.txt"
         output_path.write_text(text, encoding="utf-8")

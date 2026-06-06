@@ -149,9 +149,15 @@ class OpenAICompatibleLLMClient:
                 f"LLM server returned {exc.response.status_code}: {exc}"
             ) from exc
         try:
-            return data["choices"][0]
+            choice = data["choices"][0]
         except (KeyError, IndexError) as exc:
             raise RuntimeError(f"Malformed LLM response: {exc}") from exc
+        # Carry token usage onto the choice so callers can log it without a second
+        # round-trip (finish_reason already lives on the choice). Non-standard but
+        # internal; callers that don't look for it are unaffected.
+        if isinstance(choice, dict) and isinstance(data.get("usage"), dict):
+            choice.setdefault("usage", data["usage"])
+        return choice
 
     async def chat_stream(
         self,

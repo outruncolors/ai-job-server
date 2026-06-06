@@ -110,6 +110,74 @@ def test_resolve_multimodal_preset_unset(monkeypatch):
         swap.resolve_multimodal_preset()
 
 
+# ── multimodal load: ctx boost (fix for truncated descriptions) ─────────────
+
+
+def test_boost_multimodal_args_raises_small_ctx():
+    out = swap._boost_multimodal_args({"ctx_size": 2048, "n_gpu_layers": 99}, min_ctx=8192)
+    assert out["ctx_size"] == 8192
+    assert out["n_gpu_layers"] == 99  # other args preserved
+
+
+def test_boost_multimodal_args_keeps_larger_ctx():
+    out = swap._boost_multimodal_args({"ctx_size": 16384}, min_ctx=8192)
+    assert out["ctx_size"] == 16384
+
+
+def test_boost_multimodal_args_handles_missing_and_caps():
+    out = swap._boost_multimodal_args({"n_predict": 256, "predict": 256}, min_ctx=8192)
+    assert out["ctx_size"] == 8192
+    assert "n_predict" not in out and "predict" not in out  # output cap stripped
+
+
+class _FakeResp:
+    def __init__(self, status_code=200, json_data=None):
+        self.status_code = status_code
+        self._json = json_data
+
+    def json(self):
+        if self._json is None:
+            raise ValueError("no json body")
+        return self._json
+
+
+class _FakeClient:
+    def __init__(self, resp):
+        self._resp = resp
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def get(self, url):
+        return self._resp
+
+
+async def test_multimodal_ensure_body_inlines_boosted_preset(monkeypatch):
+    preset = {"name": "mm", "model_path": "/m.gguf", "args": {"ctx_size": 2048}, "capabilities": ["text", "vision"]}
+    monkeypatch.setattr(swap.httpx, "AsyncClient", lambda *a, **k: _FakeClient(_FakeResp(200, preset)))
+    body = await swap._multimodal_ensure_body("http://peer:8090", "mm", 8192)
+    assert body["preset"]["model_path"] == "/m.gguf"
+    assert body["preset"]["args"]["ctx_size"] == 8192  # boosted inline
+
+
+async def test_multimodal_ensure_body_falls_back_on_fetch_failure(monkeypatch):
+    monkeypatch.setattr(swap.httpx, "AsyncClient", lambda *a, **k: _FakeClient(_FakeResp(404, None)))
+    body = await swap._multimodal_ensure_body("http://peer:8090", "mm", 8192)
+    assert body == {"preset": "mm"}  # named fallback keeps the feature working
+
+
+async def test_multimodal_ensure_body_min_ctx_zero_uses_name(monkeypatch):
+    # min_ctx <= 0 disables the boost — no fetch, just load by name.
+    def _boom(*a, **k):
+        raise AssertionError("should not fetch when min_ctx is 0")
+    monkeypatch.setattr(swap.httpx, "AsyncClient", _boom)
+    body = await swap._multimodal_ensure_body("http://peer:8090", "mm", 0)
+    assert body == {"preset": "mm"}
+
+
 # ── run_vision / run_stt message shapes ─────────────────────────────────────
 
 
@@ -169,6 +237,46 @@ async def test_run_stt_builds_audio_message(monkeypatch):
     assert content[1]["type"] == "input_audio"
     assert content[1]["input_audio"]["format"] == "wav"
     assert content[1]["input_audio"]["data"]  # base64 present
+
+
+async def test_run_vision_reports_finish_reason_and_usage(monkeypatch):
+    cfg = ChainLLMConfig(api_base="http://x/v1", model="m")
+    monkeypatch.setattr(service, "ensure_multimodal_loaded", AsyncMock(return_value=cfg))
+
+    async def fake_chat(self, messages, llm_config, tools=None):
+        return {
+            "message": {"content": "partial description…"},
+            "finish_reason": "length",
+            "usage": {"completion_tokens": 300, "prompt_tokens": 1800},
+        }
+
+    monkeypatch.setattr(service.OpenAICompatibleLLMClient, "chat", fake_chat)
+
+    seen = {}
+    out = await service.run_vision(b"img", "image/png", "x", on_meta=lambda m: seen.update(m))
+    assert out == "partial description…"
+    assert seen["finish_reason"] == "length"
+    assert seen["usage"]["completion_tokens"] == 300
+
+
+async def test_execute_vision_job_logs_truncation_warning(patch_jobs_base, monkeypatch):
+    from app.models import VisionJobRequest
+    from app.multimodal import runner as mm
+
+    async def fake_run_vision(image_bytes, mime, prompt, *, on_meta=None):
+        if on_meta:
+            on_meta({"finish_reason": "length", "usage": {"completion_tokens": 300, "prompt_tokens": 1800}})
+        return "partial"
+
+    monkeypatch.setattr(mm, "run_vision", fake_run_vision)
+    requested = {"prompt": "", "mime": "image/png", "input_filename": "input.png"}
+    job_id, job_dir = _make_job(patch_jobs_base, "vision", requested, "input.png", b"\x89PNG")
+    await mm.execute_vision_job(job_id, job_dir, VisionJobRequest(**requested))
+
+    logs = (job_dir / "logs.txt").read_text()
+    assert "finish_reason=length" in logs
+    assert "completion_tokens=300" in logs
+    assert "[warn] output truncated" in logs
 
 
 async def test_run_vision_empty_content_raises(monkeypatch):

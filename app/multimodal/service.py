@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from typing import Callable, Optional
 
 from ..chain.llm_client import OpenAICompatibleLLMClient
 from .swap import ensure_multimodal_loaded
@@ -107,7 +108,22 @@ async def transcode_image_to_png(raw: bytes) -> bytes:
     return out
 
 
-async def run_vision(image_bytes: bytes, mime: str, prompt: str = "") -> str:
+def _emit_meta(choice: dict, on_meta: Optional[Callable[[dict], None]]) -> None:
+    """Hand the response's ``finish_reason`` + token ``usage`` to ``on_meta`` so a
+    caller (the job runner) can log why generation stopped — ``finish_reason=length``
+    means it was truncated by a token/context limit, not a natural stop."""
+    if on_meta is None:
+        return
+    on_meta({"finish_reason": choice.get("finish_reason"), "usage": choice.get("usage")})
+
+
+async def run_vision(
+    image_bytes: bytes,
+    mime: str,
+    prompt: str = "",
+    *,
+    on_meta: Optional[Callable[[dict], None]] = None,
+) -> str:
     """Answer ``prompt`` about an image. Returns the model's text response."""
     prompt = (prompt or "").strip() or DEFAULT_VISION_PROMPT
     b64 = base64.b64encode(image_bytes).decode("ascii")
@@ -120,12 +136,20 @@ async def run_vision(image_bytes: bytes, mime: str, prompt: str = "") -> str:
             ],
         }
     ]
-    cfg = await ensure_multimodal_loaded(temperature=0.4, max_tokens=1024)
+    # Detailed descriptions are long; 1024 was a low ceiling. (The binding limit is
+    # usually the preset's ctx_size/n_predict on the llm node — see on_meta logging.)
+    cfg = await ensure_multimodal_loaded(temperature=0.4, max_tokens=4096)
     choice = await OpenAICompatibleLLMClient().chat(messages, cfg)
+    _emit_meta(choice, on_meta)
     return _content_text(choice)
 
 
-async def run_stt(wav_bytes: bytes, prompt: str = "") -> str:
+async def run_stt(
+    wav_bytes: bytes,
+    prompt: str = "",
+    *,
+    on_meta: Optional[Callable[[dict], None]] = None,
+) -> str:
     """Transcribe 16 kHz mono WAV audio. Returns the transcript text."""
     prompt = (prompt or "").strip() or DEFAULT_STT_PROMPT
     b64 = base64.b64encode(wav_bytes).decode("ascii")
@@ -139,6 +163,7 @@ async def run_stt(wav_bytes: bytes, prompt: str = "") -> str:
         }
     ]
     # Deterministic decode; allow more tokens for long transcripts.
-    cfg = await ensure_multimodal_loaded(temperature=0.0, max_tokens=2048)
+    cfg = await ensure_multimodal_loaded(temperature=0.0, max_tokens=4096)
     choice = await OpenAICompatibleLLMClient().chat(messages, cfg)
+    _emit_meta(choice, on_meta)
     return _content_text(choice)

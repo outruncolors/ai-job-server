@@ -28,6 +28,12 @@ class LlamaCppConfig(BaseModel):
     # by the Vision and Speech-to-Text features. The same preset serves both, so
     # switching between them never reloads the model. None → those features 503.
     multimodal_preset: Optional[str] = "gemma-4-e4b-mm"
+    # Floor for the multimodal preset's `ctx_size` at load time. Image embeddings
+    # eat a big share of context, so a small preset ctx truncates long Vision
+    # descriptions / STT transcripts (finish_reason=length). The swap raises the
+    # preset's ctx_size to at least this (never lowers a larger value) and drops
+    # any output cap. Lower it if the llm node is VRAM-constrained.
+    multimodal_min_ctx: int = 8192
     models_dir: str = "/opt/ai-stack/models"
     # Embed server (D1): a second, always-on llama-server serving /v1/embeddings.
     # Managed by LlamaCppEmbedManager on llm-capable nodes (default bge-small,

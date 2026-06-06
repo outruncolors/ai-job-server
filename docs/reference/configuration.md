@@ -140,6 +140,18 @@ dir with `logs.txt` and an `output.txt` result artifact. The runner swaps the `l
 `llama-server` to this preset via the existing hash-based `ensure-loaded` and leaves it
 resident; the next normal chain LLM step swaps back to `default_preset`.
 
+**Truncated descriptions / transcripts.** Image embeddings consume a large share of
+context, so a small preset `ctx_size` (or an `n_predict` cap) would truncate long Vision
+descriptions / STT transcripts mid-sentence. To prevent this, the multimodal swap loads
+the preset with **boosted args**: `ctx_size` is raised to at least `multimodal_min_ctx`
+(default **8192**, in `config/llamacpp.json` on the web node; never lowers a larger value)
+and any `n_predict` output cap is dropped — applied inline at load time, so the stored
+preset on the llm node is left untouched. Lower `multimodal_min_ctx` if that node is
+VRAM-constrained. The runner also logs the stop reason to each job's `logs.txt` (visible in
+the OutputConsole): `[generate] finish_reason=length completion_tokens=… prompt_tokens=…`;
+`finish_reason=stop` means the model finished naturally, `length` means a limit was still
+hit (raise `multimodal_min_ctx` further, or `max_tokens` in `service.py`).
+
 ## Development
 
 ```bash
