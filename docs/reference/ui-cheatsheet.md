@@ -258,6 +258,30 @@ Polling auto-stops on `done`, `error`, or `failed`. Network errors are silently 
 
 ---
 
+## Output console
+
+A shared resizable terminal pinned to the bottom of a generator page's right
+panel that tails one job's `logs.txt`. Add the asset tags
+(`/css/output-console.css`, `/js/output-console.js` before the page script), then
+one line at the submit/attach site:
+
+```javascript
+// el = the page's #panel-right (passed by reference — some pages have several,
+// so scope the query). create() restructures the panel once and is idempotent;
+// start() shows the console and tails until the job is done/error.
+OutputConsole.create(
+  document.querySelector('#tab-generate #panel-right'),
+  { pageKey: 'image-generate' },          // unique per panel — namespaces persisted height/collapsed
+).start(jobId);
+```
+
+It wraps the panel's existing content in a `.pr-scroll` (which keeps scrolling)
+and appends a drag handle + console below. Height (drag) and collapsed state
+persist in `localStorage` under `oc-*:<pageKey>`. Self-contained: no page
+knowledge, polls `/v1/jobs/{id}` + `…/files/logs.txt` internally.
+
+---
+
 ## HTML escaping
 
 ```javascript

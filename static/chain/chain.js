@@ -898,6 +898,8 @@
       const es = new EventSource('/v1/jobs/' + jobId + '/stream');
       _activeSource = es;
       _activeTimeline.attach(es);
+      // Low-level terminal beneath the rich SSE timeline — tails logs.txt.
+      OutputConsole.create(document.getElementById('panel-right'), { pageKey: 'chain' }).start(jobId);
       // The timeline closes the source on job_done. We additionally listen
       // for job_done at this level to update the small status message + load
       // artifacts + raw final-output collapse.

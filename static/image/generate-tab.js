@@ -427,6 +427,7 @@ async function submitGenerate() {
     const job = await api('/jobs/image', 'POST', body);
     _currentJobId = job.job_id;
     statusEl.textContent = 'Job ' + job.job_id + ' — queued';
+    OutputConsole.create(document.querySelector('#tab-generate #panel-right'), { pageKey: 'image-generate' }).start(_currentJobId);
     _pollHandle = pollJob(_currentJobId, {
       intervalMs: 800,
       onUpdate(j) {

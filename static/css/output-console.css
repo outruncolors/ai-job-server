@@ -1,0 +1,66 @@
+/* Shared resizable output console (see static/js/output-console.js).
+   Loaded after components.css so .oc-host can override #panel-right's
+   `overflow-y:auto; flex:1` (components.css) with a flex-column layout. */
+
+.oc-host { display: flex; flex-direction: column; overflow: hidden; }
+.oc-host > .pr-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+.oc-handle {
+  flex: 0 0 auto;
+  height: 8px;
+  cursor: row-resize;
+  background: #161616;
+  border-top: 1px solid #333;
+  border-bottom: 1px solid #333;
+  position: relative;
+  touch-action: none;
+}
+.oc-handle::after {
+  content: "";
+  position: absolute; left: 50%; top: 50%;
+  width: 36px; height: 2px; margin: -1px 0 0 -18px;
+  background: #555; border-radius: 1px;
+}
+.oc-handle:hover::after { background: #888; }
+
+.oc {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  background: #0c0c0c;
+}
+.oc.oc-collapsed { height: auto !important; }
+
+.oc-header {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px;
+  background: #141414;
+  border-bottom: 1px solid #222;
+  font: 0.7rem/1.4 monospace;
+  color: #aaa;
+}
+.oc-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: #555; }
+.oc-dot-queued  { background: #888; }
+.oc-dot-running { background: #fa0; animation: oc-pulse 1s ease-in-out infinite; }
+.oc-dot-done    { background: #2a6; }
+.oc-dot-error,
+.oc-dot-failed  { background: #c44; }
+@keyframes oc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.oc-spacer { flex: 1 1 auto; }
+.oc-btn {
+  background: transparent; border: 1px solid #333; color: #999;
+  font: 0.65rem monospace; padding: 1px 7px; cursor: pointer; border-radius: 3px;
+}
+.oc-btn:hover { border-color: #555; color: #ddd; }
+
+.oc-body {
+  flex: 1 1 auto; min-height: 0;
+  margin: 0; padding: 6px 8px;
+  overflow-y: auto;
+  background: #0c0c0c; color: #cfcfcf;
+  font: 0.72rem/1.45 monospace;
+  white-space: pre-wrap; word-break: break-word;
+}
+.oc.oc-collapsed .oc-body { display: none; }

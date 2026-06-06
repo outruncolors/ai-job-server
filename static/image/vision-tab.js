@@ -76,6 +76,7 @@ async function submitVision() {
     }
     const jobId = data.job_id;
     status.textContent = 'Job ' + jobId + ' — queued';
+    OutputConsole.create(document.querySelector('#vision-view #panel-right'), { pageKey: 'image-vision' }).start(jobId);
     _visionPoll = pollJob(jobId, {
       intervalMs: 800,
       onUpdate(j) { status.textContent = 'Job ' + jobId + ' — ' + j.status; },

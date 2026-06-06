@@ -98,6 +98,7 @@ async function submitStt() {
     }
     const jobId = data.job_id;
     status.textContent = 'Job ' + jobId + ' — queued';
+    OutputConsole.create(document.querySelector('#stt-view #panel-right'), { pageKey: 'voice-stt' }).start(jobId);
     _sttPoll = pollJob(jobId, {
       intervalMs: 800,
       onUpdate(j) { status.textContent = 'Job ' + jobId + ' — ' + j.status; },

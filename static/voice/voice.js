@@ -125,6 +125,7 @@
       try {
         hint.style.display = 'none';
         const job = await api('/jobs/voice', 'POST', body);
+        OutputConsole.create(document.querySelector('#voice-view #panel-right'), { pageKey: 'voice' }).start(job.job_id);
         msg.style.color = '#fa0'; msg.textContent = 'Generating sample…';
         if (_createPollHandle) { _createPollHandle.stop(); _createPollHandle = null; }
         _createPollHandle = pollJob(job.job_id, {
@@ -303,6 +304,7 @@
         hint.style.display = 'none';
         renderResolvedPrompt(document.getElementById('use-resolved-prompt'), resolvedForDisplay);
         const job = await api('/jobs/voice', 'POST', body);
+        OutputConsole.create(document.querySelector('#voice-view #panel-right'), { pageKey: 'voice' }).start(job.job_id);
         msg.style.color = '#fa0'; msg.textContent = 'Synthesizing…';
         if (_usePollHandle) { _usePollHandle.stop(); _usePollHandle = null; }
         _usePollHandle = pollJob(job.job_id, {
