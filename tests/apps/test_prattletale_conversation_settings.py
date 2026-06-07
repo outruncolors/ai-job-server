@@ -79,8 +79,8 @@ def test_patch_context_window_changes_built_window(client):
     assert r.status_code == 200, r.text
     conv = store.get_conversation(cid)
     assert conv["config"]["context_window_turns"] == 2
-    # the voice/variety flags are NOT clobbered by the partial config patch
-    assert conv["config"]["variety_pass_enabled"] is True
+    # other flags are NOT clobbered by the partial config patch (defaults kept)
+    assert conv["config"]["dialogue_feel_enabled"] is True
     assert conv["config"]["voice_enabled"] is False
 
     ctx = generator.build_context(conv, dict(_CHARACTER), store.get_transcript(cid))

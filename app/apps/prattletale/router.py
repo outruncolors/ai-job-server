@@ -46,6 +46,10 @@ class ConfigPatch(BaseModel):
     voice_enabled: Optional[bool] = None
     typing_timing_enabled: Optional[bool] = None
     variety_pass_enabled: Optional[bool] = None
+    structured_chat_history: Optional[bool] = None
+    director_enabled: Optional[bool] = None
+    repair_enabled: Optional[bool] = None
+    debug_prattletale: Optional[bool] = None
     enabled_plugins: Optional[list[str]] = None
     sfx_enabled: Optional[bool] = None
     sfx_chance: Optional[float] = None

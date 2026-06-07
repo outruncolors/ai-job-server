@@ -148,9 +148,26 @@ class ConversationConfig(BaseModel):
     context_window_turns: int = 12
     voice_enabled: bool = False
     typing_timing_enabled: bool = False
-    # When on, a middle "variety" LLM pass rewrites a drafted reply that repeats
-    # the structure of recent messages (anti-monotony). Default on.
-    variety_pass_enabled: bool = True
+    # RETIRED: the old middle "variety" LLM pass (anti-monotony rewrite). Its job
+    # is now done up-front by the director plan, so this defaults OFF and the build
+    # path skips the step regardless. Field kept so existing configs stay valid.
+    variety_pass_enabled: bool = False
+    # When on, the turn step sends the model a real sequenced role array
+    # (system + user/assistant transcript turns) instead of one flattened user
+    # prompt. Default on; the single-prompt path remains as the fallback.
+    structured_chat_history: bool = True
+    # The per-turn director: a small LLM pre-pass that returns a JSON plan (move,
+    # stance, reply shape, what to reference/avoid) injected into generation, and
+    # subsumes the old shade/move/cadence feel roll. Default on. Falls back to the
+    # weighted wildcard feel roll when off or when the director call fails.
+    director_enabled: bool = True
+    # When on, a last-resort LLM "repair" pass runs ONLY if the deterministic
+    # cleanup + parser still can't produce usable items. Default on.
+    repair_enabled: bool = True
+    # Dev visibility: when on, the per-turn trace carries extra payload (director
+    # plan, pattern summary, structured messages, repair info) and the frontend
+    # exposes the Prattletale prompt-debug surface.
+    debug_prattletale: bool = False
     # Plugin ids enabled for this conversation. A plugin's composer mode/panel and
     # actions are only available when its id is listed here. New conversations
     # start with each plugin whose ``default_enabled`` is true (seeded by the
@@ -170,10 +187,8 @@ class ConversationConfig(BaseModel):
     # blocks simply collapse to empty when nothing is configured.
     dialogue_feel_enabled: bool = True
     dialogue_feel_roll_enabled: bool = True
-    # Opt-in: when on (and rolls enabled), a small "director" LLM picks the per-turn
-    # feel from conversation context instead of the blind weighted wildcard draw —
-    # one extra LLM call per turn. Off by default. Falls back to the wildcard draw
-    # if the director call fails or yields nothing usable.
+    # DEPRECATED: superseded by ``director_enabled`` (the rich JSON director now
+    # owns per-turn feel). Field kept so existing configs stay valid; no longer read.
     dialogue_feel_director_enabled: bool = False
     dialogue_feel: DialogueFeel = Field(default_factory=DialogueFeel)
 
