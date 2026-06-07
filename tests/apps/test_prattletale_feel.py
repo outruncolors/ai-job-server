@@ -338,11 +338,12 @@ async def test_run_director_runs_one_step_job_and_parses(monkeypatch):
             ' "emotional_temperature": "wary", "length": "short"}',
             encoding="utf-8")
     monkeypatch.setattr(generator, "execute_chain_job", fake)
-    plan = await generator.run_director(
+    plan, raw = await generator.run_director(
         _ctx(), ChainLLMConfig(api_base="http://x", model="m"), counterpart_id="mara")
     assert plan is not None
     assert plan["conversation_move"] == "ask one sharp question"
     assert plan["emotional_temperature"] == "wary"
+    assert "ask one sharp question" in raw  # raw output also returned for the trace
 
 
 # ---- build_context wires the stable blocks ---------------------------------

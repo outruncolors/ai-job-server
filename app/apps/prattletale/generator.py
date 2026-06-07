@@ -55,6 +55,11 @@ JOB_TYPE = "prattletale_turn"
 JOB_TYPE_DIRECTOR = "prattletale_director"
 JOB_TYPE_REPAIR = "prattletale_repair"
 
+# Bumped when the prompt/pipeline shape changes; surfaced in the per-turn trace and
+# the /debug/prompts endpoint so it's never ambiguous which pipeline produced a
+# reply. "core-1" = director + structured messages + deterministic-first repair.
+PRATTLETALE_PROMPT_VERSION = "core-1"
+
 # Rendered when the device user has no persona, so the prompt's <user_persona>
 # section never collapses to a dangling label with empty contents.
 _EMPTY_PERSONA = "(No specific persona — an ordinary conversational partner.)"
@@ -639,11 +644,12 @@ async def run_director(
     *,
     counterpart_id: str = "",
     session_id: str = "",
-) -> Optional[dict]:
+) -> tuple[Optional[dict], str]:
     """Run the per-turn director: a one-step LLM pre-pass that *plans* the next
     reply (shape, move, stance, what to reference/avoid) as strict JSON. Returns
-    the validated/normalized plan dict, or ``None`` when nothing usable parsed (the
-    caller then falls back to the weighted wildcard feel roll).
+    ``(plan, raw)`` — the validated/normalized plan dict (or ``None`` when nothing
+    usable parsed, so the caller falls back to the weighted wildcard feel roll) plus
+    the director's raw output (for the trace).
 
     Runs as its own tiny on-disk job so it reuses the full LLM plumbing (endpoint
     resolution, model swap, on-disk trace) and is independently traceable; it never
@@ -663,9 +669,10 @@ async def run_director(
     status = create_job(JOB_TYPE_DIRECTOR, request.model_dump(), request.input)
     job_dir = find_job_dir(status["job_id"])
     if job_dir is None:  # pragma: no cover — create_job just made it
-        return None
+        return None, ""
     await execute_chain_job(status["job_id"], job_dir, request)
-    return parse_director_plan(_read_final_output(job_dir))
+    raw = _read_final_output(job_dir)
+    return parse_director_plan(raw), raw
 
 
 async def run_repair(raw: str, llm: ChainLLMConfig) -> str:
@@ -801,15 +808,16 @@ async def run_model_turn(
         # A failed or empty director (-> None) falls back to the wildcard feel roll
         # inside build_turn_request. Never lets a director error sink the reply.
         plan: Optional[dict] = None
+        plan_raw = ""
         if director_enabled:
             try:
-                plan = await run_director(
+                plan, plan_raw = await run_director(
                     context_vars, resolved,
                     counterpart_id=conversation["counterpart_character_id"],
                     session_id=conversation_id,
                 )
             except Exception:  # noqa: BLE001 — director is best-effort; fall back to wildcards
-                plan = None
+                plan, plan_raw = None, ""
         request = build_turn_request(
             context_vars,
             resolved,
@@ -867,9 +875,15 @@ async def run_model_turn(
             except Exception as exc:  # noqa: BLE001 — never let voice sink the reply
                 voice_error = str(exc)
 
+        turn_alt = request.steps[0].alternatives[0]
         store.write_trace(conversation_id, turn["id"], {
             "job_id": job_id,
+            "prompt_version": PRATTLETALE_PROMPT_VERSION,
             "context_input": context_vars,
+            "pattern_summary": build_recent_pattern_summary(transcript, character),
+            "director_plan": plan,
+            "director_plan_raw": plan_raw,
+            "structured_messages": turn_alt.messages if structured else None,
             "raw_final_output": raw,
             "repair": repair_info,
             "parsed_items": items,

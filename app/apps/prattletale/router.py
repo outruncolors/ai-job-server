@@ -19,9 +19,11 @@ from fastapi import APIRouter, Body, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from ...prompt_pal import service as pp_service
+from ...prompt_pal import store as pp_store
 from ..hoodat.characters_store import get_character
 from . import settings_store, store, voice
-from .generator import GenerationError, run_model_turn
+from .generator import PRATTLETALE_PROMPT_VERSION, GenerationError, run_model_turn
 from .models import ConversationConfig, DeviceUser, DialogueFeel
 from .plugins import registry as plugin_registry
 
@@ -419,3 +421,48 @@ def get_trace(conversation_id: str, turn_id: str):
     if trace is None:
         raise HTTPException(status_code=404, detail="Trace not found")
     return trace
+
+
+# --- prompt debug surface ---------------------------------------------------
+
+# The Prattletale prompts that drive the live pipeline (UI-editable / resettable).
+_DEBUG_PROMPT_KEYS = ("turn", "turn_system", "director", "repair")
+# Retired keys shown for awareness; they no longer affect a reply.
+_DEBUG_RETIRED_KEYS = ("variety", "feel_director", "turn.guard")
+
+
+@router.get("/debug/prompts")
+def debug_prompts():
+    """Show which Prattletale Prompt Pal entry is actually active (stored copy vs
+    in-code default) for each live prompt, plus the pipeline version — so it is
+    never ambiguous which prompt produced a reply. Read-only."""
+    out: dict[str, dict] = {}
+    for key in _DEBUG_PROMPT_KEYS:
+        try:
+            active = pp_service.get_text("prattletale", key)
+        except Exception:  # noqa: BLE001 — an unresolved/empty prompt is shown blank
+            active = ""
+        out[key] = {
+            "id": pp_service.id_for("prattletale", key),
+            "is_stored": pp_store.get_by_app_key("prattletale", key) is not None,
+            "active_prompt": active,
+        }
+    return {
+        "prompt_version": PRATTLETALE_PROMPT_VERSION,
+        "prompts": out,
+        "retired": list(_DEBUG_RETIRED_KEYS),
+    }
+
+
+@router.post("/debug/prompts/{key}/reset")
+def reset_prompt(key: str):
+    """Reset one Prattletale prompt to its in-code default by deleting the stored
+    copy (so ``get_text`` falls back to the registered default). 404 for an unknown
+    key; ``reset=false`` when there was no stored copy to remove."""
+    if key not in _DEBUG_PROMPT_KEYS:
+        raise HTTPException(status_code=404, detail=f"Unknown prompt key: {key}")
+    entry = pp_store.get_by_app_key("prattletale", key)
+    if entry is None:
+        return {"reset": False, "key": key}
+    pp_store.delete_entry(entry["id"])
+    return {"reset": True, "key": key}

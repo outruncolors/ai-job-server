@@ -115,3 +115,56 @@ def test_get_trace_and_list_traces_store_helpers(monkeypatch):
     assert store.get_trace(cid, "t9999") is None
     assert store.list_traces(cid) == ["t0002"]
     assert store.list_traces("nope") == []
+
+
+async def test_trace_carries_director_plan_pattern_and_messages(client, monkeypatch):
+    cid = _seed()
+    store.append_user_turn(cid, [{"type": "dialogue", "text": "you came back"}])
+
+    async def fake(job_id, job_dir, request, event_bus=None):
+        if request.steps[0].id == "director":
+            (job_dir / "final_output.txt").write_text(
+                '{"conversation_move": "tease", "length": "short"}', encoding="utf-8")
+        else:
+            (job_dir / "final_output.txt").write_text("[say] hi", encoding="utf-8")
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    turn, _ = await generator.run_model_turn(cid)
+    trace = store.get_trace(cid, turn["id"])
+    assert trace["prompt_version"] == generator.PRATTLETALE_PROMPT_VERSION
+    assert trace["director_plan"]["conversation_move"] == "tease"
+    assert "tease" in trace["director_plan_raw"]
+    assert isinstance(trace["pattern_summary"], dict)
+    # structured mode (default) -> the role array is captured
+    assert trace["structured_messages"] is not None
+    assert any(m["role"] == "user" for m in trace["structured_messages"])
+    assert trace["repair"]["llm_used"] is False
+
+
+# --- prompt debug surface ---------------------------------------------------
+
+def test_debug_prompts_lists_active_and_version(client):
+    r = client.get("/v1/apps/prattletale/debug/prompts")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["prompt_version"] == generator.PRATTLETALE_PROMPT_VERSION
+    assert set(body["prompts"]) == {"turn", "turn_system", "director", "repair"}
+    assert "You are a real person" in body["prompts"]["turn_system"]["active_prompt"]
+    assert "variety" in body["retired"] and "feel_director" in body["retired"]
+
+
+def test_debug_reset_unknown_key_404(client):
+    assert client.post("/v1/apps/prattletale/debug/prompts/nope/reset").status_code == 404
+
+
+def test_debug_reset_falls_back_to_default(client):
+    from app.prompt_pal import store as pp_store
+    # edit the stored turn prompt, then reset it -> stored copy removed
+    pp_store.create_entry({"app": "prattletale", "key": "turn", "title": "turn",
+                           "prompt": "MY EDITED TURN"})
+    assert pp_store.get_by_app_key("prattletale", "turn") is not None
+    r = client.post("/v1/apps/prattletale/debug/prompts/turn/reset")
+    assert r.status_code == 200 and r.json()["reset"] is True
+    assert pp_store.get_by_app_key("prattletale", "turn") is None
+    # nothing stored now -> a second reset is a no-op
+    assert client.post("/v1/apps/prattletale/debug/prompts/turn/reset").json()["reset"] is False
