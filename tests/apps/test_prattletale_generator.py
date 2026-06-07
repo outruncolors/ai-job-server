@@ -223,6 +223,16 @@ def test_build_turn_request_skips_variety_when_disabled():
     assert [s.number for s in req.steps] == [1, 2]  # numbering stays contiguous
 
 
+def test_resolve_llm_raises_max_tokens_floor_for_reasoning_headroom():
+    # variety/guard think; reasoning tokens count against max_tokens, so the
+    # reply pipeline needs a generous floor (2048 default starves the answer).
+    low = ChainLLMConfig(api_base="http://x", model="m", max_tokens=2048)
+    assert generator._resolve_llm(low).max_tokens == generator._MIN_TURN_MAX_TOKENS
+    # Never lowers an already-larger budget.
+    high = ChainLLMConfig(api_base="http://x", model="m", max_tokens=20000)
+    assert generator._resolve_llm(high).max_tokens == 20000
+
+
 def test_turn_step_runs_without_thinking_others_default():
     # The in-character reply must not emit a reasoning trace; utility passes
     # (variety/guard) keep the project default (None → thinking on).

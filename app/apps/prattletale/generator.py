@@ -64,6 +64,14 @@ class GenerationError(Exception):
 
 # ---- LLM resolution --------------------------------------------------------
 
+# Reasoning tokens count against max_tokens. The variety/guard passes run with
+# thinking on, so a verbose think trace plus the reply must both fit — the 2048
+# default lets the reasoning exhaust the budget and return empty content (which
+# surfaces as "model output produced no items"). Give the reply pipeline a
+# generous floor so thinking has room without starving the answer.
+_MIN_TURN_MAX_TOKENS = 6144
+
+
 def _resolve_llm(llm: Optional[ChainLLMConfig]) -> ChainLLMConfig:
     if llm is None:
         try:
@@ -72,6 +80,10 @@ def _resolve_llm(llm: Optional[ChainLLMConfig]) -> ChainLLMConfig:
             raise GenerationError(str(exc)) from exc
     # Reasoning is controlled per chain step now (see _llm_step's `thinking`):
     # the in-character `turn` runs without it, utility steps keep the default.
+    # Raise (never lower) max_tokens so thinking steps don't run out of budget
+    # mid-reasoning and return empty content.
+    if llm.max_tokens < _MIN_TURN_MAX_TOKENS:
+        llm = llm.model_copy(update={"max_tokens": _MIN_TURN_MAX_TOKENS})
     return llm
 
 
