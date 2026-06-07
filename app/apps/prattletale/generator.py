@@ -132,6 +132,35 @@ def _render_item(item: dict) -> str:
     return f"({text})"
 
 
+# Item type -> the canonical output tag the model is asked to emit. Used to replay
+# a model turn back into the structured history in the SAME format the model must
+# produce — so the assistant's own prior turns model the target tagged-line format
+# instead of the parenthesized display style (which would teach it to tuck actions
+# inside dialogue). Inverse of ``_TAG_TO_TYPE`` in prompts.py.
+_TYPE_TO_TAG = {
+    ItemType.dialogue.value: "say",
+    ItemType.action.value: "do",
+    ItemType.narration.value: "narration",
+    ItemType.narration_emotion.value: "feel",
+}
+
+
+def _render_model_turn_as_output(items: list[dict]) -> str:
+    """Serialize a model turn's visible items into canonical tagged lines
+    (``[say]``/``[do]``/``[narration]``/``[feel]``), one per line — the exact format
+    the turn prompt asks the model to emit. This is what an ``assistant`` role
+    message carries in structured-history mode, so every prior turn is a faithful
+    few-shot example of the output contract rather than a display-rendered blob."""
+    lines: list[str] = []
+    for it in items:
+        text = (it.get("text") or "").strip()
+        if not text:
+            continue
+        tag = _TYPE_TO_TAG.get(it.get("type"), "narration")
+        lines.append(f"[{tag}] {text}")
+    return "\n".join(lines)
+
+
 def _speaker_label(author: str, character: dict) -> str:
     if author == Author.model.value:
         return (character.get("name") or "").strip() or "Counterpart"
@@ -190,15 +219,22 @@ def _transcript_to_messages(turns: list[dict], character: dict) -> list[dict]:
             and it.get("type") != ItemType.command.value
             and it.get("type") != ItemType.ooc.value
         ]
+        author = turn.get("author")
+        if author == Author.model.value:
+            # Replay the model's own turns in the canonical tagged-line OUTPUT
+            # format so the assistant role models the format it must emit (not the
+            # parenthesized display style, which teaches it to inline actions).
+            content = _render_model_turn_as_output(visible)
+            if not content:
+                continue
+            messages.append({"role": "assistant", "content": content})
+            continue
         rendered = [r for r in (_render_item(it) for it in visible) if r]
         if not rendered:
             continue
         content = " ".join(rendered)
-        author = turn.get("author")
         if author == Author.system.value:
             messages.append({"role": "system", "content": f"[Earlier] {content}"})
-        elif author == Author.model.value:
-            messages.append({"role": "assistant", "content": content})
         else:
             messages.append({"role": "user", "content": content})
     return messages

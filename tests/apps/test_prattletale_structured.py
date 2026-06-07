@@ -40,13 +40,35 @@ def test_transcript_to_messages_maps_roles_and_skips():
         {"author": "model", "items": [{"type": "dialogue", "text": "x", "hidden_from_context": True}]},
     ]
     msgs = generator._transcript_to_messages(turns, _CHAR)
-    # Dialogue renders as plain text, other types as parenthesized stage directions
-    # (same as _flatten_transcript / _render_item).
+    # User turns render in display style (dialogue plain, other types parenthesized);
+    # the model's OWN turns replay in the canonical tagged OUTPUT format so the
+    # assistant role models the format it must emit (one beat per tagged line).
     assert msgs == [
         {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": "hey (waves)"},
+        {"role": "assistant", "content": "[say] hey\n[do] waves"},
         {"role": "system", "content": "[Earlier] they met"},
     ]
+
+
+def test_transcript_assistant_turns_use_tagged_output_format():
+    """Regression: a model turn must NOT replay as a parenthesized display blob
+    (which taught the model to inline actions inside [say]); it replays as the
+    same tagged lines the model is asked to emit, one beat per line."""
+    turns = [{"author": "model", "items": [
+        {"type": "dialogue", "text": "okay so you're a gourmet"},
+        {"type": "action", "text": "leans over the basket"},
+        {"type": "narration", "text": "the smell of sugar drifts up"},
+        {"type": "narration_emotion", "text": "trying to play it cool"},
+    ]}]
+    [msg] = generator._transcript_to_messages(turns, _CHAR)
+    assert msg["role"] == "assistant"
+    assert msg["content"] == (
+        "[say] okay so you're a gourmet\n"
+        "[do] leans over the basket\n"
+        "[narration] the smell of sugar drifts up\n"
+        "[feel] trying to play it cool"
+    )
+    assert "(" not in msg["content"]  # no parenthesized stage directions
 
 
 def test_build_structured_messages_ordering():

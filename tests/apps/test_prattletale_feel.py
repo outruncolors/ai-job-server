@@ -207,6 +207,25 @@ def test_migration_updates_unmodified_stored_prompt():
     assert pp_store.get_by_app_key("prattletale", "variety")["data"]["prompt"] == ""
 
 
+def test_migration_upgrades_unmodified_turn_system():
+    # An install seeded with the v1 turn_system (no one-action-per-line rule) is
+    # brought forward to the current default; an edited copy is left alone.
+    _store_prompt("turn_system", prompts._TURN_SYSTEM_V1)
+    updated = prompts.migrate_turn_variety_prompts()
+    assert "turn_system" in updated
+    upgraded = pp_store.get_by_app_key("prattletale", "turn_system")["data"]["prompt"]
+    assert upgraded == prompts.TURN_SYSTEM
+    assert "NEVER tuck an action" in upgraded
+
+
+def test_migration_leaves_edited_turn_system_untouched():
+    _store_prompt("turn_system", "MY EDITED SYSTEM PROMPT")
+    updated = prompts.migrate_turn_variety_prompts()
+    assert "turn_system" not in updated
+    assert pp_store.get_by_app_key(
+        "prattletale", "turn_system")["data"]["prompt"] == "MY EDITED SYSTEM PROMPT"
+
+
 def test_migration_leaves_edited_prompt_untouched():
     _store_prompt("turn", "MY EDITED TURN PROMPT")
     updated = prompts.migrate_turn_variety_prompts()
