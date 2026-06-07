@@ -219,6 +219,76 @@ def test_migration_noop_when_absent():
     assert prompts.migrate_turn_variety_prompts() == []
 
 
+# ---- standing-orders placement & reach (turn / variety / guard) ------------
+
+def test_standing_orders_block_is_the_last_thing_in_the_turn_prompt():
+    # The block must sit at the very end (highest-compliance slot), AFTER the
+    # natural-reply example — not spliced mid-prompt before HARD RULES, where the
+    # format/example text reliably won out and the order was ignored.
+    assert prompts.TURN.rstrip().endswith("{{var.standing_orders}}")
+    assert "{{var.standing_orders}}\n\nHARD RULES" not in prompts.TURN
+    assert prompts.TURN.index("{{var.standing_orders}}") > prompts.TURN.index(
+        "where else would i be")
+
+
+def test_variety_and_guard_are_standing_order_aware():
+    # Both downstream editors now carry the token (so the order reaches them) and an
+    # instruction that an active order overrides their normal rewrite.
+    assert "{{var.standing_orders}}" in prompts.VARIETY
+    assert "OVERRIDES the monotony" in prompts.VARIETY
+    assert "{{var.standing_orders}}" in prompts.TURN_GUARD
+    assert "keep order-compliant content verbatim" in prompts.TURN_GUARD
+
+
+def test_active_command_reaches_every_chain_step():
+    # End-to-end: a stored command's text must appear, fully resolved, in the turn,
+    # variety AND guard step prompts — not just the turn step (the old behaviour).
+    seed_dialogue_feel_wildcards()
+    seed.seed_message_style_wildcard()
+    ctx = _ctx()
+    ctx["standing_orders"] = generator._render_standing_orders(["answer only in French"])
+    req = generator.build_turn_request(
+        ctx, ChainLLMConfig(api_base="http://x", model="m"),
+        variety=True, dialogue_feel_roll_enabled=False)
+    assert [s.name for s in req.steps] == ["Turn", "Variety", "Guard"]
+    for step in req.steps:
+        prompt = step.alternatives[0].prompt
+        assert "STANDING ORDERS" in prompt, step.name
+        assert "answer only in French" in prompt, step.name
+        assert "{{var.standing_orders}}" not in prompt, step.name  # fully resolved
+
+
+def test_migration_brings_v3_turn_and_old_guard_forward():
+    # An install on the standing-orders-before-HARD-RULES default (v3) with the v1
+    # guard is migrated to the current TURN + guard without being treated as edited.
+    pp_store.create_entry({
+        "app": "prattletale", "key": "turn", "title": "turn",
+        "prompt": prompts._TURN_V3,
+        "guard": {"enabled": True, "prompt": prompts._TURN_GUARD_V1, "variables": {}},
+    })
+    pp_store.create_entry({
+        "app": "prattletale", "key": "variety", "title": "variety",
+        "prompt": prompts._VARIETY_V2})
+    updated = prompts.migrate_turn_variety_prompts()
+    assert set(updated) == {"turn", "turn.guard", "variety"}
+    turn = pp_store.get_by_app_key("prattletale", "turn")["data"]
+    assert turn["prompt"] == prompts.TURN
+    assert turn["guard"]["prompt"] == prompts.TURN_GUARD
+    assert pp_store.get_by_app_key(
+        "prattletale", "variety")["data"]["prompt"] == prompts.VARIETY
+
+
+def test_migration_leaves_edited_guard_untouched():
+    pp_store.create_entry({
+        "app": "prattletale", "key": "turn", "title": "turn",
+        "prompt": prompts._TURN_V3,
+        "guard": {"enabled": True, "prompt": "MY EDITED GUARD", "variables": {}}})
+    updated = prompts.migrate_turn_variety_prompts()
+    assert "turn" in updated and "turn.guard" not in updated  # prompt moves, guard kept
+    assert pp_store.get_by_app_key(
+        "prattletale", "turn")["data"]["guard"]["prompt"] == "MY EDITED GUARD"
+
+
 # ---- feel director (context-aware roll) ------------------------------------
 
 def test_parse_director_roll_extracts_and_orders():

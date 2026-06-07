@@ -308,7 +308,7 @@ def build_turn_request(
             steps.append(_llm_step(number, "variety", "Variety",
                                    resolve_wildcards(variety_prompt), thinking=False))
             number += 1
-    guard_prompt = get_guard("prattletale", "turn")
+    guard_prompt = get_guard("prattletale", "turn", variables=prompt_vars)
     if guard_prompt:
         steps.append(_llm_step(number, "guard", "Guard", guard_prompt, thinking=False))
     return ChainJobRequest(

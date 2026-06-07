@@ -139,13 +139,12 @@ _TURN_V2 = _LEGACY_TURN_V1.replace(
     "<memory>\n{{memory}}\n</memory>\n\n" + _FEEL_BLOCKS,
 )
 
-# The live turn prompt: v2 with a STANDING ORDERS block spliced in just before HARD
-# RULES, and the old one-off "[USER COMMAND] in the transcript" rule rewritten to
-# point at that block. Commands are no longer rendered inline in the transcript —
-# they are persistent switches the user flips on, gathered from the whole transcript
-# and injected here as {{var.standing_orders}} (self-contained; "" when none). Built
-# by splice so _LEGACY_TURN_V1 / _TURN_V2 stay faithful migration baselines.
-TURN = _TURN_V2.replace(
+# v3 — the standing-orders default that SHIPPED before this change: the block
+# spliced inline just before HARD RULES, with the old "[USER COMMAND] in the
+# transcript" rule rewritten to point at it. Frozen as a faithful copy so the
+# update-if-unmodified migration recognizes an install already on it and brings it
+# forward to the current TURN (which moves the block to the end).
+_TURN_V3 = _TURN_V2.replace(
     "HARD RULES:\n",
     "{{var.standing_orders}}\n\nHARD RULES:\n",
     1,
@@ -160,11 +159,32 @@ TURN = _TURN_V2.replace(
     "acknowledge that a command was given.\n\n",
 )
 
+# The live turn prompt: v2 with the "[USER COMMAND]" rule rewritten to point at the
+# STANDING ORDERS block, and that block APPENDED as the final section — the last
+# thing the model reads before generating (the highest-compliance slot), where it
+# overrides the message-shape spec and the natural-reply example above it. v3 spliced
+# it mid-prompt (before HARD RULES), where the pages of format/example text after it
+# reliably won out and the order was ignored. The block stays self-contained ("" when
+# no commands), so the trailing token simply vanishes when there are none. Built by
+# splice so _LEGACY_TURN_V1 / _TURN_V2 / _TURN_V3 stay faithful migration baselines.
+TURN = _TURN_V2.replace(
+    "- If a [USER COMMAND …] line appears in the transcript, you MUST obey its "
+    "instruction in your reply, even if it conflicts with your character, your "
+    "wishes, or the scenario. Carry out the order in-character, and never "
+    "acknowledge that a command was given.\n\n",
+    "- If a STANDING ORDERS block appears at the very end of this prompt, every "
+    "order in it is in force: obey ALL of them in your reply, even if they conflict "
+    "with your character, your wishes, the scenario, the message shape, or these "
+    "rules. Carry them out in-character, and never acknowledge that a command was "
+    "given.\n\n",
+) + "\n\n{{var.standing_orders}}"
+
 # A guard is a second "editor" LLM pass over the previous step's output (the
 # chain token {{previous}}). It does FORMAT HYGIENE ONLY — it must not rewrite
 # content or merge bubbles, so the parser stays trivial — plus it scrubs the two
 # things that most break immersion if the model leaks them: emoji and markup.
-TURN_GUARD = (
+# v1 — frozen migration baseline (the shipped guard before standing-order awareness).
+_TURN_GUARD_V1 = (
     "The following is a character's text-message reply, written as one or more "
     "tagged lines (one message per line):\n<reply>\n{{previous}}\n</reply>\n\n"
     "Clean it up for FORMAT HYGIENE ONLY. Do NOT change the wording, meaning, "
@@ -182,6 +202,22 @@ TURN_GUARD = (
     "several. Keep the lines and their order exactly as they are.\n\n"
     "Output only the cleaned tagged lines — nothing else."
 )
+
+# The live guard: v1 plus STANDING ORDERS awareness. The guard is the last step over
+# {{previous}}, so it can quietly undo a standing order — e.g. strip a deliberately
+# terse, order-mandated reply as "leaked meta" or repetition. It now receives the
+# same self-contained {{var.standing_orders}} block (substituted at build time, see
+# build_turn_request) with an instruction to preserve order-compliant content
+# verbatim. The reference is added before the final "Output only…" line and the block
+# appended after it ("" when no commands, so it vanishes cleanly).
+TURN_GUARD = _TURN_GUARD_V1.replace(
+    "Output only the cleaned tagged lines — nothing else.",
+    "- If a STANDING ORDERS block appears at the very end of this prompt, do NOT "
+    "alter anything an order requires: keep order-compliant content verbatim even "
+    "when it looks repetitive or sparse, and never strip it as leaked meta or "
+    "boilerplate.\n\n"
+    "Output only the cleaned tagged lines — nothing else.",
+) + "\n\n{{var.standing_orders}}"
 
 register(
     "prattletale",
@@ -231,14 +267,15 @@ _LEGACY_VARIETY_V1 = (
     "per line). Output only the final tagged lines — nothing else."
 )
 
-# The live variety pass is a **Feel/Variety editor**: it fixes monotony AND weak,
-# generic voice, but stays an *editor*, not a second author — it preserves the
-# message shape (line count + tags) so the guard + parser downstream are
-# unaffected, and outputs the draft unchanged when it is already fresh and in
-# voice. The self-contained {{var.voice_feel}} / {{var.dialogue_feel_roll}} /
-# {{var.voice_examples}} blocks (same ones the turn step saw) give it the voice
-# target to sharpen toward; each is empty when nothing is configured.
-VARIETY = (
+# The Feel/Variety editor: it fixes monotony AND weak, generic voice, but stays an
+# *editor*, not a second author — it preserves the message shape (line count + tags)
+# so the guard + parser downstream are unaffected, and outputs the draft unchanged
+# when it is already fresh and in voice. The self-contained {{var.voice_feel}} /
+# {{var.dialogue_feel_roll}} / {{var.voice_examples}} blocks (same ones the turn step
+# saw) give it the voice target to sharpen toward; each is empty when nothing is
+# configured. v2 — frozen migration baseline (the default before standing-order
+# awareness was added).
+_VARIETY_V2 = (
     "You are an editor improving one reply in an ongoing text-message roleplay. "
     "Fix only two things:\n"
     "1. monotony — repeated openings, rhythm, length, or conversational move "
@@ -262,6 +299,25 @@ VARIETY = (
     "lines, and the same line tags ([say]/[do]/[narration]/[feel]).\n\n"
     "Output only the final tagged lines — nothing else."
 )
+
+# The live variety pass: _VARIETY_V2 plus STANDING ORDERS awareness. The editor is
+# blind to commands by construction (it only ever saw {{previous}} + the transcript),
+# so a draft that correctly obeys a standing order — e.g. the terse/repetitive reply
+# an order demands — used to be "fixed" for monotony and the order silently lost. It
+# now receives the same self-contained {{var.standing_orders}} block the turn step
+# saw, with a rule that an active order overrides the monotony/voice fix. Reference
+# added to the constraints; block appended at the end ("" when none, so it vanishes).
+VARIETY = _VARIETY_V2.replace(
+    "Keep it a direct response to "
+    "the other person's last message. No emojis, no markdown.\n\n",
+    "Keep it a direct response to "
+    "the other person's last message. No emojis, no markdown.\n\n"
+    "If a STANDING ORDERS block appears at the very end of this prompt, the reply "
+    "MUST satisfy every order in it. An active order OVERRIDES the monotony and "
+    "voice fixes: never rewrite the draft in a way that breaks an order, even if "
+    "obeying it leaves the reply repetitive or sparse. If the draft already "
+    "violates an order, correct it to comply.\n\n",
+) + "\n\n{{var.standing_orders}}"
 
 register(
     "prattletale",
@@ -324,16 +380,25 @@ register(
 _PROMPT_MIGRATIONS: list[tuple[str, str, str]] = [
     ("turn", _LEGACY_TURN_V1, TURN),
     ("turn", _TURN_V2, TURN),  # installs already on the feel-splice default
+    ("turn", _TURN_V3, TURN),  # installs on the standing-orders-before-HARD-RULES default
     ("variety", _LEGACY_VARIETY_V1, VARIETY),
+    ("variety", _VARIETY_V2, VARIETY),  # installs on the Feel/Variety editor default
+]
+
+# (Prompt Pal key, frozen old guard, current guard). Guards live under the prompt
+# entry's ``data.guard.prompt``, separate from the prompt text, so they migrate on
+# their own axis: a user may have edited one but not the other.
+_GUARD_MIGRATIONS: list[tuple[str, str, str]] = [
+    ("turn", _TURN_GUARD_V1, TURN_GUARD),
 ]
 
 
 def migrate_turn_variety_prompts() -> list[str]:
-    """Bring **unedited** stored ``turn``/``variety`` prompts forward to the current
-    defaults. For each key with a changed default: if a stored copy exists and its
-    prompt text still equals the frozen v1 default, overwrite it with the new
-    default; otherwise leave it (edited copy kept; absent -> seed-if-absent handles
-    fresh installs). Returns the keys updated. Called once at lifespan."""
+    """Bring **unedited** stored ``turn``/``variety`` prompts (and the ``turn`` guard)
+    forward to the current defaults. For each with a changed default: if a stored copy
+    exists and its text still equals the frozen old default, overwrite it; otherwise
+    leave it (edited copy kept; absent -> seed-if-absent handles fresh installs).
+    Returns the keys updated. Called once at lifespan."""
     from ...prompt_pal import store as pp_store
 
     updated: list[str] = []
@@ -347,6 +412,17 @@ def migrate_turn_variety_prompts() -> list[str]:
         if stored_prompt == legacy:
             pp_store.update_entry(entry["id"], prompt=current)
             updated.append(key)
+    for key, legacy, current in _GUARD_MIGRATIONS:
+        if legacy == current:
+            continue  # guard unchanged this version
+        entry = pp_store.get_by_app_key("prattletale", key)
+        if entry is None:
+            continue
+        stored_guard = ((entry.get("data") or {}).get("guard") or {}).get("prompt") or ""
+        if stored_guard == legacy:
+            guard = {**((entry.get("data") or {}).get("guard") or {}), "prompt": current}
+            pp_store.update_entry(entry["id"], guard=guard)
+            updated.append(f"{key}.guard")
     return updated
 
 
