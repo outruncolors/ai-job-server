@@ -23,12 +23,16 @@ def _isolate(monkeypatch, tmp_path):
     monkeypatch.setattr(store, "CONVERSATIONS_DIR", tmp_path / "conversations")
     monkeypatch.setattr(router_module, "get_character", lambda cid: dict(_CHARACTER))
 
-    async def fake_model_turn(conversation_id, llm=None, *, replace_turn_id=None, synthesize=True):
+    async def fake_model_turn(
+        conversation_id, llm=None, *, replace_turn_id=None, add_version_turn_id=None, synthesize=True
+    ):
         items = [
             {"type": "narration", "text": "She glances up."},
             {"type": "dialogue", "text": "Hey."},
         ]
-        if replace_turn_id is not None:
+        if add_version_turn_id is not None:
+            turn = store.add_turn_version(conversation_id, add_version_turn_id, items, job_id="job_fake")
+        elif replace_turn_id is not None:
             turn = store.replace_turn(conversation_id, replace_turn_id, items)
         else:
             turn = store.append_model_turn(conversation_id, items)
@@ -181,3 +185,116 @@ def test_retry_missing_conversation_404(client):
     assert (
         client.post("/v1/apps/prattletale/conversations/nope/turns/t0001/retry").status_code == 404
     )
+
+
+# --- continue (partner takes another turn) ---------------------------------
+
+def test_continue_appends_model_turn_without_user_turn(client):
+    conv = _create(client)
+    store.append_user_turn(conv["id"], [{"type": "dialogue", "text": "hi"}])
+    r = client.post(f"/v1/apps/prattletale/conversations/{conv['id']}/continue")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "user_turn" not in body
+    assert body["model_turn"]["author"] == "model"
+    # only the original user turn + the new model turn — no extra user turn
+    transcript = store.get_transcript(conv["id"])
+    assert [t["author"] for t in transcript["turns"]] == ["user", "model"]
+
+
+def test_continue_on_empty_conversation_lets_character_open(client):
+    conv = _create(client)
+    r = client.post(f"/v1/apps/prattletale/conversations/{conv['id']}/continue")
+    assert r.status_code == 200, r.text
+    assert store.get_transcript(conv["id"])["turns"][0]["author"] == "model"
+
+
+def test_continue_missing_conversation_404(client):
+    assert client.post("/v1/apps/prattletale/conversations/nope/continue").status_code == 404
+
+
+# --- regenerate (versions) -------------------------------------------------
+
+def test_regenerate_latest_model_turn_appends_version(client):
+    conv = _create(client)
+    store.append_user_turn(conv["id"], [{"type": "dialogue", "text": "hi"}])
+    model_turn = store.append_model_turn(conv["id"], [{"type": "dialogue", "text": "original"}], job_id="j1")
+
+    r = client.post(
+        f"/v1/apps/prattletale/conversations/{conv['id']}/turns/{model_turn['id']}/regenerate"
+    )
+    assert r.status_code == 200, r.text
+    turn = r.json()
+    assert len(turn["versions"]) == 2
+    assert turn["active_version"] == 1
+    # the original survives as v0; the turn keeps its id/position
+    assert turn["id"] == model_turn["id"]
+    assert turn["versions"][0]["items"][0]["text"] == "original"
+    transcript = store.get_transcript(conv["id"])
+    assert [t["id"] for t in transcript["turns"]] == ["t0001", model_turn["id"]]
+
+
+def test_regenerate_non_latest_turn_409(client):
+    conv = _create(client)
+    user_turn = store.append_user_turn(conv["id"], [{"type": "dialogue", "text": "hi"}])
+    store.append_model_turn(conv["id"], [{"type": "dialogue", "text": "reply"}])  # the latest turn
+    r = client.post(
+        f"/v1/apps/prattletale/conversations/{conv['id']}/turns/{user_turn['id']}/regenerate"
+    )
+    assert r.status_code == 409
+
+
+def test_regenerate_missing_turn_404(client):
+    conv = _create(client)
+    assert (
+        client.post(
+            f"/v1/apps/prattletale/conversations/{conv['id']}/turns/t9999/regenerate"
+        ).status_code == 404
+    )
+
+
+# --- version switch --------------------------------------------------------
+
+def test_select_version_switches_active(client):
+    conv = _create(client)
+    model_turn = store.append_model_turn(conv["id"], [{"type": "dialogue", "text": "v0"}], job_id="j1")
+    store.add_turn_version(conv["id"], model_turn["id"], [{"type": "dialogue", "text": "v1"}], job_id="j2")
+
+    r = client.post(
+        f"/v1/apps/prattletale/conversations/{conv['id']}/turns/{model_turn['id']}/version",
+        json={"index": 0},
+    )
+    assert r.status_code == 200, r.text
+    turn = r.json()
+    assert turn["active_version"] == 0
+    assert turn["items"][0]["text"] == "v0"
+
+
+def test_select_version_out_of_range_422(client):
+    conv = _create(client)
+    model_turn = store.append_model_turn(conv["id"], [{"type": "dialogue", "text": "v0"}], job_id="j1")
+    store.add_turn_version(conv["id"], model_turn["id"], [{"type": "dialogue", "text": "v1"}], job_id="j2")
+    r = client.post(
+        f"/v1/apps/prattletale/conversations/{conv['id']}/turns/{model_turn['id']}/version",
+        json={"index": 9},
+    )
+    assert r.status_code == 422
+
+
+def test_select_version_unversioned_turn_422(client):
+    conv = _create(client)
+    model_turn = store.append_model_turn(conv["id"], [{"type": "dialogue", "text": "only"}])
+    r = client.post(
+        f"/v1/apps/prattletale/conversations/{conv['id']}/turns/{model_turn['id']}/version",
+        json={"index": 0},
+    )
+    assert r.status_code == 422
+
+
+def test_select_version_missing_turn_404(client):
+    conv = _create(client)
+    r = client.post(
+        f"/v1/apps/prattletale/conversations/{conv['id']}/turns/t9999/version",
+        json={"index": 0},
+    )
+    assert r.status_code == 404

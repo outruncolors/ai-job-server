@@ -406,6 +406,7 @@ async def run_model_turn(
     llm: Optional[ChainLLMConfig] = None,
     *,
     replace_turn_id: Optional[str] = None,
+    add_version_turn_id: Optional[str] = None,
     synthesize: bool = True,
 ) -> tuple[dict, str]:
     """Run the full pipeline for ``conversation_id`` and persist a model turn.
@@ -422,6 +423,13 @@ async def run_model_turn(
     :func:`store.replace_turn` (same ``turn_id``/position, new committed items) so
     the chat layout stays stable. A retry that fails again appends a fresh
     ``system_error`` turn like any other failure.
+
+    When ``add_version_turn_id`` is given (the **regenerate** path) the turn is
+    likewise excluded from context, but on success the new draft is *appended* as
+    a fresh version via :func:`store.add_turn_version` (keeping the prior
+    version(s) so the user can flip between them). A regenerate that **fails**
+    re-raises instead of appending a ``system_error`` turn — the existing turn and
+    its versions must stay intact — so the caller (the router) surfaces the error.
     """
     from .prompts import parse_items  # lazy: avoids a prompts<->generator import cycle
 
@@ -430,11 +438,12 @@ async def run_model_turn(
     if conversation is None or transcript is None:
         raise GenerationError(f"conversation not found: {conversation_id}")
 
-    if replace_turn_id is not None:
-        # Re-run against the transcript with the turn being retried excluded.
+    exclude_turn_id = replace_turn_id or add_version_turn_id
+    if exclude_turn_id is not None:
+        # Re-run against the transcript with the turn being retried/regenerated excluded.
         transcript = {
             **transcript,
-            "turns": [t for t in transcript.get("turns", []) if t.get("id") != replace_turn_id],
+            "turns": [t for t in transcript.get("turns", []) if t.get("id") != exclude_turn_id],
         }
 
     job_id: Optional[str] = None
@@ -485,7 +494,9 @@ async def run_model_turn(
         raw = _read_final_output(job_dir)
         items = parse_items(raw)
 
-        if replace_turn_id is not None:
+        if add_version_turn_id is not None:
+            turn = store.add_turn_version(conversation_id, add_version_turn_id, items, job_id=job_id)
+        elif replace_turn_id is not None:
             turn = store.replace_turn(conversation_id, replace_turn_id, items, job_id=job_id)
         else:
             turn = store.append_model_turn(conversation_id, items, job_id=job_id)
@@ -520,6 +531,10 @@ async def run_model_turn(
         })
         return turn, job_id
     except Exception as exc:  # noqa: BLE001 — any failure becomes an inline error turn
+        # Regenerate must not destroy the existing turn / its versions on failure:
+        # re-raise so the router can surface the error and the turn stays intact.
+        if add_version_turn_id is not None:
+            raise
         error_turn = store.append_error_turn(conversation_id, str(exc), job_id=job_id)
         if error_turn is not None:
             store.write_trace(conversation_id, error_turn["id"], {

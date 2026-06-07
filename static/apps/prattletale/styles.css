@@ -249,6 +249,25 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .pt-retry:hover { opacity: 0.85; background: var(--color-danger); }
 
+/* per-model-turn footer: version nav (◀ N/M ▶) + ↻ regenerate, left-aligned
+   under the model stack (avatar gutter width keeps it under the bubbles). */
+.pt-turn-footer {
+  display: flex; align-items: center; gap: 2px;
+  margin: 1px 0 var(--gap-sm) 40px;
+  color: var(--color-text-dim);
+}
+.pt-ver-btn {
+  background: transparent; border: none; color: var(--color-text-muted);
+  padding: 1px 5px; font-size: var(--font-size-sm); line-height: 1; cursor: pointer;
+  border-radius: 4px; opacity: 0.75;
+}
+.pt-ver-btn:hover { background: var(--color-bg-raised); color: var(--color-text); opacity: 1; }
+.pt-ver-btn:disabled { opacity: 0.3; cursor: default; background: transparent; }
+.pt-ver-count {
+  font-size: var(--font-size-xs); color: var(--color-text-dim);
+  min-width: 2.4em; text-align: center; user-select: none;
+}
+
 /* inline audio play button on bubbles with synthesized speech */
 .pt-play {
   background: transparent; border: none; padding: 0 0 0 6px; margin-left: 2px;

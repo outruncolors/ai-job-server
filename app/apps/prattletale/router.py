@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from ..hoodat.characters_store import get_character
 from . import settings_store, store, voice
-from .generator import run_model_turn
+from .generator import GenerationError, run_model_turn
 from .models import ConversationConfig, DeviceUser, DialogueFeel
 from .plugins import registry as plugin_registry
 
@@ -91,6 +91,12 @@ class TurnItemIn(BaseModel):
 
 class TurnCreate(BaseModel):
     items: list[TurnItemIn]
+
+
+class VersionSelect(BaseModel):
+    """Pick which generated version of a turn is active (regenerate nav)."""
+
+    index: int
 
 
 # --- conversation CRUD -----------------------------------------------------
@@ -204,6 +210,21 @@ async def create_turn(conversation_id: str, body: TurnCreate):
     return {"user_turn": user_turn, "model_turn": model_turn}
 
 
+@router.post("/conversations/{conversation_id}/continue")
+async def continue_turn(conversation_id: str):
+    """Have the partner take another turn with no user input.
+
+    Runs the model-turn pipeline against the current transcript without appending
+    a user turn first — used when the composer is empty (the "Continue" button) and
+    to let the character open an empty conversation. Like :func:`create_turn`, a
+    model-side failure comes back as a 200 ``system_error`` turn.
+    """
+    if store.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    model_turn, _ = await run_model_turn(conversation_id, synthesize=False)
+    return {"model_turn": model_turn}
+
+
 @router.post("/conversations/{conversation_id}/turns/{turn_id}/retry")
 async def retry_turn(conversation_id: str, turn_id: str):
     transcript = store.get_transcript(conversation_id)
@@ -217,6 +238,53 @@ async def retry_turn(conversation_id: str, turn_id: str):
         raise HTTPException(status_code=409, detail="Only the latest model turn can be retried")
     model_turn, _ = await run_model_turn(conversation_id, replace_turn_id=turn_id, synthesize=False)
     return model_turn
+
+
+@router.post("/conversations/{conversation_id}/turns/{turn_id}/regenerate")
+async def regenerate_turn(conversation_id: str, turn_id: str):
+    """Generate a fresh **version** of the latest model turn, keeping the prior
+    one(s) so the user can flip between them. Like Retry, only the latest model
+    turn is eligible (409 otherwise); unlike Retry it appends rather than
+    overwrites. A failed regenerate leaves the turn intact and returns 502.
+    """
+    transcript = store.get_transcript(conversation_id)
+    if transcript is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    turns = transcript.get("turns", [])
+    if not any(t.get("id") == turn_id for t in turns):
+        raise HTTPException(status_code=404, detail="Turn not found")
+    last = turns[-1]
+    if last.get("id") != turn_id or last.get("author") != "model":
+        raise HTTPException(status_code=409, detail="Only the latest model turn can be regenerated")
+    try:
+        model_turn, _ = await run_model_turn(
+            conversation_id, add_version_turn_id=turn_id, synthesize=False
+        )
+    except GenerationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return model_turn
+
+
+@router.post("/conversations/{conversation_id}/turns/{turn_id}/version")
+def select_turn_version(conversation_id: str, turn_id: str, body: VersionSelect):
+    """Switch which generated version of a turn is active (the regenerate nav).
+
+    Works on any turn that has versions, regardless of position. 404 when the
+    conversation or turn is missing; 422 when the turn isn't versioned or the
+    index is out of range.
+    """
+    transcript = store.get_transcript(conversation_id)
+    if transcript is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if not any(t.get("id") == turn_id for t in transcript.get("turns", [])):
+        raise HTTPException(status_code=404, detail="Turn not found")
+    try:
+        turn = store.set_active_version(conversation_id, turn_id, body.index)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if turn is None:  # pragma: no cover — existence checked above
+        raise HTTPException(status_code=404, detail="Turn not found")
+    return turn
 
 
 @router.post("/conversations/{conversation_id}/turns/{turn_id}/items/{item_id}/audio")

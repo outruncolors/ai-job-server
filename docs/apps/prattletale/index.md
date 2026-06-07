@@ -48,7 +48,13 @@ autonomous ticks, group chat) is sketched in the design and gets its own build p
 4. Committing appends your turn and runs the model's reply **synchronously** (a direct chain run,
    like Hoodat/Blaboratory). A client-side typing indicator shows while it generates; the reply
    then renders as its bubble stack. A failed turn becomes a red error bubble with **Retry**.
-5. Reloading restores the full transcript from disk.
+5. **Continue**: with the composer empty the Send button reads **Continue** — pressing it (or Enter)
+   makes the partner take another turn with no input from you (and on a fresh chat lets the
+   character speak first).
+6. **Regenerate & versions**: the latest character reply shows a **↻** in its footer. Regenerating
+   keeps the previous take as a separate version; a `◀ N/M ▶` nav flips between them. Switching the
+   active version works on any turn that has more than one.
+7. Reloading restores the full transcript (and each turn's active version) from disk.
 
 **Prerequisite:** a default LLM endpoint (Server → LLM → Endpoints), used via
 `get_default_as_chain_llm_config()`. Voice additionally needs the `voice` capability and a narrator

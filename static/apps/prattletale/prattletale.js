@@ -440,14 +440,54 @@
       firePluginRender();
       return;
     }
-    thread.innerHTML = buildSegments(turns)
-      .map((seg) => (seg.kind === 'narration' ? narrationSegmentHtml(seg) : turnSegmentHtml(seg)))
-      .join('');
+    // A model turn can split into several segments (narration interleaving), so
+    // the version/regenerate footer is rendered once — after the turn's *last*
+    // non-narration segment.
+    const segs = buildSegments(turns);
+    const lastTurnSeg = {};
+    segs.forEach((s, i) => { if (s.kind === 'turn') lastTurnSeg[s.turnId] = i; });
+    let latestModelTurnId = null;
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].author === 'model') { latestModelTurnId = turns[i].id; break; }
+    }
+    thread.innerHTML = segs.map((seg, i) => {
+      let html = seg.kind === 'narration' ? narrationSegmentHtml(seg) : turnSegmentHtml(seg);
+      if (seg.kind === 'turn' && seg.author === 'model' && lastTurnSeg[seg.turnId] === i) {
+        const turn = turns.find((t) => t.id === seg.turnId);
+        html += turnFooterHtml(turn, seg.turnId === latestModelTurnId);
+      }
+      return html;
+    }).join('');
     wireRetry();
     wirePlay();
+    wireVersionNav();
     wireThreadControls();
     scrollToBottom();
     firePluginRender();
+  }
+
+  // Per-model-turn footer: version nav (◀ N/M ▶) when the turn has >1 generated
+  // version, and a ↻ regenerate button on the latest model turn. Renders nothing
+  // otherwise. Buttons carry data-turn + data-act (prev/next/regen).
+  function turnFooterHtml(turn, isLatest) {
+    if (!turn) return '';
+    const versions = Array.isArray(turn.versions) ? turn.versions : [];
+    const nVer = versions.length;
+    if (nVer <= 1 && !isLatest) return '';
+    const tid = _escHtml(turn.id);
+    let nav = '';
+    if (nVer > 1) {
+      const active = turn.active_version || 0;
+      const prevDis = active <= 0 ? ' disabled' : '';
+      const nextDis = active >= nVer - 1 ? ' disabled' : '';
+      nav = `<button type="button" class="pt-ver-btn" data-turn="${tid}" data-act="prev"${prevDis} title="Previous version" aria-label="Previous version">◀</button>` +
+        `<span class="pt-ver-count">${active + 1}/${nVer}</span>` +
+        `<button type="button" class="pt-ver-btn" data-turn="${tid}" data-act="next"${nextDis} title="Next version" aria-label="Next version">▶</button>`;
+    }
+    const regen = isLatest
+      ? `<button type="button" class="pt-ver-btn pt-regen" data-turn="${tid}" data-act="regen" title="Regenerate" aria-label="Regenerate">↻</button>`
+      : '';
+    return `<div class="pt-turn-footer" data-turn="${tid}">${nav}${regen}</div>`;
   }
 
   // One avatar + bubble-stack group for a run of non-narration items from a turn.
@@ -1059,8 +1099,11 @@
       return;
     }
     const hasText = $('pt-input').value.trim().length > 0;
-    btn.textContent = hasText ? 'Stack' : 'Send';
-    btn.disabled = _sending || (!hasText && _draft.length === 0);
+    const hasDraft = _draft.length > 0;
+    // Empty composer: the button continues the partner's turn (it's never disabled
+    // for "nothing to send" anymore — Send/Stack commit text, Continue nudges the model).
+    btn.textContent = hasText ? 'Stack' : (hasDraft ? 'Send' : 'Continue');
+    btn.disabled = _sending;
   }
 
   function renderDraft() {
@@ -1186,8 +1229,9 @@
   // stack a bubble; empty box -> commit the chain.
   function submitOrStack() {
     if (_panelMode) { runPluginGo(); return; }
-    if ($('pt-input').value.trim()) stackItem();
-    else send();
+    if ($('pt-input').value.trim()) { stackItem(); return; }
+    if (_draft.length) { send(); return; }
+    continueTurn();  // empty composer -> the partner takes another turn
   }
 
   async function send() {
@@ -1250,6 +1294,42 @@
       const div = document.createElement('div');
       div.className = 'pt-empty pt-send-error';
       div.textContent = 'Send failed: ' + err.message;
+      thread.appendChild(div);
+      scrollToBottom();
+    } finally {
+      _sending = false;
+      setComposerEnabled(true);
+      $('pt-input').focus();
+    }
+  }
+
+  // Empty-composer "Continue": the partner takes another turn with no user input
+  // (also lets the character open an empty conversation). Mirrors send()'s
+  // model-turn handling but stages no optimistic user turn.
+  async function continueTurn() {
+    if (_sending) return;
+    _sending = true;
+    setComposerEnabled(false);
+    const id = _current.conversation.id;
+    const turns = _current.transcript.turns;
+    const typingEl = showTyping();
+    try {
+      const res = await api(
+        `${APP}/conversations/${encodeURIComponent(id)}/continue`, 'POST');
+      typingEl.remove();
+      const isErr = (res.model_turn.items || []).some((i) => i.type === 'system_error');
+      const timing = _current.conversation.config && _current.conversation.config.typing_timing_enabled;
+      if (timing && !isErr) await revealModelTurn(res.model_turn);
+      turns.push(res.model_turn);
+      renderThread();
+      firePluginTurn(res.model_turn);
+    } catch (err) {
+      typingEl.remove();
+      renderThread();
+      const thread = $('pt-thread');
+      const div = document.createElement('div');
+      div.className = 'pt-empty pt-send-error';
+      div.textContent = 'Continue failed: ' + err.message;
       thread.appendChild(div);
       scrollToBottom();
     } finally {
@@ -1324,6 +1404,72 @@
         </div>`;
         wireRetry();
       }
+    } finally {
+      _sending = false;
+      setComposerEnabled(true);
+    }
+  }
+
+  // ---------- versions (regenerate) ----------
+
+  function wireVersionNav() {
+    $('pt-thread').querySelectorAll('.pt-ver-btn').forEach((btn) => {
+      if (btn.dataset.wired) return;
+      btn.dataset.wired = '1';
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        const turnId = btn.dataset.turn;
+        const act = btn.dataset.act;
+        if (act === 'regen') regenerateTurn(turnId);
+        else switchVersion(turnId, act === 'next' ? 1 : -1);
+      });
+    });
+  }
+
+  async function switchVersion(turnId, delta) {
+    if (_sending) return;
+    const turns = _current.transcript.turns;
+    const turn = turns.find((t) => t.id === turnId);
+    if (!turn || !Array.isArray(turn.versions)) return;
+    const index = (turn.active_version || 0) + delta;
+    if (index < 0 || index >= turn.versions.length) return;
+    try {
+      const updated = await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}` +
+        `/turns/${encodeURIComponent(turnId)}/version`, 'POST', { index });
+      const idx = turns.findIndex((t) => t.id === turnId);
+      if (idx >= 0) turns[idx] = updated;
+      renderThread();
+    } catch (err) {
+      toast('error', `Could not switch version: ${err.message}`);
+    }
+  }
+
+  async function regenerateTurn(turnId) {
+    if (_sending) return;
+    _sending = true;
+    setComposerEnabled(false);
+    // swap the turn's stack for a typing indicator in place (mirrors retryTurn)
+    const turnEl = $('pt-thread').querySelector(`.pt-turn[data-turn="${CSS.escape(turnId)}"]`);
+    const stack = turnEl ? turnEl.querySelector('.pt-stack') : null;
+    if (stack) {
+      stack.innerHTML = `<div class="pt-bubble pt-bubble--dialogue pt-typing">
+        <span></span><span></span><span></span></div>`;
+    }
+    try {
+      const newTurn = await api(
+        `${APP}/conversations/${encodeURIComponent(_current.conversation.id)}` +
+        `/turns/${encodeURIComponent(turnId)}/regenerate`, 'POST');
+      // Replace in place (mirrors retryTurn); renderThread redraws the turn and
+      // its version footer (now showing the new N/M).
+      const turns = _current.transcript.turns;
+      const idx = turns.findIndex((t) => t.id === turnId);
+      if (idx >= 0) turns[idx] = newTurn;
+      renderThread();
+      firePluginTurn(newTurn);
+    } catch (err) {
+      toast('error', `Regenerate failed: ${err.message}`);
+      renderThread();  // restore the unchanged turn
     } finally {
       _sending = false;
       setComposerEnabled(true);

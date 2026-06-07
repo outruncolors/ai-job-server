@@ -356,6 +356,93 @@ def replace_turn(
     return None
 
 
+# --- turn versions (regenerate) --------------------------------------------
+
+def _sync_versions_from_items(turn: dict) -> None:
+    """Write a versioned turn's live ``items`` back into its active version.
+
+    No-op for unversioned turns (``versions`` is None). Called by the in-place
+    item mutators so an edit/hide/delete/audio/sfx applied to the rendered
+    (active) items persists into that version only — sibling versions are
+    untouched.
+    """
+    versions = turn.get("versions")
+    if not versions:
+        return
+    idx = turn.get("active_version", 0)
+    if 0 <= idx < len(versions):
+        versions[idx]["items"] = turn["items"]
+
+
+def add_turn_version(
+    conversation_id: str,
+    turn_id: str,
+    items: list[dict],
+    *,
+    job_id: Optional[str] = None,
+) -> Optional[dict]:
+    """Append a regenerated alternative to ``turn_id`` and make it active.
+
+    Lazily versions the turn: the first call snapshots the current state as
+    version 0 before appending the new draft as version 1 (the active one).
+    ``items`` are the parsed model items (``{type, text}`` dicts), built with the
+    standard ``<turn_id>-iNN`` ids — those ids repeat across versions but only the
+    active version is ever rendered, so they never collide in practice. Returns
+    the updated turn, or None if the conversation or turn is missing.
+    """
+    transcript = _read_transcript(conversation_id)
+    if transcript is None:
+        return None
+    turn = _find_turn(transcript, turn_id)
+    if turn is None:
+        return None
+    versions = turn.get("versions")
+    if not versions:
+        versions = [
+            {
+                "items": turn.get("items", []),
+                "job_id": turn.get("job_id"),
+                "created_at": turn.get("created_at") or now_iso(),
+            }
+        ]
+    new_items = _build_items(turn_id, Author.model, items, status=ItemStatus.committed)
+    versions.append({"items": new_items, "job_id": job_id, "created_at": now_iso()})
+    turn["versions"] = versions
+    turn["active_version"] = len(versions) - 1
+    turn["items"] = new_items
+    turn["job_id"] = job_id
+    _atomic_write(_transcript_path(conversation_id), transcript)
+    _touch_conversation(conversation_id)
+    return turn
+
+
+def set_active_version(conversation_id: str, turn_id: str, index: int) -> Optional[dict]:
+    """Switch which generated version of ``turn_id`` is active (rendered / fed to
+    context). Mirrors the chosen version's ``items``/``job_id`` onto the turn.
+
+    Returns the updated turn. None if the conversation or turn is missing; raises
+    :class:`ValueError` if the turn isn't versioned or ``index`` is out of range
+    (the router maps that to 422).
+    """
+    transcript = _read_transcript(conversation_id)
+    if transcript is None:
+        return None
+    turn = _find_turn(transcript, turn_id)
+    if turn is None:
+        return None
+    versions = turn.get("versions")
+    if not versions:
+        raise ValueError("turn has no versions")
+    if not (0 <= index < len(versions)):
+        raise ValueError(f"version index out of range: {index}")
+    turn["active_version"] = index
+    turn["items"] = versions[index].get("items", [])
+    turn["job_id"] = versions[index].get("job_id")
+    _atomic_write(_transcript_path(conversation_id), transcript)
+    _touch_conversation(conversation_id)
+    return turn
+
+
 def apply_audio(conversation_id: str, turn_id: str, audio_by_item_id: dict) -> Optional[dict]:
     """Set ``audio`` on items of an existing turn **in place** (ids/text unchanged).
 
@@ -371,6 +458,7 @@ def apply_audio(conversation_id: str, turn_id: str, audio_by_item_id: dict) -> O
             for item in turn.get("items", []):
                 if item.get("id") in audio_by_item_id:
                     item["audio"] = audio_by_item_id[item["id"]]
+            _sync_versions_from_items(turn)
             _atomic_write(_transcript_path(conversation_id), transcript)
             return turn
     return None
@@ -391,6 +479,7 @@ def apply_sfx(conversation_id: str, turn_id: str, sfx_by_item_id: dict) -> Optio
             for item in turn.get("items", []):
                 if item.get("id") in sfx_by_item_id:
                     item["sfx"] = sfx_by_item_id[item["id"]]
+            _sync_versions_from_items(turn)
             _atomic_write(_transcript_path(conversation_id), transcript)
             return turn
     return None
@@ -422,6 +511,7 @@ def edit_item(conversation_id: str, turn_id: str, item_id: str, text: str) -> Op
     if item is None:
         return None
     item["text"] = text
+    _sync_versions_from_items(turn)
     _atomic_write(_transcript_path(conversation_id), transcript)
     _touch_conversation(conversation_id)
     return turn
@@ -440,6 +530,7 @@ def set_item_hidden(conversation_id: str, turn_id: str, item_id: str, hidden: bo
     if item is None:
         return None
     item["hidden_from_context"] = bool(hidden)
+    _sync_versions_from_items(turn)
     _atomic_write(_transcript_path(conversation_id), transcript)
     _touch_conversation(conversation_id)
     return turn
@@ -466,6 +557,7 @@ def delete_item(conversation_id: str, turn_id: str, item_id: str) -> Optional[di
         _touch_conversation(conversation_id)
         return {"turn_deleted": turn_id}
     turn["items"] = remaining
+    _sync_versions_from_items(turn)
     _atomic_write(_transcript_path(conversation_id), transcript)
     _touch_conversation(conversation_id)
     return turn

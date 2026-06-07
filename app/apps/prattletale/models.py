@@ -79,14 +79,37 @@ class Item(BaseModel):
     created_at: str
 
 
+class TurnVersion(BaseModel):
+    """One regenerated alternative of a model turn — a snapshot of its items.
+
+    Created lazily: a turn that has never been regenerated carries ``versions=None``
+    (and its ``items`` are the only copy). On the first regenerate the current state
+    is captured as version 0, the new draft as version 1, and ``Turn.items`` becomes
+    a mirror of the active version (so every downstream reader is unchanged).
+    """
+
+    items: list[Item] = Field(default_factory=list)
+    job_id: Optional[str] = None
+    created_at: str
+
+
 class Turn(BaseModel):
-    """One side's atomic contribution — an ordered stack of items."""
+    """One side's atomic contribution — an ordered stack of items.
+
+    ``versions``/``active_version`` back the regenerate feature: when ``versions``
+    is non-None the turn has more than one generated alternative and ``items``
+    mirrors ``versions[active_version].items``. ``versions=None`` (the default)
+    means the turn was never regenerated — the common case for user turns and
+    first-pass model turns.
+    """
 
     id: str
     author: Author
     created_at: str
     job_id: Optional[str] = None
     items: list[Item] = Field(default_factory=list)
+    versions: Optional[list[TurnVersion]] = None
+    active_version: int = 0
 
 
 class DeviceUser(BaseModel):

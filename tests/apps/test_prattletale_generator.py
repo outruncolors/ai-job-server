@@ -157,6 +157,45 @@ async def test_missing_conversation_raises():
         await generator.run_model_turn("does-not-exist")
 
 
+# ---- regenerate (versions) -------------------------------------------------
+
+async def test_regenerate_appends_a_version_and_excludes_the_turn_from_context(monkeypatch):
+    conv_id = _seed_conversation()
+    store.append_user_turn(conv_id, [{"type": "dialogue", "text": "hi"}])
+    base = store.append_model_turn(conv_id, [{"type": "dialogue", "text": "original"}], job_id="j0")
+
+    captured = {}
+
+    async def fake(job_id, job_dir, request, event_bus=None):
+        captured["input"] = request.input  # the flattened transcript fed to the prompt
+        (job_dir / "final_output.txt").write_text("[say] a fresh take.", encoding="utf-8")
+
+    monkeypatch.setattr(generator, "execute_chain_job", fake)
+
+    turn, _ = await generator.run_model_turn(conv_id, add_version_turn_id=base["id"])
+    assert len(turn["versions"]) == 2
+    assert turn["active_version"] == 1
+    assert turn["versions"][0]["items"][0]["text"] == "original"
+    assert turn["items"][0]["text"] == "a fresh take."
+    # the turn being regenerated is excluded from its own context
+    assert "original" not in captured["input"]
+
+
+async def test_failed_regenerate_reraises_and_leaves_turn_intact(monkeypatch):
+    conv_id = _seed_conversation()
+    base = store.append_model_turn(conv_id, [{"type": "dialogue", "text": "keep me"}], job_id="j0")
+    monkeypatch.setattr(generator, "execute_chain_job", _fake_chain("   \n  "))  # empty parse -> error
+
+    with pytest.raises(generator.GenerationError):
+        await generator.run_model_turn(conv_id, add_version_turn_id=base["id"])
+
+    # no system_error turn appended; the original turn stands, still unversioned
+    turns = store.get_transcript(conv_id)["turns"]
+    assert [t["id"] for t in turns] == [base["id"]]
+    assert turns[0]["items"][0]["text"] == "keep me"
+    assert turns[0].get("versions") is None
+
+
 # ---- build_context (pure) --------------------------------------------------
 
 def test_build_context_excludes_hidden_and_error_items():

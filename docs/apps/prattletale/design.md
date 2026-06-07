@@ -233,6 +233,26 @@ the error turn excluded and `store.replace_turn` overwrites it **in place** (sam
 items, status `committed`), keeping turn order and layout stable; a fresh trace overwrites
 `traces/<turn>.json`.
 
+### Continue & regenerate (versions)
+
+**Continue** (`POST .../continue`) runs the model-turn pipeline against the current transcript
+**without** appending a user turn first — the partner takes another turn on its own. The composer's
+Send button reads **"Continue"** when empty; this is also how the character can open an empty
+conversation. `build_context` already tolerates consecutive model turns / an empty transcript.
+
+**Regenerate** (`POST .../turns/{turn_id}/regenerate`) is like Retry — latest model turn only (409
+otherwise), context excludes the turn — but instead of overwriting it **appends a new version** via
+`store.add_turn_version`, keeping the prior take(s). A turn carries `versions: list[{items, job_id,
+created_at}] | None` and `active_version: int`; `versions` is **None until the first regenerate**
+(the common case — user turns and first-pass model turns are unversioned), then `Turn.items` becomes
+a mirror of `versions[active_version].items` so every downstream reader (context, voice, sfx,
+edit/hide/delete, the frontend) is unchanged. In-place item mutators sync their edit back into the
+active version only (`store._sync_versions_from_items`). A regenerate that **fails re-raises** (the
+router returns 502) rather than appending a `system_error` turn, so the existing turn and its
+versions stay intact. **Switching** the active version (`POST .../turns/{turn_id}/version` with
+`{index}`) is a non-generating op allowed on any versioned turn regardless of position; the UI shows
+`◀ N/M ▶` plus a `↻` regenerate button (latest model turn only) in a per-turn footer.
+
 ## API surface (Phase 1)
 
 Prefix `/v1/apps/prattletale`:
@@ -245,6 +265,12 @@ Prefix `/v1/apps/prattletale`:
 - `POST /conversations/{id}/turns` — body `{items: [{type, text}, ...]}`; appends the user turn,
   runs the model turn, returns `{user_turn, model_turn}` (model_turn may be a `system_error` turn).
 - `POST /conversations/{id}/turns/{turn_id}/retry` — re-run a failed/model turn; replaces it.
+- `POST /conversations/{id}/continue` — partner takes another turn (no user turn appended); returns
+  `{model_turn}`.
+- `POST /conversations/{id}/turns/{turn_id}/regenerate` — append a new **version** of the latest
+  model turn (keeps prior versions); 409 if not the latest model turn, 502 on generation failure.
+- `POST /conversations/{id}/turns/{turn_id}/version` — body `{index}`; switch the active version of
+  a turn. 422 when the turn is unversioned or the index is out of range.
 - `POST /conversations/{id}/turns/{turn_id}/items/{item_id}/audio` — synthesize (or return) one
   model item's clip: `{audio: {path, duration_ms, voice_preset_id} | null}`. Idempotent (reuses an
   existing wav); `null` when the item isn't spoken. Drives the client's per-message voice playback.

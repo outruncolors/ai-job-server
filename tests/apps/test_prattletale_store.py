@@ -191,3 +191,68 @@ def test_delete_conversation_removes_folder():
     assert store.delete_conversation(cid) is True
     assert not (store.CONVERSATIONS_DIR / cid).exists()
     assert store.delete_conversation(cid) is False
+
+
+# --- turn versions (regenerate) --------------------------------------------
+
+def test_add_turn_version_seeds_v0_then_appends_active():
+    conv = _make_conversation()
+    cid = conv["id"]
+    turn = store.append_model_turn(cid, [{"type": "dialogue", "text": "first take"}], job_id="j1")
+    assert turn.get("versions") is None  # unversioned until first regenerate
+
+    updated = store.add_turn_version(cid, turn["id"], [{"type": "dialogue", "text": "second take"}], job_id="j2")
+    assert len(updated["versions"]) == 2
+    assert updated["active_version"] == 1
+    assert updated["job_id"] == "j2"
+    # v0 is the original snapshot; active items mirror v1. (Model items are stored
+    # as-is — only user-authored bubbles get canonical quote wrapping.)
+    assert updated["versions"][0]["items"][0]["text"] == "first take"
+    assert updated["versions"][0]["job_id"] == "j1"
+    assert updated["items"][0]["text"] == "second take"
+
+    # round-trips through get_transcript
+    persisted = store.get_transcript(cid)["turns"][0]
+    assert persisted["active_version"] == 1
+    assert persisted["items"][0]["text"] == "second take"
+
+    # a third regenerate appends, doesn't reseed
+    again = store.add_turn_version(cid, turn["id"], [{"type": "dialogue", "text": "third take"}], job_id="j3")
+    assert len(again["versions"]) == 3
+    assert again["active_version"] == 2
+
+
+def test_set_active_version_switches_items_and_validates_range():
+    conv = _make_conversation()
+    cid = conv["id"]
+    turn = store.append_model_turn(cid, [{"type": "dialogue", "text": "one"}], job_id="j1")
+    store.add_turn_version(cid, turn["id"], [{"type": "dialogue", "text": "two"}], job_id="j2")
+
+    back = store.set_active_version(cid, turn["id"], 0)
+    assert back["active_version"] == 0
+    assert back["items"][0]["text"] == "one"
+    assert back["job_id"] == "j1"
+
+    with pytest.raises(ValueError):
+        store.set_active_version(cid, turn["id"], 5)
+    # an unversioned turn has no versions to switch
+    plain = store.append_model_turn(cid, [{"type": "dialogue", "text": "plain"}])
+    with pytest.raises(ValueError):
+        store.set_active_version(cid, plain["id"], 0)
+
+
+def test_edit_item_on_versioned_turn_updates_active_version_only():
+    conv = _make_conversation()
+    cid = conv["id"]
+    turn = store.append_model_turn(cid, [{"type": "dialogue", "text": "one"}], job_id="j1")
+    store.add_turn_version(cid, turn["id"], [{"type": "dialogue", "text": "two"}], job_id="j2")
+    item_id = store.get_transcript(cid)["turns"][0]["items"][0]["id"]
+
+    store.edit_item(cid, turn["id"], item_id, "two edited")
+    t = store.get_transcript(cid)["turns"][0]
+    assert t["versions"][1]["items"][0]["text"] == "two edited"  # active version got the edit
+    assert t["versions"][0]["items"][0]["text"] == "one"         # sibling untouched
+
+    # flipping back shows the pristine v0
+    back = store.set_active_version(cid, turn["id"], 0)
+    assert back["items"][0]["text"] == "one"

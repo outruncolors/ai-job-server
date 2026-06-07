@@ -60,7 +60,10 @@ in `static/js/nav.js`. App pages load the shared topnav and style off `responsiv
   lacks the `image` capability — it does not gate the whole app.
 - **prattletale** — iMessage-style roleplay chat against a Hoodat character. Each conversation is
   a self-contained folder (`conversation.json` + `transcript.json` + `traces/` + `media/`).
-  A *turn* is one side's contribution; an *item* is one rendered bubble. Has a plugin system
+  A *turn* is one side's contribution; an *item* is one rendered bubble. A model turn can be
+  **regenerated** into multiple alternative *versions* (`Turn.versions`/`active_version`, lazily
+  created on first regenerate; `Turn.items` mirrors the active version) flipped via `◀ N/M ▶`;
+  the empty-composer **Continue** button makes the partner take another turn. Has a plugin system
   (registry + manifest + generic action dispatch + `window.PtPlugins` loader); **Summarizer**
   ships as the first plugin.
 
