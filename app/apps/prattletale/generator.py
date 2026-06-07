@@ -64,11 +64,8 @@ class GenerationError(Exception):
 
 # ---- LLM resolution --------------------------------------------------------
 
-# Reasoning tokens count against max_tokens. The variety/guard passes run with
-# thinking on, so a verbose think trace plus the reply must both fit — the 2048
-# default lets the reasoning exhaust the budget and return empty content (which
-# surfaces as "model output produced no items"). Give the reply pipeline a
-# generous floor so thinking has room without starving the answer.
+# Roomy generation cap for the chat-turn pipeline so long replies (and the
+# guard pass) aren't truncated by the 2048 default. Raised, never lowered.
 _MIN_TURN_MAX_TOKENS = 6144
 
 
@@ -78,10 +75,8 @@ def _resolve_llm(llm: Optional[ChainLLMConfig]) -> ChainLLMConfig:
             llm = get_default_as_chain_llm_config()
         except RuntimeError as exc:
             raise GenerationError(str(exc)) from exc
-    # Reasoning is controlled per chain step now (see _llm_step's `thinking`):
-    # the in-character `turn` runs without it, utility steps keep the default.
-    # Raise (never lower) max_tokens so thinking steps don't run out of budget
-    # mid-reasoning and return empty content.
+    # Reasoning is controlled per chain step (see _llm_step's `thinking`); the
+    # whole chat-turn pipeline runs no-thinking. Give replies a roomy token cap.
     if llm.max_tokens < _MIN_TURN_MAX_TOKENS:
         llm = llm.model_copy(update={"max_tokens": _MIN_TURN_MAX_TOKENS})
     return llm
@@ -302,18 +297,20 @@ def build_turn_request(
         "top_k": 6,
         "max_chars": 1200,
     }
-    # The in-character reply runs without reasoning (it degrades roleplay); the
-    # downstream variety/guard utility passes keep the default (thinking on).
+    # The whole chat-turn pipeline runs no-thinking: reasoning degrades the
+    # in-character reply, and on variety/guard a verbose think trace can exhaust
+    # max_tokens and return empty content ("model output produced no items").
     steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory, thinking=False)]
     number = 2
     if variety:
         variety_prompt = get_text("prattletale", "variety", variables=prompt_vars)
         if variety_prompt.strip():
-            steps.append(_llm_step(number, "variety", "Variety", resolve_wildcards(variety_prompt)))
+            steps.append(_llm_step(number, "variety", "Variety",
+                                   resolve_wildcards(variety_prompt), thinking=False))
             number += 1
     guard_prompt = get_guard("prattletale", "turn")
     if guard_prompt:
-        steps.append(_llm_step(number, "guard", "Guard", guard_prompt))
+        steps.append(_llm_step(number, "guard", "Guard", guard_prompt, thinking=False))
     return ChainJobRequest(
         title="Prattletale turn",
         input=context_vars.get("transcript", ""),
@@ -346,7 +343,7 @@ async def direct_feel_roll(
         title="Prattletale feel director",
         input=context_vars.get("transcript", ""),
         llm=llm,
-        steps=[_llm_step(1, "feel_director", "Feel Director", prompt)],
+        steps=[_llm_step(1, "feel_director", "Feel Director", prompt, thinking=False)],
         variables={"counterpart_id": counterpart_id, "session_id": session_id},
     )
     status = create_job(JOB_TYPE_DIRECTOR, request.model_dump(), request.input)

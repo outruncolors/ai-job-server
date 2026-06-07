@@ -223,21 +223,16 @@ def test_build_turn_request_skips_variety_when_disabled():
     assert [s.number for s in req.steps] == [1, 2]  # numbering stays contiguous
 
 
-def test_resolve_llm_raises_max_tokens_floor_for_reasoning_headroom():
-    # variety/guard think; reasoning tokens count against max_tokens, so the
-    # reply pipeline needs a generous floor (2048 default starves the answer).
+def test_whole_turn_pipeline_runs_without_thinking():
+    # Reasoning is disabled across the chat-turn pipeline: it degrades the reply
+    # and on variety/guard can exhaust max_tokens (empty content -> "no items").
+    req = generator.build_turn_request(_ctx(), ChainLLMConfig(api_base="http://x", model="m"))
+    assert all(s.primary.thinking is False for s in req.steps)
+
+
+def test_resolve_llm_raises_max_tokens_floor():
     low = ChainLLMConfig(api_base="http://x", model="m", max_tokens=2048)
     assert generator._resolve_llm(low).max_tokens == generator._MIN_TURN_MAX_TOKENS
     # Never lowers an already-larger budget.
     high = ChainLLMConfig(api_base="http://x", model="m", max_tokens=20000)
     assert generator._resolve_llm(high).max_tokens == 20000
-
-
-def test_turn_step_runs_without_thinking_others_default():
-    # The in-character reply must not emit a reasoning trace; utility passes
-    # (variety/guard) keep the project default (None → thinking on).
-    req = generator.build_turn_request(_ctx(), ChainLLMConfig(api_base="http://x", model="m"))
-    by_id = {s.id: s.primary.thinking for s in req.steps}
-    assert by_id["turn"] is False
-    assert by_id["variety"] is None
-    assert by_id["guard"] is None
