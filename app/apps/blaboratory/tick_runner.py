@@ -43,12 +43,6 @@ def next_tick() -> int:
     return event_store.max_tick() + 1
 
 
-def _disable_thinking(llm: ChainLLMConfig) -> ChainLLMConfig:
-    if llm.chat_template_kwargs is None:
-        return llm.model_copy(update={"chat_template_kwargs": {"enable_thinking": False}})
-    return llm
-
-
 def decision_node(activity: Optional[dict]) -> str:
     """The ``[Your Action]`` block: the menu of actions + Continue + breakpoint."""
     lines = ["It is your turn to act. Choose ONE thing to do this tick. Options:"]
@@ -153,7 +147,6 @@ async def run_tick(tick_number: Optional[int] = None, *, llm: Optional[ChainLLMC
         except RuntimeError as exc:
             log.warning("Blaboratory tick %s skipped: %s", tick_number, exc)
             return {"tick": tick_number, "acted": [], "skipped": "no_default_llm"}
-    llm = _disable_thinking(llm)
 
     # Backfill the vector index before any gather so retrieval sees this tick's
     # and prior un-indexed rows. No-op (logged once) without the embed server.

@@ -49,7 +49,14 @@ _ALTERNATIVE_FIELDS = {
     "target_step",
     "fall_through",
     "memory",
+    "thinking",
 }
+
+
+# Project-wide default for whether an LLM step uses reasoning. Thinking is the
+# default (it improves utility/JSON prompts); only steps that explicitly set
+# `thinking=False` (e.g. an in-character roleplay reply) suppress it.
+DEFAULT_THINKING = True
 
 
 class ChainLLMConfig(BaseModel):
@@ -62,6 +69,11 @@ class ChainLLMConfig(BaseModel):
     # request field (llama.cpp honors it; servers that don't simply ignore it).
     # Used e.g. to disable a reasoning model's thinking: {"enable_thinking": False}.
     chat_template_kwargs: Optional[dict] = None
+    # Per-request reasoning budget sent to llama.cpp as `thinking_budget_tokens`
+    # (0 = end thinking immediately / off; -1 = unrestricted / on). Honored only
+    # when the server was launched WITHOUT a --reasoning-budget flag (CLI default
+    # -1). Resolved per LLM step by the executor from `Alternative.thinking`.
+    thinking_budget_tokens: Optional[int] = None
 
 
 class SequenceVariable(BaseModel):
@@ -105,6 +117,9 @@ class Alternative(BaseModel):
     # llm preset routing
     preset: Optional[str] = None
     requires: list[str] = []
+    # reasoning control (llm steps): None = project default (DEFAULT_THINKING),
+    # True/False force reasoning on/off via the per-request thinking budget.
+    thinking: Optional[bool] = None
     # sequence reference
     sequence_id: Optional[str] = None
     # new step types

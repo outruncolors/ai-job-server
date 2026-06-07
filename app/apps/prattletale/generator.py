@@ -70,20 +70,26 @@ def _resolve_llm(llm: Optional[ChainLLMConfig]) -> ChainLLMConfig:
             llm = get_default_as_chain_llm_config()
         except RuntimeError as exc:
             raise GenerationError(str(exc)) from exc
-    # Want an in-character reply, not a reasoning trace (same rationale as Hoodat).
-    if llm.chat_template_kwargs is None:
-        llm = llm.model_copy(update={"chat_template_kwargs": {"enable_thinking": False}})
+    # Reasoning is controlled per chain step now (see _llm_step's `thinking`):
+    # the in-character `turn` runs without it, utility steps keep the default.
     return llm
 
 
 def _llm_step(
-    number: int, step_id: str, name: str, prompt: str, *, memory: Optional[dict] = None
+    number: int, step_id: str, name: str, prompt: str, *,
+    memory: Optional[dict] = None, thinking: Optional[bool] = None,
 ) -> ChainStep:
     """Build a single-alternative ``llm`` step. When ``memory`` is given, the
     alternative carries a :class:`MemoryStepConfig` so the executor retrieves a
     memory block and exposes it to the prompt via the ``{{memory}}`` token (and
-    writes ``steps/NNN_<id>/memory.txt`` for the trace)."""
-    alt = Alternative(prompt=prompt, memory=MemoryStepConfig(**memory) if memory else None)
+    writes ``steps/NNN_<id>/memory.txt`` for the trace). ``thinking`` overrides
+    the project reasoning default (None = default-on; False for the in-character
+    reply, which roleplay best practice runs without a reasoning trace)."""
+    alt = Alternative(
+        prompt=prompt,
+        memory=MemoryStepConfig(**memory) if memory else None,
+        thinking=thinking,
+    )
     return ChainStep(
         number=number, id=step_id, name=name, type="llm",
         alternatives=[alt],
@@ -95,20 +101,13 @@ def _llm_step(
 def _render_item(item: dict) -> str:
     """Render one item for the transcript script: dialogue (and a ``summary``
     recap) as plain text, every other (visible) type as a parenthesized stage
-    direction."""
+    direction. ``command`` items are NOT rendered here — a command is a standing
+    order (a switch the user flipped on, not a line of conversation), gathered
+    separately by :func:`_collect_standing_orders` and injected as its own prompt
+    block. They are excluded from the transcript script entirely."""
     text = (item.get("text") or "").strip()
     if not text:
         return ""
-    # A command is an out-of-character order the user issued: render it as a
-    # self-describing imperative so the model obeys it regardless of any prompt
-    # edits (the {{var.transcript}} block always reaches the model, but a stored
-    # `turn` prompt is never re-seeded — see prompts.py).
-    if item.get("type") == ItemType.command.value:
-        return (
-            "[USER COMMAND — an out-of-character order you must obey in your reply, "
-            "even if it conflicts with your character, your wishes, or the scenario. "
-            f"Carry it out in-character without acknowledging the command: {text}]"
-        )
     if item.get("type") in (ItemType.dialogue.value, ItemType.summary.value):
         return text
     return f"({text})"
@@ -123,15 +122,17 @@ def _speaker_label(author: str, character: dict) -> str:
 
 
 def _flatten_transcript(turns: list[dict], character: dict) -> str:
-    """Flatten turns to a ``[Speaker] …`` script, skipping ``hidden_from_context``
-    and ``system_error`` items. A turn with no visible items is dropped entirely
-    (no dangling speaker label)."""
+    """Flatten turns to a ``[Speaker] …`` script, skipping ``hidden_from_context``,
+    ``system_error``, and ``command`` items (commands are standing orders, injected
+    as their own block — see :func:`_collect_standing_orders`). A turn with no
+    visible items is dropped entirely (no dangling speaker label)."""
     lines: list[str] = []
     for turn in turns:
         visible = [
             it for it in (turn.get("items") or [])
             if not it.get("hidden_from_context")
             and it.get("type") != ItemType.system_error.value
+            and it.get("type") != ItemType.command.value
         ]
         rendered = [r for r in (_render_item(it) for it in visible) if r]
         if not rendered:
@@ -143,6 +144,41 @@ def _flatten_transcript(turns: list[dict], character: dict) -> str:
         else:
             lines.append(f"[{_speaker_label(turn.get('author'), character)}] {' '.join(rendered)}")
     return "\n".join(lines)
+
+
+def _collect_standing_orders(turns: list[dict]) -> list[str]:
+    """The text of every **active** (non-hidden) ``command`` item across the whole
+    transcript, oldest first. A command is a standing order — a switch the user
+    flipped on that stays in force for every future reply until they hide or delete
+    it — so it is gathered from the entire transcript, never windowed: an order set
+    twenty turns ago must not fall out of scope. Hiding/deleting the command item
+    (the manager modal) is what switches it back off."""
+    orders: list[str] = []
+    for turn in turns:
+        for it in (turn.get("items") or []):
+            if it.get("type") != ItemType.command.value or it.get("hidden_from_context"):
+                continue
+            text = (it.get("text") or "").strip()
+            if text:
+                orders.append(text)
+    return orders
+
+
+def _render_standing_orders(orders: list[str]) -> str:
+    """Render active commands as a self-contained STANDING ORDERS block, or ``""``
+    when there are none. Self-contained (its own header) so the ``{{var.standing_orders}}``
+    token simply vanishes when empty — same convention as the Dialogue Feel blocks."""
+    if not orders:
+        return ""
+    lines = "\n".join(f"- {order}" for order in orders)
+    return (
+        "STANDING ORDERS — out-of-character instructions the user has switched on. "
+        "They stay in force for THIS reply and every future reply until switched "
+        "off. You MUST obey every one, even if it conflicts with your character, "
+        "your wishes, or the scenario. Carry them out in-character, and never "
+        "acknowledge that a command was given:\n"
+        f"{lines}"
+    )
 
 
 def _latest_user_text(turns: list[dict]) -> str:
@@ -187,6 +223,9 @@ def build_context(conversation: dict, character: dict, transcript: dict) -> dict
         "role_instructions": (conversation.get("role_instructions") or "").strip(),
         "user_persona": persona or _EMPTY_PERSONA,
         "transcript": transcript_text,
+        # Active Command-plugin orders, gathered from the WHOLE transcript (not the
+        # window) so a standing order never scrolls out of scope. "" when none.
+        "standing_orders": _render_standing_orders(_collect_standing_orders(turns)),
         # Dialogue Feel System: the stable profile + concrete examples. Each is a
         # self-contained block (or "") so the turn/variety prompts can drop them in
         # directly. The per-turn *roll* (RNG) is added later in build_turn_request.
@@ -251,7 +290,9 @@ def build_turn_request(
         "top_k": 6,
         "max_chars": 1200,
     }
-    steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory)]
+    # The in-character reply runs without reasoning (it degrades roleplay); the
+    # downstream variety/guard utility passes keep the default (thinking on).
+    steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory, thinking=False)]
     number = 2
     if variety:
         variety_prompt = get_text("prattletale", "variety", variables=prompt_vars)

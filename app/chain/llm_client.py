@@ -86,6 +86,8 @@ class OpenAICompatibleLLMClient:
         }
         if llm_config.chat_template_kwargs:
             payload["chat_template_kwargs"] = llm_config.chat_template_kwargs
+        if llm_config.thinking_budget_tokens is not None:
+            payload["thinking_budget_tokens"] = llm_config.thinking_budget_tokens
         try:
             async with httpx.AsyncClient(timeout=llm_config.timeout_seconds) as client:
                 resp = await client.post(url, json=payload)
@@ -131,6 +133,8 @@ class OpenAICompatibleLLMClient:
             payload["tool_choice"] = "auto"
         if llm_config.chat_template_kwargs:
             payload["chat_template_kwargs"] = llm_config.chat_template_kwargs
+        if llm_config.thinking_budget_tokens is not None:
+            payload["thinking_budget_tokens"] = llm_config.thinking_budget_tokens
         try:
             async with httpx.AsyncClient(timeout=llm_config.timeout_seconds) as client:
                 resp = await client.post(url, json=payload)
@@ -184,6 +188,8 @@ class OpenAICompatibleLLMClient:
             payload["tool_choice"] = "auto"
         if llm_config.chat_template_kwargs:
             payload["chat_template_kwargs"] = llm_config.chat_template_kwargs
+        if llm_config.thinking_budget_tokens is not None:
+            payload["thinking_budget_tokens"] = llm_config.thinking_budget_tokens
         try:
             async with httpx.AsyncClient(timeout=llm_config.timeout_seconds) as client:
                 async with client.stream("POST", url, json=payload) as resp:

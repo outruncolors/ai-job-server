@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from .events import EventBus
 from .llm_client import OpenAICompatibleLLMClient
-from .models import Alternative, ChainJobRequest, ChainStep
+from .models import DEFAULT_THINKING, Alternative, ChainJobRequest, ChainStep
 
 
 def _now_iso() -> str:
@@ -421,6 +421,13 @@ async def execute_chain_job(
                 )
                 if swap_log is not None:
                     _append_log(job_dir, f"[step {ptr} inv {inv}] {swap_log}\n")
+                # Reasoning control is a per-request budget (no model reload):
+                # 0 ends thinking immediately, -1 leaves it unrestricted. Honored
+                # only when the server was launched without a --reasoning-budget.
+                thinking = alt.thinking if alt.thinking is not None else DEFAULT_THINKING
+                effective_llm = effective_llm.model_copy(
+                    update={"thinking_budget_tokens": -1 if thinking else 0}
+                )
                 request_for_step = request.model_copy(update={"llm": effective_llm})
                 new_output, output_file, rendered_prompt = await run_llm_step(
                     step_dir, step, alt, request_for_step, client, text_output, ptr,

@@ -50,9 +50,8 @@ def _resolve_llm(llm: Optional[ChainLLMConfig]) -> ChainLLMConfig:
             llm = get_default_as_chain_llm_config()
         except RuntimeError as exc:
             raise GenerationError(str(exc)) from exc
-    # Want prose/JSON, not a reasoning trace (same rationale as Blaboratory).
-    if llm.chat_template_kwargs is None:
-        llm = llm.model_copy(update={"chat_template_kwargs": {"enable_thinking": False}})
+    # Reasoning is the project default now (it improves field/JSON generation);
+    # the chain executor sets the per-request thinking budget per step.
     return llm
 
 

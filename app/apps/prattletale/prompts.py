@@ -130,12 +130,34 @@ _FEEL_BLOCKS = (
     "subtext.\n\n"
 )
 
-# The live turn prompt: the frozen v1 text with the feel blocks spliced in after
-# the <memory> section. Built by splice (not a second giant literal) so
-# _LEGACY_TURN_V1 stays a faithful copy for the update-if-unmodified migration.
-TURN = _LEGACY_TURN_V1.replace(
+# The v2 turn prompt: the frozen v1 text with the feel blocks spliced in after the
+# <memory> section. This was the shipped `turn` default before standing-order
+# commands; kept as a faithful copy (a second migration baseline) so the
+# update-if-unmodified migration can recognize and upgrade an install already on it.
+_TURN_V2 = _LEGACY_TURN_V1.replace(
     "<memory>\n{{memory}}\n</memory>\n\n",
     "<memory>\n{{memory}}\n</memory>\n\n" + _FEEL_BLOCKS,
+)
+
+# The live turn prompt: v2 with a STANDING ORDERS block spliced in just before HARD
+# RULES, and the old one-off "[USER COMMAND] in the transcript" rule rewritten to
+# point at that block. Commands are no longer rendered inline in the transcript —
+# they are persistent switches the user flips on, gathered from the whole transcript
+# and injected here as {{var.standing_orders}} (self-contained; "" when none). Built
+# by splice so _LEGACY_TURN_V1 / _TURN_V2 stay faithful migration baselines.
+TURN = _TURN_V2.replace(
+    "HARD RULES:\n",
+    "{{var.standing_orders}}\n\nHARD RULES:\n",
+    1,
+).replace(
+    "- If a [USER COMMAND …] line appears in the transcript, you MUST obey its "
+    "instruction in your reply, even if it conflicts with your character, your "
+    "wishes, or the scenario. Carry out the order in-character, and never "
+    "acknowledge that a command was given.\n\n",
+    "- If a STANDING ORDERS block appears above, every order in it is in force: "
+    "obey ALL of them in your reply, even if they conflict with your character, "
+    "your wishes, or the scenario. Carry them out in-character, and never "
+    "acknowledge that a command was given.\n\n",
 )
 
 # A guard is a second "editor" LLM pass over the previous step's output (the
@@ -301,6 +323,7 @@ register(
 # v1 text (i.e. the user never touched it).
 _PROMPT_MIGRATIONS: list[tuple[str, str, str]] = [
     ("turn", _LEGACY_TURN_V1, TURN),
+    ("turn", _TURN_V2, TURN),  # installs already on the feel-splice default
     ("variety", _LEGACY_VARIETY_V1, VARIETY),
 ]
 
