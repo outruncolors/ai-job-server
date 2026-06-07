@@ -141,6 +141,49 @@ async def test_trace_carries_director_plan_pattern_and_messages(client, monkeypa
     assert trace["repair"]["llm_used"] is False
 
 
+# --- conversation export (bug-report bundle) --------------------------------
+
+def test_export_store_bundles_conversation_transcript_and_traces():
+    cid = _seed(variety_pass_enabled=False)
+    store.append_user_turn(cid, [{"type": "dialogue", "text": "hi"}])
+    store.write_trace(cid, "t0002", {"job_id": "j2", "raw_final_output": "[say] yo"})
+
+    bundle = store.export_conversation(cid)
+    assert bundle["conversation"]["id"] == cid
+    assert bundle["transcript"]["conversation_id"] == cid
+    assert bundle["traces"]["t0002"]["raw_final_output"] == "[say] yo"
+    # a missing conversation exports as None
+    assert store.export_conversation("nope") is None
+
+
+async def test_export_endpoint_returns_self_contained_bundle(client, monkeypatch):
+    cid = _seed()
+    store.append_user_turn(cid, [{"type": "dialogue", "text": "you came back"}])
+    monkeypatch.setattr(generator, "execute_chain_job", _fake_chain("[say] hey"))
+    turn, _ = await generator.run_model_turn(cid)
+
+    r = client.get(f"/v1/apps/prattletale/conversations/{cid}/export")
+    assert r.status_code == 200, r.text
+    # downloadable: attachment header names the file after the conversation
+    assert f'prattletale-{cid}.json' in r.headers.get("content-disposition", "")
+
+    body = r.json()
+    assert body["app"] == "prattletale"
+    assert body["prompt_version"] == generator.PRATTLETALE_PROMPT_VERSION
+    assert "exported_at" in body
+    # the active prompts that produced the reply travel with the report
+    assert set(body["active_prompts"]) == {"turn", "turn_system", "director", "repair"}
+    # the counterpart character sheet is resolved and included
+    assert body["character"]["id"] == "mara-okafor"
+    # the turn's trace is bundled in, keyed by turn id
+    assert body["traces"][turn["id"]]["job_id"]
+    assert body["conversation"]["id"] == cid
+
+
+def test_export_endpoint_404_for_missing_conversation(client):
+    assert client.get("/v1/apps/prattletale/conversations/nope/export").status_code == 404
+
+
 # --- prompt debug surface ---------------------------------------------------
 
 def test_debug_prompts_lists_active_and_version(client):

@@ -625,3 +625,22 @@ def list_traces(conversation_id: str) -> list[str]:
     if not traces.exists():
         return []
     return sorted(p.stem for p in traces.iterdir() if p.suffix == ".json")
+
+
+# --- export (shareable bug-report bundle) -----------------------------------
+
+def export_conversation(conversation_id: str) -> Optional[dict]:
+    """Bundle a whole conversation for a shareable bug report: the conversation
+    doc, its full transcript (turns/items/versions), and every per-turn trace keyed
+    by turn id. None when the conversation is absent. Read-only and self-contained
+    for the store's own data — media bytes are not inlined (only the on-disk
+    references already inside items travel with the transcript)."""
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        return None
+    return {
+        "conversation": conversation,
+        "transcript": get_transcript(conversation_id) or {},
+        "traces": {tid: get_trace(conversation_id, tid)
+                   for tid in list_traces(conversation_id)},
+    }

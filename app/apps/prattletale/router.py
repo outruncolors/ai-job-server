@@ -13,12 +13,14 @@ models, and ``404`` for missing resources.
 
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from ...cruddables.envelope import now_iso
 from ...prompt_pal import service as pp_service
 from ...prompt_pal import store as pp_store
 from ..hoodat.characters_store import get_character
@@ -423,6 +425,37 @@ def get_trace(conversation_id: str, turn_id: str):
     return trace
 
 
+@router.get("/conversations/{conversation_id}/export")
+def export_conversation(conversation_id: str):
+    """Export a whole conversation as one self-contained JSON bundle for bug
+    reports: the conversation + full transcript + every per-turn trace, enriched
+    with the pipeline version, the active prompts that produced the replies, and
+    the counterpart character sheet (so the report reproduces the inputs). 404 when
+    the conversation is absent. Read-only.
+
+    Returned as a file attachment so hitting the URL in a browser downloads it; the
+    UI fetches the JSON and saves it with the same name."""
+    bundle = store.export_conversation(conversation_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    char_id = (bundle["conversation"] or {}).get("counterpart_character_id")
+    try:
+        character = get_character(char_id) if char_id else None
+    except Exception:  # noqa: BLE001 — a missing/broken character must not block export
+        character = None
+    bundle["app"] = "prattletale"
+    bundle["prompt_version"] = PRATTLETALE_PROMPT_VERSION
+    bundle["exported_at"] = now_iso()
+    bundle["active_prompts"] = _active_prompt_map()
+    bundle["character"] = character
+    filename = f"prattletale-{conversation_id}.json"
+    return Response(
+        content=json.dumps(bundle, indent=2, ensure_ascii=False),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # --- prompt debug surface ---------------------------------------------------
 
 # The Prattletale prompts that drive the live pipeline (UI-editable / resettable).
@@ -431,11 +464,11 @@ _DEBUG_PROMPT_KEYS = ("turn", "turn_system", "director", "repair")
 _DEBUG_RETIRED_KEYS = ("variety", "feel_director", "turn.guard")
 
 
-@router.get("/debug/prompts")
-def debug_prompts():
-    """Show which Prattletale Prompt Pal entry is actually active (stored copy vs
-    in-code default) for each live prompt, plus the pipeline version — so it is
-    never ambiguous which prompt produced a reply. Read-only."""
+def _active_prompt_map() -> dict[str, dict]:
+    """For each live Prattletale prompt, the entry actually in effect: its Prompt
+    Pal id, whether a stored copy is shadowing the in-code default, and the resolved
+    text. Shared by ``/debug/prompts`` and the conversation export so a bug report
+    records exactly which prompts produced the replies."""
     out: dict[str, dict] = {}
     for key in _DEBUG_PROMPT_KEYS:
         try:
@@ -447,9 +480,17 @@ def debug_prompts():
             "is_stored": pp_store.get_by_app_key("prattletale", key) is not None,
             "active_prompt": active,
         }
+    return out
+
+
+@router.get("/debug/prompts")
+def debug_prompts():
+    """Show which Prattletale Prompt Pal entry is actually active (stored copy vs
+    in-code default) for each live prompt, plus the pipeline version — so it is
+    never ambiguous which prompt produced a reply. Read-only."""
     return {
         "prompt_version": PRATTLETALE_PROMPT_VERSION,
-        "prompts": out,
+        "prompts": _active_prompt_map(),
         "retired": list(_DEBUG_RETIRED_KEYS),
     }
 

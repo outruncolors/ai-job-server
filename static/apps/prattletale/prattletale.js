@@ -1555,6 +1555,31 @@
     goList();
   }
 
+  // Download the whole conversation (transcript + every per-turn trace + the
+  // active prompts and character sheet) as one JSON file — a self-contained
+  // bug report to attach when a reply goes wrong.
+  async function exportConversation() {
+    if (!_current) return;
+    const conv = _current.conversation;
+    let bundle;
+    try {
+      bundle = await api(`${APP}/conversations/${encodeURIComponent(conv.id)}/export`);
+    } catch (err) {
+      toast('error', `Export failed: ${err.message}`);
+      return;
+    }
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `prattletale-${conv.id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('success', 'Conversation exported');
+  }
+
   // ---------- conversation config view (SP4) ----------
 
   function openConfig() {
@@ -2090,6 +2115,7 @@
     $('pt-settings-cancel').addEventListener('click', () => $('pt-settings-dialog').close());
     $('pt-settings-save').addEventListener('click', saveSettings);
 
+    $('pt-export').addEventListener('click', exportConversation);
     $('pt-config').addEventListener('click', openConfig);
     $('pt-config-close').addEventListener('click', () => $('pt-config-dialog').close());
     $('pt-config-cancel').addEventListener('click', () => $('pt-config-dialog').close());
