@@ -173,6 +173,19 @@ async def event_stream_from_disk(
 
         # Type-specific body event.
         if step_type == "llm":
+            # Reasoning trace (if the step ran with thinking on) — replayed
+            # before the output so the Thinking block sits above it.
+            reasoning_path = step_dir / "reasoning.txt"
+            if reasoning_path.exists():
+                try:
+                    reasoning_text = reasoning_path.read_text(encoding="utf-8")
+                except OSError:
+                    reasoning_text = ""
+                if reasoning_text:
+                    yield _format_sse(_make_event(
+                        _next(), "llm_reasoning",
+                        step_number=ptr, invocation=inv, delta=reasoning_text,
+                    ))
             output_path = step_dir / "output.txt"
             full_text = ""
             if output_path.exists():

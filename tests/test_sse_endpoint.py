@@ -105,6 +105,49 @@ async def test_event_stream_from_disk_synthesizes_completed_job(tmp_path):
     assert payload["step_number"] == 1
 
 
+async def test_reasoning_persisted_and_replayed_before_output(tmp_path):
+    """A step run with thinking on writes reasoning.txt; the disk-replay path
+    emits an llm_reasoning frame (the Thinking block) before the llm_chunk."""
+    from app.chain.executor import execute_chain_job
+    from app.chain.llm_client import StreamChunk
+    from app.chain.models import ChainJobRequest, ChainLLMConfig, ChainStep
+    from app.chain.sse import event_stream_from_disk
+    from app.jobs import create_job, find_job_dir
+
+    req = ChainJobRequest(
+        input="hi",
+        llm=ChainLLMConfig(api_base="http://fake", model="fake"),
+        steps=[ChainStep(name="think step", prompt="Say: {{input}}", thinking=True)],
+    )
+    data = create_job("chain", req.model_dump(), req.input)
+    job_id = data["job_id"]
+    job_dir = find_job_dir(job_id)
+
+    def factory(*args, **kwargs):
+        async def gen():
+            yield StreamChunk(reasoning="weighing options")
+            yield StreamChunk(content="final answer", finish_reason="stop")
+        return gen()
+
+    with patch("app.chain.executor.OpenAICompatibleLLMClient") as MockClient:
+        MockClient.return_value.chat_stream = MagicMock(side_effect=factory)
+        await execute_chain_job(job_id, job_dir, req)
+
+    # reasoning persisted next to output, output itself clean.
+    step_dir = next((job_dir / "steps").iterdir())
+    assert (step_dir / "reasoning.txt").read_text() == "weighing options"
+    assert (step_dir / "output.txt").read_text() == "final answer"
+
+    frames = [f async for f in event_stream_from_disk(job_id, job_dir)]
+    types_seen = [f.split("\n")[0].removeprefix("event: ") for f in frames]
+    assert "llm_reasoning" in types_seen
+    # Thinking block comes before the answer.
+    assert types_seen.index("llm_reasoning") < types_seen.index("llm_chunk")
+    reasoning_frame = next(f for f in frames if f.startswith("event: llm_reasoning"))
+    payload = json.loads(reasoning_frame.split("data: ", 1)[1].rstrip())
+    assert payload["delta"] == "weighing options"
+
+
 async def test_executor_emits_lifecycle_events_to_bus(tmp_path):
     from app.chain.events import EventBus
     from app.chain.executor import execute_chain_job

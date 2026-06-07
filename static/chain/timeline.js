@@ -18,7 +18,7 @@
   'use strict';
 
   const EVENT_TYPES = [
-    'job_start', 'step_start', 'step_input', 'llm_chunk', 'artifact_ready',
+    'job_start', 'step_start', 'step_input', 'llm_reasoning', 'llm_chunk', 'artifact_ready',
     'summary', 'goto', 'step_done', 'step_error', 'job_done',
   ];
 
@@ -171,6 +171,38 @@
       _scrollToBottom();
     }
 
+    function _onLlmReasoning(p) {
+      // The model's think trace. Emitted before the answer (and replayed before
+      // it from disk), so this collapsible node naturally sits above the output.
+      const key = _key(p.step_number, p.invocation, 'llm_reasoning');
+      let rec = nodes.get(key);
+      if (!rec) {
+        const sk = `${p.step_number}:${p.invocation || 0}`;
+        const meta = stepMeta.get(sk) || { name: '', type: 'llm' };
+        const header =
+          `<span class="tl-step">Step ${_esc(p.step_number)}</span>` +
+          ` · <span class="tl-type">${_esc(_typeLabel(meta.type) || 'llm')}</span>` +
+          ` · <span class="tl-label">💭 thinking</span>`;
+        rec = _makeNode('tl-node-llm-reasoning streaming', header, '');
+        const det = document.createElement('details');
+        det.className = 'tl-reasoning';
+        det.open = true;
+        const sum = document.createElement('summary');
+        sum.textContent = 'reasoning';
+        const pre = document.createElement('pre');
+        pre.className = 'tl-pre tl-streaming';
+        det.appendChild(sum);
+        det.appendChild(pre);
+        rec.body.appendChild(det);
+        rec.pre = pre;
+        nodes.set(key, rec);
+        rootEl.appendChild(rec.wrap);
+        _setStatus(rec, 'thinking…', 'streaming');
+      }
+      if (p.delta) rec.pre.appendChild(document.createTextNode(p.delta));
+      _scrollToBottom();
+    }
+
     function _onArtifactReady(p) {
       const kind = p.kind || 'file';
       const key = _key(p.step_number, p.invocation, 'artifact:' + (p.filename || kind));
@@ -241,6 +273,15 @@
           out.wrap.classList.remove('streaming');
         }
       }
+      // Settle the reasoning node (stop the streaming shimmer, collapse it).
+      const reason = nodes.get(_key(p.step_number, p.invocation, 'llm_reasoning'));
+      if (reason) {
+        if (reason.pre) reason.pre.classList.remove('tl-streaming');
+        reason.wrap.classList.remove('streaming');
+        const det = reason.wrap.querySelector('details.tl-reasoning');
+        if (det) det.open = false;
+        _setStatus(reason, '✓', 'done');
+      }
       // Flip status badges on whichever node(s) we have for this step.
       for (const kind of ['input', 'llm_output']) {
         const r = nodes.get(_key(p.step_number, p.invocation, kind));
@@ -295,6 +336,7 @@
         case 'job_start':    return _onJobStart(payload || {});
         case 'step_start':   return _onStepStart(payload || {});
         case 'step_input':   return _onStepInput(payload || {});
+        case 'llm_reasoning': return _onLlmReasoning(payload || {});
         case 'llm_chunk':    return _onLlmChunk(payload || {});
         case 'artifact_ready': return _onArtifactReady(payload || {});
         case 'summary':      return _onSummary(payload || {});

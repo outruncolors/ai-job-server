@@ -12,19 +12,25 @@ class StreamChunk:
     """One streaming delta from ``chat_stream``.
 
     ``content`` is the text delta (may be empty for tool-call-only chunks).
-    ``tool_call_deltas`` carries partial OpenAI tool-call fragments keyed by
-    index; the caller assembles them. ``finish_reason`` is set on the last
-    chunk that carries one (e.g. ``"stop"``, ``"tool_calls"``).
+    ``reasoning`` is the reasoning/thinking delta — llama.cpp emits it in
+    ``delta.reasoning_content`` when a reasoning model runs with reasoning
+    parsing on (``--reasoning-format``); it is kept separate from ``content`` so
+    the final output never includes the think trace. ``tool_call_deltas``
+    carries partial OpenAI tool-call fragments keyed by index; the caller
+    assembles them. ``finish_reason`` is set on the last chunk that carries one
+    (e.g. ``"stop"``, ``"tool_calls"``).
     """
-    __slots__ = ("content", "tool_call_deltas", "finish_reason")
+    __slots__ = ("content", "reasoning", "tool_call_deltas", "finish_reason")
 
     def __init__(
         self,
         content: str = "",
         tool_call_deltas: Optional[list[dict]] = None,
         finish_reason: Optional[str] = None,
+        reasoning: str = "",
     ):
         self.content = content
+        self.reasoning = reasoning
         self.tool_call_deltas = tool_call_deltas or []
         self.finish_reason = finish_reason
 
@@ -212,12 +218,14 @@ class OpenAICompatibleLLMClient:
                         choice = choices[0]
                         delta = choice.get("delta") or {}
                         content = delta.get("content") or ""
+                        reasoning = delta.get("reasoning_content") or ""
                         tool_call_deltas = delta.get("tool_calls") or []
                         finish_reason = choice.get("finish_reason")
-                        if not (content or tool_call_deltas or finish_reason):
+                        if not (content or reasoning or tool_call_deltas or finish_reason):
                             continue
                         yield StreamChunk(
                             content=content,
+                            reasoning=reasoning,
                             tool_call_deltas=list(tool_call_deltas),
                             finish_reason=finish_reason,
                         )

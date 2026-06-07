@@ -143,13 +143,26 @@ async def _stream_assistant_turn(
     event_bus: Any,
     step_number: int,
     invocation: int,
-) -> str:
+) -> tuple[str, str]:
     """Stream one final assistant turn from ``messages`` (no tools).
 
-    Emits ``llm_chunk`` per content delta and returns the accumulated content.
+    Emits ``llm_chunk`` per content delta and ``llm_reasoning`` per reasoning
+    delta (the model's think trace, kept separate from the answer). Returns
+    ``(content, reasoning)``; reasoning is ``""`` when thinking is off or the
+    server doesn't surface a ``reasoning_content`` channel.
     """
     accumulated: list[str] = []
+    reasoning: list[str] = []
     async for chunk in client.chat_stream(messages, llm_config, tools=None):
+        if chunk.reasoning:
+            reasoning.append(chunk.reasoning)
+            if event_bus is not None:
+                event_bus.emit(
+                    "llm_reasoning",
+                    step_number=step_number,
+                    invocation=invocation,
+                    delta=chunk.reasoning,
+                )
         if chunk.content:
             accumulated.append(chunk.content)
             if event_bus is not None:
@@ -162,7 +175,7 @@ async def _stream_assistant_turn(
     output = "".join(accumulated)
     if not output:
         raise RuntimeError("LLM stream produced no content")
-    return output
+    return output, "".join(reasoning)
 
 
 async def _retrieve_memory_block(
@@ -305,15 +318,19 @@ async def run_llm_step(
         (step_dir / "tool_calls.json").write_text(
             json.dumps(tool_call_log, indent=2), encoding="utf-8"
         )
-        output = await _stream_assistant_turn(
+        output, reasoning = await _stream_assistant_turn(
             messages, client, request.llm, event_bus, step_index, invocation,
         )
     else:
         # No tools: stream a single user-only chat directly.
         messages = [{"role": "user", "content": prompt}]
-        output = await _stream_assistant_turn(
+        output, reasoning = await _stream_assistant_turn(
             messages, client, request.llm, event_bus, step_index, invocation,
         )
     output = _strip_think_block(output)
     (step_dir / "output.txt").write_text(output, encoding="utf-8")
+    # Persist the think trace alongside the output so a reloaded/replayed job
+    # can reconstruct the Thinking block (see event_stream_from_disk).
+    if reasoning:
+        (step_dir / "reasoning.txt").write_text(reasoning, encoding="utf-8")
     return output, "output.txt", prompt
