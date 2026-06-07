@@ -163,23 +163,20 @@ def test_turn_prompt_default_carries_feel_tokens():
     assert "STYLE FLOOR" in prompts.TURN
 
 
-def test_build_turn_request_resolves_roll_into_turn_and_variety():
+def test_build_turn_request_resolves_roll_into_turn_prompt():
     seed_dialogue_feel_wildcards()
     seed.seed_message_style_wildcard()
     req = generator.build_turn_request(
         _ctx(), ChainLLMConfig(api_base="http://x", model="m"),
-        variety=True, structured_chat_history=False, counterpart_id="mara")
+        structured_chat_history=False, counterpart_id="mara")
     turn_prompt = req.steps[0].alternatives[0].prompt
     # the per-turn roll is resolved (not a raw token), and the stable profile var
     # passed through context_vars is substituted too
     assert "THIS TURN'S DIALOGUE FEEL" in turn_prompt
     assert "{{var.dialogue_feel_roll}}" not in turn_prompt
     assert "VOICE-FEEL-SENTINEL" in turn_prompt
-
-    variety_step = next(s for s in req.steps if s.id == "variety")
-    vp = variety_step.alternatives[0].prompt
-    assert "THIS TURN'S DIALOGUE FEEL" in vp  # same roll reaches the editor
-    assert "VOICE-FEEL-SENTINEL" in vp
+    # variety is retired: the turn step stands alone.
+    assert [s.id for s in req.steps] == ["turn"]
 
 
 def test_build_turn_request_roll_disabled_leaves_no_roll_block():
@@ -206,7 +203,8 @@ def test_migration_updates_unmodified_stored_prompt():
     updated = prompts.migrate_turn_variety_prompts()
     assert set(updated) == {"turn", "variety"}
     assert pp_store.get_by_app_key("prattletale", "turn")["data"]["prompt"] == prompts.TURN
-    assert pp_store.get_by_app_key("prattletale", "variety")["data"]["prompt"] == prompts.VARIETY
+    # variety is retired: an unedited stored copy is emptied.
+    assert pp_store.get_by_app_key("prattletale", "variety")["data"]["prompt"] == ""
 
 
 def test_migration_leaves_edited_prompt_untouched():
@@ -241,29 +239,27 @@ def test_variety_and_guard_are_standing_order_aware():
     assert "keep order-compliant content verbatim" in prompts.TURN_GUARD
 
 
-def test_active_command_reaches_every_chain_step():
-    # End-to-end: a stored command's text must appear, fully resolved, in the turn,
-    # variety AND guard step prompts — not just the turn step (the old behaviour).
+def test_active_command_reaches_turn_step():
+    # A stored command's text must appear, fully resolved, in the turn step prompt
+    # (single-prompt mode). The variety + guard steps are retired.
     seed_dialogue_feel_wildcards()
     seed.seed_message_style_wildcard()
     ctx = _ctx()
     ctx["standing_orders"] = generator._render_standing_orders(["answer only in French"])
     req = generator.build_turn_request(
         ctx, ChainLLMConfig(api_base="http://x", model="m"),
-        variety=True, dialogue_feel_roll_enabled=False, structured_chat_history=False)
-    # The guard step is retired (deterministic repair replaces it); orders must
-    # still reach the turn AND variety step prompts.
-    assert [s.name for s in req.steps] == ["Turn", "Variety"]
-    for step in req.steps:
-        prompt = step.alternatives[0].prompt
-        assert "STANDING ORDERS" in prompt, step.name
-        assert "answer only in French" in prompt, step.name
-        assert "{{var.standing_orders}}" not in prompt, step.name  # fully resolved
+        dialogue_feel_roll_enabled=False, structured_chat_history=False)
+    assert [s.name for s in req.steps] == ["Turn"]
+    prompt = req.steps[0].alternatives[0].prompt
+    assert "STANDING ORDERS" in prompt
+    assert "answer only in French" in prompt
+    assert "{{var.standing_orders}}" not in prompt  # fully resolved
 
 
-def test_migration_brings_v3_turn_and_old_guard_forward():
+def test_migration_brings_v3_turn_forward_and_retires_guard_and_variety():
     # An install on the standing-orders-before-HARD-RULES default (v3) with the v1
-    # guard is migrated to the current TURN + guard without being treated as edited.
+    # guard: the turn prompt is brought forward, the (unedited) guard is DISABLED in
+    # place (the guard step is retired), and the (unedited) variety is emptied.
     pp_store.create_entry({
         "app": "prattletale", "key": "turn", "title": "turn",
         "prompt": prompts._TURN_V3,
@@ -276,9 +272,9 @@ def test_migration_brings_v3_turn_and_old_guard_forward():
     assert set(updated) == {"turn", "turn.guard", "variety"}
     turn = pp_store.get_by_app_key("prattletale", "turn")["data"]
     assert turn["prompt"] == prompts.TURN
-    assert turn["guard"]["prompt"] == prompts.TURN_GUARD
-    assert pp_store.get_by_app_key(
-        "prattletale", "variety")["data"]["prompt"] == prompts.VARIETY
+    assert turn["guard"]["enabled"] is False  # disabled, not run anymore
+    assert turn["guard"]["prompt"] == prompts._TURN_GUARD_V1  # prompt text untouched
+    assert pp_store.get_by_app_key("prattletale", "variety")["data"]["prompt"] == ""
 
 
 def test_migration_leaves_edited_guard_untouched():
@@ -288,8 +284,8 @@ def test_migration_leaves_edited_guard_untouched():
         "guard": {"enabled": True, "prompt": "MY EDITED GUARD", "variables": {}}})
     updated = prompts.migrate_turn_variety_prompts()
     assert "turn" in updated and "turn.guard" not in updated  # prompt moves, guard kept
-    assert pp_store.get_by_app_key(
-        "prattletale", "turn")["data"]["guard"]["prompt"] == "MY EDITED GUARD"
+    g = pp_store.get_by_app_key("prattletale", "turn")["data"]["guard"]
+    assert g["prompt"] == "MY EDITED GUARD" and g["enabled"] is True
 
 
 # ---- feel director (context-aware roll) ------------------------------------

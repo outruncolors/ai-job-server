@@ -77,9 +77,9 @@ async def test_trace_has_enriched_steps_with_variety(client, monkeypatch):
     assert len(trace["parsed_items"]) == 1
 
     steps = trace["steps"]
-    # The guard step is retired (deterministic repair replaces it).
-    assert [s["id"] for s in steps] == ["turn", "variety"]
-    assert [s["number"] for s in steps] == [1, 2]
+    # The variety + guard steps are retired; the turn step stands alone.
+    assert [s["id"] for s in steps] == ["turn"]
+    assert [s["number"] for s in steps] == [1]
     # per-step output + prompt were captured from the step dirs
     assert steps[0]["output"] == "out:turn"
     assert steps[0]["prompt"] == "rendered:turn"

@@ -1,10 +1,10 @@
 """The OOC reply pipeline — a lean, single-step LLM job.
 
-Mirrors :func:`app.apps.prattletale.generator.direct_feel_roll`'s one-step
+Mirrors :func:`app.apps.prattletale.generator.run_director`'s one-step
 on-disk-job pattern (reuse the full LLM plumbing: endpoint resolution, model
 swap, on-disk trace), but with its own ``ooc.reply`` prompt and **no** memory /
-variety / feel / guard — an out-of-character chat with the author is meta, so it
-stays lean.
+director / feel — an out-of-character chat with the author is meta, so it stays
+lean.
 
 The OOC reply sees both channels: the in-character conversation (via
 :func:`generator.build_context`) and the full out-of-character history so far

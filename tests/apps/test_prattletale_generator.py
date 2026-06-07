@@ -265,18 +265,11 @@ def _ctx() -> dict:
             "user_persona": "p", "transcript": "[User] hi"}
 
 
-def test_build_turn_request_includes_variety_step_when_enabled():
-    # Format hygiene is no longer a chain "guard" step (it's a post-execution
-    # deterministic pass). The variety pass is added when enabled + prompt present.
+def test_build_turn_request_has_no_variety_or_guard_step():
+    # Both the variety pass (now empty default) and the guard step are retired:
+    # the turn step stands alone even with the variety flag on.
     req = generator.build_turn_request(
         _ctx(), ChainLLMConfig(api_base="http://x", model="m"), variety=True)
-    assert [s.id for s in req.steps] == ["turn", "variety"]
-
-
-def test_build_turn_request_skips_variety_when_disabled():
-    req = generator.build_turn_request(
-        _ctx(), ChainLLMConfig(api_base="http://x", model="m"), variety=False
-    )
     assert [s.id for s in req.steps] == ["turn"]
     assert [s.number for s in req.steps] == [1]
 

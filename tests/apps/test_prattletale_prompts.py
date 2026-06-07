@@ -46,30 +46,19 @@ def test_turn_prompt_seeds_and_composes_with_variables():
     assert "{{var.character}}" not in text
 
 
-def test_get_guard_returns_hygiene_pass():
+def test_turn_guard_is_retired_and_disabled():
+    # The guard step is retired (deterministic repair replaces it); the seeded
+    # turn guard is disabled, so get_guard resolves to None.
     registry.seed_registered()
-    guard = service.get_guard("prattletale", "turn")
-    assert guard is not None
-    # The guard runs over the first step's output via the chain token.
-    assert "{{previous}}" in guard
-    assert "FORMAT HYGIENE" in guard
-    # The guard also scrubs emoji (belt-and-suspenders with the parser).
-    assert "emoji" in guard.lower()
+    assert service.get_guard("prattletale", "turn") is None
 
 
-def test_variety_prompt_seeds_and_composes_with_transcript():
+def test_variety_prompt_is_retired_and_empty():
+    # The variety pass is retired: its entry is still registered (resurrectable in
+    # the UI) but seeds empty, so get_text composes to "".
     registry.seed_registered()
-    entry = store.get_by_app_key("prattletale", "variety")
-    assert entry is not None
-
-    text = service.get_text(
-        "prattletale", "variety",
-        variables={"character": "Name: Mara", "transcript": "[Mara] same opening again"},
-    )
-    # The recent conversation is baked in; the draft token is left for the executor.
-    assert "[Mara] same opening again" in text
-    assert "{{previous}}" in text
-    assert "{{var.transcript}}" not in text
+    assert store.get_by_app_key("prattletale", "variety") is not None
+    assert service.get_text("prattletale", "variety") == ""
 
 
 # ---- parser: canonical message format --------------------------------------

@@ -230,7 +230,9 @@ register(
     tags=("turn", "chat"),
     variables={},
     description="Reply as the Hoodat counterpart as natural text messages (tagged lines).",
-    guard={"enabled": True, "prompt": TURN_GUARD, "variables": {}},
+    # The guard step is retired (deterministic repair replaces it); the guard is
+    # seeded DISABLED but kept for reference / manual resurrection in the UI.
+    guard={"enabled": False, "prompt": TURN_GUARD, "variables": {}},
 )
 
 
@@ -379,25 +381,28 @@ VARIETY = _VARIETY_V2.replace(
     "violates an order, correct it to comply.\n\n",
 ) + "\n\n{{var.standing_orders}}"
 
+# RETIRED: the variety pass is superseded by the director plan (which does
+# anti-monotony up front). It now seeds EMPTY, so build_turn_request adds no
+# variety step even when the flag is on — but the entry stays registered so a user
+# can paste a prompt back in via the Prompt Pal UI to resurrect it. VARIETY (above)
+# is kept as the frozen baseline the migration recognizes as "unedited".
 register(
     "prattletale",
     "variety",
-    title="Chat turn — variety pass",
-    prompt=VARIETY,
+    title="Chat turn — variety pass (retired)",
+    prompt="",
     tags=("turn", "chat", "variety"),
     variables={},
-    description="Rewrite a drafted reply if it repeats the structure of recent messages.",
+    description="Retired: anti-monotony is now handled by the director plan.",
 )
 
 
-# ---- feel director (context-aware per-turn roll) ---------------------------
+# ---- feel director (RETIRED) -----------------------------------------------
 
-# An optional pre-pass (opt-in: config.dialogue_feel_director_enabled): instead of
-# a blind weighted wildcard draw, a small LLM reads the conversation + the
-# character's stable fingerprint and *chooses* this turn's micro-style. Its output
-# is parsed into the same <dialogue_feel_roll> block the turn/variety steps expect
-# (feel.parse_director_roll), so nothing downstream changes; on any failure the
-# caller falls back to the wildcard draw. Pick the FEEL, never the words.
+# RETIRED: superseded by the rich JSON `director` (below). No longer registered or
+# seeded, and nothing calls get_text("prattletale", "feel_director"). The frozen
+# text is kept only as a reference baseline; any previously-seeded store entry is
+# left as a harmless orphan.
 FEEL_DIRECTOR = (
     "You are the dialogue director for a live text-message roleplay. Read the "
     "conversation and decide how the character should play THIS ONE next reply — "
@@ -417,16 +422,6 @@ FEEL_DIRECTOR = (
     "Emotional shade: <2-6 words>\n"
     "Move: <one short instruction>\n"
     "Cadence: <a few words>"
-)
-
-register(
-    "prattletale",
-    "feel_director",
-    title="Chat turn — feel director",
-    prompt=FEEL_DIRECTOR,
-    tags=("turn", "chat", "feel"),
-    variables={},
-    description="Pick this turn's dialogue feel (shade/move/cadence) from conversation context.",
 )
 
 
@@ -523,24 +518,26 @@ _PROMPT_MIGRATIONS: list[tuple[str, str, str]] = [
     ("turn", _LEGACY_TURN_V1, TURN),
     ("turn", _TURN_V2, TURN),  # installs already on the feel-splice default
     ("turn", _TURN_V3, TURN),  # installs on the standing-orders-before-HARD-RULES default
-    ("variety", _LEGACY_VARIETY_V1, VARIETY),
-    ("variety", _VARIETY_V2, VARIETY),  # installs on the Feel/Variety editor default
+    # The variety pass is retired: bring every unedited prior default to "" so the
+    # build path adds no variety step. Edited copies are kept (resurrectable).
+    ("variety", _LEGACY_VARIETY_V1, ""),
+    ("variety", _VARIETY_V2, ""),  # the Feel/Variety editor default
+    ("variety", VARIETY, ""),  # the standing-orders-aware default that last shipped
 ]
 
-# (Prompt Pal key, frozen old guard, current guard). Guards live under the prompt
-# entry's ``data.guard.prompt``, separate from the prompt text, so they migrate on
-# their own axis: a user may have edited one but not the other.
-_GUARD_MIGRATIONS: list[tuple[str, str, str]] = [
-    ("turn", _TURN_GUARD_V1, TURN_GUARD),
-]
+# Turn-guard prompts (under ``data.guard``) whose presence is unedited; the guard
+# step is retired (deterministic repair replaces it), so an unedited guard is
+# disabled in place (enabled=False) to keep the Prompt Pal UI honest. An edited
+# guard is left untouched.
+_RETIRED_GUARD_BASELINES = (_TURN_GUARD_V1, TURN_GUARD)
 
 
 def migrate_turn_variety_prompts() -> list[str]:
-    """Bring **unedited** stored ``turn``/``variety`` prompts (and the ``turn`` guard)
-    forward to the current defaults. For each with a changed default: if a stored copy
-    exists and its text still equals the frozen old default, overwrite it; otherwise
-    leave it (edited copy kept; absent -> seed-if-absent handles fresh installs).
-    Returns the keys updated. Called once at lifespan."""
+    """Bring **unedited** stored Prattletale prompts forward to the current state:
+    refresh the ``turn`` prompt, empty the retired ``variety`` prompt, and disable
+    the retired ``turn`` guard — each only when the stored copy still equals a
+    frozen baseline (edited copies are kept; absent -> seed-if-absent handles fresh
+    installs). Returns the keys updated. Called once at lifespan."""
     from ...prompt_pal import store as pp_store
 
     updated: list[str] = []
@@ -554,17 +551,14 @@ def migrate_turn_variety_prompts() -> list[str]:
         if stored_prompt == legacy:
             pp_store.update_entry(entry["id"], prompt=current)
             updated.append(key)
-    for key, legacy, current in _GUARD_MIGRATIONS:
-        if legacy == current:
-            continue  # guard unchanged this version
-        entry = pp_store.get_by_app_key("prattletale", key)
-        if entry is None:
-            continue
-        stored_guard = ((entry.get("data") or {}).get("guard") or {}).get("prompt") or ""
-        if stored_guard == legacy:
-            guard = {**((entry.get("data") or {}).get("guard") or {}), "prompt": current}
-            pp_store.update_entry(entry["id"], guard=guard)
-            updated.append(f"{key}.guard")
+    # Disable an unedited turn guard (the guard step no longer runs).
+    entry = pp_store.get_by_app_key("prattletale", "turn")
+    if entry is not None:
+        guard = (entry.get("data") or {}).get("guard") or {}
+        stored_guard = guard.get("prompt") or ""
+        if guard.get("enabled", True) and stored_guard in _RETIRED_GUARD_BASELINES:
+            pp_store.update_entry(entry["id"], guard={**guard, "enabled": False})
+            updated.append("turn.guard")
     return updated
 
 
