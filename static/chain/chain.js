@@ -556,6 +556,12 @@
             '<label style="margin:0;display:flex;align-items:center;gap:3px;font-size:0.72rem;cursor:pointer;">' +
               '<input type="checkbox" class="alt-llm-req-vision"' + (requires.includes('vision') ? ' checked' : '') + ' onchange="_onLlmRequiresChange(this)"> vision' +
             '</label>' +
+            '<label style="margin:0;color:#383838;font-size:0.7rem;" title="default uses the project setting (on); off suppresses reasoning, e.g. roleplay replies">thinking:</label>' +
+            '<select class="alt-thinking" style="flex:0 0 auto;font-size:0.72rem;" title="default uses the project setting (on); off suppresses reasoning, e.g. roleplay replies">' +
+              '<option value=""'    + (data.thinking == null   ? ' selected' : '') + '>default</option>' +
+              '<option value="on"'  + (data.thinking === true  ? ' selected' : '') + '>on</option>' +
+              '<option value="off"' + (data.thinking === false ? ' selected' : '') + '>off</option>' +
+            '</select>' +
           '</div>' +
           '<label>Prompt</label>' +
           '<textarea class="alt-prompt" style="min-height:72px;">' + _escHtml(data.prompt || '') + '</textarea>' +
@@ -752,6 +758,8 @@
         if (altEl.querySelector('.alt-llm-req-text')?.checked)   requires.push('text');
         if (altEl.querySelector('.alt-llm-req-vision')?.checked) requires.push('vision');
         data.requires = requires;
+        const thinkVal = altEl.querySelector('.alt-thinking')?.value;
+        data.thinking = thinkVal === 'on' ? true : thinkVal === 'off' ? false : null;
       } else if (type === 'voice') {
         data.voice_preset_id     = altEl.querySelector('.alt-voice-preset')?.value || null;
         data.prompt              = altEl.querySelector('.alt-prompt')?.value || '';
