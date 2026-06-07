@@ -43,6 +43,7 @@ class ItemType(str, Enum):
     system_error = "system_error"  # a failed model turn, never fed back into context
     summary = "summary"  # a plugin-posted recap of earlier turns (kept in context)
     command = "command"  # a user-issued out-of-character order the model must obey
+    ooc = "ooc"  # an out-of-character side message (OOC plugin); excluded from IC context
 
 
 class Author(str, Enum):

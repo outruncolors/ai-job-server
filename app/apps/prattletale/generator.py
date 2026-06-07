@@ -140,6 +140,9 @@ def _flatten_transcript(turns: list[dict], character: dict) -> str:
             if not it.get("hidden_from_context")
             and it.get("type") != ItemType.system_error.value
             and it.get("type") != ItemType.command.value
+            # OOC side messages are a parallel channel the character never sees —
+            # gathered for the OOC pipeline (render_ooc_history), excluded here.
+            and it.get("type") != ItemType.ooc.value
         ]
         rendered = [r for r in (_render_item(it) for it in visible) if r]
         if not rendered:
@@ -188,6 +191,30 @@ def _render_standing_orders(orders: list[str]) -> str:
     )
 
 
+def render_ooc_history(turns: list[dict]) -> str:
+    """Flatten every ``ooc`` item across the **whole** transcript (not windowed,
+    oldest first) into a ``[You] …`` / ``[Author] …`` back-and-forth script — the
+    OOC pipeline's side channel. Spans all OOC sessions so a new out-of-character
+    exchange always carries the earlier ones forward. ``""`` when no OOC has
+    happened yet (the ``{{var.ooc_history}}`` token then simply vanishes).
+
+    The user side is labeled ``[You]``; the author-behind-the-character side
+    ``[Author]`` (this OOC reply speaks as the author, not the character).
+    ``hidden_from_context`` OOC items are skipped (they still render, with the
+    hidden tag, but aren't fed to generation — same as hidden in-character items)."""
+    lines: list[str] = []
+    for turn in turns:
+        for it in (turn.get("items") or []):
+            if it.get("type") != ItemType.ooc.value or it.get("hidden_from_context"):
+                continue
+            text = (it.get("text") or "").strip()
+            if not text:
+                continue
+            label = "You" if it.get("author") == Author.user.value else "Author"
+            lines.append(f"[{label}] {text}")
+    return "\n".join(lines)
+
+
 def _latest_user_text(turns: list[dict]) -> str:
     """The most recent user turn's visible text — the strongest memory-retrieval
     signal (what they *just* said). Empty when the user hasn't spoken yet."""
@@ -201,6 +228,9 @@ def _latest_user_text(turns: list[dict]) -> str:
             # A command is an instruction, not "what the user said" — skip it so
             # retrieval falls back to the prior real utterance / the whole window.
             and it.get("type") != ItemType.command.value
+            # An OOC aside isn't part of the in-character conversation — skip it so
+            # memory retrieval is never driven by an out-of-character line.
+            and it.get("type") != ItemType.ooc.value
         ]
         text = " ".join(r for r in (_render_item(it) for it in visible) if r).strip()
         if text:

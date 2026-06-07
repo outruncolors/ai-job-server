@@ -1,0 +1,80 @@
+/* OOC plugin styles.
+ *
+ * Two pieces: the composer panel (explainer + status), and the inline collapsible
+ * "OUT OF CHARACTER" run that wraps the back-and-forth. The run is deliberately
+ * NOT styled like the chat — a violet, dashed-bordered "author's notes" frame with
+ * a header (glyph + label + count + caret) — so a meta exchange reads as clearly
+ * walled off from the roleplay. Inner messages are a two-sided back-and-forth:
+ * the user's line (right) vs the author's reply (left). */
+
+:root {
+  --pt-ooc-accent: #b48cff;
+  --pt-ooc-frame: rgba(180, 140, 255, 0.45);
+  --pt-ooc-tint: rgba(180, 140, 255, 0.06);
+  --pt-ooc-you-bg: rgba(180, 140, 255, 0.18);
+  --pt-ooc-ai-bg: rgba(180, 140, 255, 0.08);
+}
+
+/* ---- composer panel ---- */
+.pt-ooc-cmp-panel { display: flex; flex-direction: column; gap: var(--gap-sm); }
+.pt-ooc-explainer { font-size: var(--font-size-sm); color: var(--color-text-sub); line-height: 1.4; }
+.pt-ooc-explainer b { color: var(--pt-ooc-accent); }
+.pt-ooc-cmp-msg { font-size: var(--font-size-sm); color: var(--color-text-sub); }
+.pt-ooc-cmp-msg.pt-ooc-cmp-err { color: var(--color-danger, #ff6b6b); }
+
+/* ---- the collapsible OOC run ---- */
+.pt-ooc-seg {
+  margin: var(--gap-xl) var(--gap-lg);
+  border: 1.5px dashed var(--pt-ooc-frame);
+  border-radius: 12px;
+  background: var(--pt-ooc-tint);
+  overflow: hidden;
+}
+
+.pt-ooc-head {
+  display: flex; align-items: center; gap: var(--gap-sm);
+  width: 100%; padding: var(--gap-sm) var(--gap-md);
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--pt-ooc-accent); font: inherit; text-align: left;
+}
+.pt-ooc-head:hover { background: rgba(180, 140, 255, 0.08); }
+.pt-ooc-glyph { font-size: 1.05em; line-height: 1; }
+.pt-ooc-title {
+  font-size: var(--font-size-xs); font-weight: bold;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.pt-ooc-count {
+  font-size: var(--font-size-micro); line-height: 1;
+  padding: 2px 7px; border-radius: 999px;
+  background: rgba(180, 140, 255, 0.18); color: var(--pt-ooc-accent);
+}
+.pt-ooc-caret { margin-left: auto; font-size: 0.9em; opacity: 0.85; }
+
+.pt-ooc-body {
+  display: flex; flex-direction: column; gap: var(--gap-sm);
+  padding: 0 var(--gap-md) var(--gap-md);
+}
+.pt-ooc-seg--collapsed .pt-ooc-body { display: none; }
+
+/* ---- inner back-and-forth bubbles ---- */
+.pt-ooc-msg-bubble {
+  display: flex; flex-direction: column; gap: 2px;
+  max-width: min(82%, 560px);
+  padding: 6px 10px; border-radius: 10px;
+  background: var(--pt-ooc-ai-bg);
+  border: 1px solid rgba(180, 140, 255, 0.22);
+  color: var(--color-text);
+  white-space: pre-wrap; word-break: break-word;
+}
+.pt-ooc-msg--ai { align-self: flex-start; }
+.pt-ooc-msg--you {
+  align-self: flex-end;
+  background: var(--pt-ooc-you-bg);
+  border-color: rgba(180, 140, 255, 0.35);
+}
+.pt-ooc-who {
+  font-size: var(--font-size-micro); font-weight: bold;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--pt-ooc-accent); opacity: 0.8;
+}
+.pt-ooc-text { line-height: 1.5; }

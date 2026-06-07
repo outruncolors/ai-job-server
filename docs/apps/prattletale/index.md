@@ -155,3 +155,26 @@ memory-retrieval query (an instruction, not "what the user said"). The in-code `
 carries the matching standing-orders rule, and the update-if-unmodified migration upgrades unedited
 stored copies (both the pristine-v1 and feel-splice baselines) to it. The plugin relies on generic
 frontend hooks (`onRender` + `ctx.transcript`/`ctx.reload`) added alongside it. Plugin action: `send`.
+
+**OOC** (default-on) is a **parallel out-of-character channel** — a back-and-forth with the *author
+behind the character*, not the character. The **⌁ OOC** composer mode posts a user `ooc` item; the
+`send` action then generates the **author's reply** (a second `ooc` item, `author=model`) and returns
+**both** turns. The reply speaks as the author/director — discussing the character, the scene, and
+intentions in the **third person** to help steer the roleplay — and never as the character (the lean
+`ooc.reply` Prompt Pal prompt; a single `llm` step, no memory/variety/feel/guard). Staying in OOC
+mode lets the user keep replying; sending a normal (Essentials) message ends the session. A
+**session** is simply a **maximal run of consecutive `ooc` items**, so the next in-character turn
+ends it for free — no session id is stored. **In-character turns never see OOC content**: the `ooc`
+type is filtered out of `generator._flatten_transcript` (and the memory-query `_latest_user_text`).
+**OOC generation, conversely, sees both channels**: the in-character window (via `build_context`)
+plus the **full** OOC history across all sessions (`generator.render_ooc_history`, whole transcript,
+labeled `[You]`/`[Author]`), so a later session carries earlier ones forward. A failed generation
+posts an inline-error `ooc` reply (`(OOC generation failed: …)`) rather than raising — the same
+inline-error philosophy as the in-character pipeline. Rendering is a new **core** segment kind (like
+narration): `buildSegments` merges consecutive `ooc` items into a `{kind:'ooc'}` run that
+`renderThread` draws as a **bordered, collapsible "⌁ OUT OF CHARACTER" panel** (violet "author's
+notes" frame; the inner messages are a two-sided you/author back-and-forth). The trailing run (the
+active session) defaults to expanded; once a normal message follows it the run is no longer trailing
+and renders **collapsed** — click the header to toggle (overrides are remembered per conversation).
+OOC turns store inline in the transcript (a session's chronological place is preserved) and reuse the
+core per-item edit/hide/delete controls. Plugin action: `send`.

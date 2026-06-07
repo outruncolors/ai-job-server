@@ -407,17 +407,36 @@
     return type === 'narration' || type === 'narration_emotion';
   }
 
+  // OOC side messages render as a collapsible "out of character" run. Consecutive
+  // ooc items — across turns and authors — merge into one segment; a normal turn
+  // between them ends the run (so a "session" = one maximal run). Manual
+  // expand/collapse overrides (keyed by the run's first item id) survive re-render;
+  // the trailing run (the active session) defaults to expanded, older runs to
+  // collapsed.
+  const _oocOverride = new Map();  // ooc segment key -> user-set expanded bool
+
+  // A model turn whose items are ALL ooc (an OOC author reply) — never a target
+  // for the regenerate footer (that belongs to the last in-character model turn).
+  function isOocTurn(turn) {
+    const items = turn.items || [];
+    return items.length > 0 && items.every((it) => it.type === 'ooc');
+  }
+
   // Walk every item across all turns (in order) into render segments:
-  //   {kind:'narration', items:[{turn,item}…]}  — one merged narration run, or
+  //   {kind:'narration', items:[{turn,item}…]}  — one merged narration run,
+  //   {kind:'ooc',       items:[{turn,item}…]}   — one merged out-of-character run, or
   //   {kind:'turn', turnId, author, items:[…]}   — a run of non-narration items
   //                                                from one turn (avatar + stack).
-  // A turn with narration in the middle thus yields several segments.
+  // A turn with narration/ooc in the middle thus yields several segments.
   function buildSegments(turns) {
     const segs = [];
     let cur = null;
     for (const turn of turns) {
       for (const item of (turn.items || [])) {
-        if (isNarrationType(item.type)) {
+        if (item.type === 'ooc') {
+          if (!cur || cur.kind !== 'ooc') { cur = { kind: 'ooc', items: [] }; segs.push(cur); }
+          cur.items.push({ turn, item });
+        } else if (isNarrationType(item.type)) {
           if (!cur || cur.kind !== 'narration') { cur = { kind: 'narration', items: [] }; segs.push(cur); }
           cur.items.push({ turn, item });
         } else {
@@ -446,13 +465,22 @@
     const segs = buildSegments(turns);
     const lastTurnSeg = {};
     segs.forEach((s, i) => { if (s.kind === 'turn') lastTurnSeg[s.turnId] = i; });
+    // The latest *in-character* model turn owns the ↻ regenerate footer — skip
+    // OOC author replies (their turns are all-ooc and render as ooc segments).
     let latestModelTurnId = null;
     for (let i = turns.length - 1; i >= 0; i--) {
-      if (turns[i].author === 'model') { latestModelTurnId = turns[i].id; break; }
+      if (turns[i].author === 'model' && !isOocTurn(turns[i])) { latestModelTurnId = turns[i].id; break; }
     }
     thread.innerHTML = segs.map((seg, i) => {
-      let html = seg.kind === 'narration' ? narrationSegmentHtml(seg) : turnSegmentHtml(seg);
-      if (seg.kind === 'turn' && seg.author === 'model' && lastTurnSeg[seg.turnId] === i) {
+      if (seg.kind === 'narration') return narrationSegmentHtml(seg);
+      if (seg.kind === 'ooc') {
+        const key = seg.items[0].item.id;
+        const isActive = i === segs.length - 1;  // trailing run = the active session
+        const expanded = _oocOverride.has(key) ? _oocOverride.get(key) : isActive;
+        return oocSegmentHtml(seg, expanded);
+      }
+      let html = turnSegmentHtml(seg);
+      if (seg.author === 'model' && lastTurnSeg[seg.turnId] === i) {
         const turn = turns.find((t) => t.id === seg.turnId);
         html += turnFooterHtml(turn, seg.turnId === latestModelTurnId);
       }
@@ -461,6 +489,7 @@
     wireRetry();
     wirePlay();
     wireVersionNav();
+    wireOocToggle();
     wireThreadControls();
     scrollToBottom();
     firePluginRender();
@@ -527,6 +556,43 @@
       <div class="pt-narration-body">${lines}</div>
       <hr class="pt-narration-rule">
     </div>`;
+  }
+
+  // A bordered, collapsible "OUT OF CHARACTER" panel wrapping a back-and-forth run.
+  // The header (glyph + label + message count + caret) toggles the body; the body's
+  // inner messages are normal bubbleHtml items (the ooc plugin's bubble renderer
+  // sides them you/author and keeps data-turn/data-item so edit/delete still work).
+  function oocSegmentHtml(seg, expanded) {
+    const key = seg.items[0].item.id;
+    const count = seg.items.length;
+    const inner = seg.items.map(({ turn, item }) => bubbleHtml(item, turn)).join('');
+    return `<div class="pt-ooc-seg${expanded ? '' : ' pt-ooc-seg--collapsed'}" data-ooc-key="${_escHtml(key)}">
+      <button type="button" class="pt-ooc-head" data-ooc-key="${_escHtml(key)}"
+        aria-label="Toggle out-of-character messages">
+        <span class="pt-ooc-glyph">⌁</span>
+        <span class="pt-ooc-title">OUT OF CHARACTER</span>
+        <span class="pt-ooc-count">${count}</span>
+        <span class="pt-ooc-caret">${expanded ? '▾' : '▸'}</span>
+      </button>
+      <div class="pt-ooc-body">${inner}</div>
+    </div>`;
+  }
+
+  // Toggle an OOC run open/closed in place (no full re-render, so the thread
+  // doesn't jump). The override is remembered so the next renderThread respects it.
+  function wireOocToggle() {
+    $('pt-thread').querySelectorAll('.pt-ooc-head').forEach((btn) => {
+      if (btn.dataset.wired) return;
+      btn.dataset.wired = '1';
+      btn.addEventListener('click', () => {
+        const seg = btn.closest('.pt-ooc-seg');
+        if (!seg) return;
+        const nowCollapsed = seg.classList.toggle('pt-ooc-seg--collapsed');
+        _oocOverride.set(btn.dataset.oocKey, !nowCollapsed);
+        const caret = btn.querySelector('.pt-ooc-caret');
+        if (caret) caret.textContent = nowCollapsed ? '▸' : '▾';
+      });
+    });
   }
 
   // The visible text for a bubble: strip the canonical decoration so both sides
@@ -911,6 +977,7 @@
     _textModeIdx = 0;
     _editing = -1;
     _savedTextInput = '';
+    _oocOverride.clear();  // OOC collapse overrides are per-conversation (item ids repeat)
     // Force the plugin panel closed (a stale one from a previous chat shouldn't leak).
     _panelMode = null;
     $('pt-composer').classList.remove('pt-panel-open');

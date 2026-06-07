@@ -128,10 +128,12 @@ def _last_item_preview(conversation_id: str) -> Optional[str]:
     transcript = _read_transcript(conversation_id)
     if transcript is None:
         return None
+    # The list preview shows the last *in-character* line — skip OOC side messages
+    # (an out-of-character aside shouldn't headline the conversation card).
     for turn in reversed(transcript.get("turns", [])):
-        items = turn.get("items") or []
-        if items:
-            return items[-1].get("text")
+        for item in reversed(turn.get("items") or []):
+            if item.get("type") != ItemType.ooc.value:
+                return item.get("text")
     return None
 
 
@@ -321,6 +323,30 @@ def append_command_turn(conversation_id: str, text: str) -> Optional[dict]:
         Author.user,
         [{"type": ItemType.command.value, "text": text}],
         status=ItemStatus.committed,
+    )
+
+
+def append_ooc_turn(
+    conversation_id: str,
+    author: Author,
+    text: str,
+    *,
+    job_id: Optional[str] = None,
+) -> Optional[dict]:
+    """Append a turn carrying one ``ooc`` item — an out-of-character side message
+    (the OOC plugin). The same helper posts both ends of the parallel chat: the
+    user's line (``Author.user``) and the author-behind-the-character's reply
+    (``Author.model``). OOC text is freeform and stored **raw** —
+    :func:`_canonical_user_text` only wraps ``dialogue``/``action``, so an ``ooc``
+    item passes through unwrapped on both sides. OOC items are excluded from the
+    in-character context but rendered inline as a collapsible "out of character"
+    run. None if the conversation is missing."""
+    return _append_turn(
+        conversation_id,
+        Author(author),
+        [{"type": ItemType.ooc.value, "text": text}],
+        status=ItemStatus.committed,
+        job_id=job_id,
     )
 
 

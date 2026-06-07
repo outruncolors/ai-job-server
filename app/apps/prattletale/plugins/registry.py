@@ -21,6 +21,7 @@ _PLUGIN_MODULES = (
     "app.apps.prattletale.plugins.sfx",
     "app.apps.prattletale.plugins.memory",
     "app.apps.prattletale.plugins.command",
+    "app.apps.prattletale.plugins.ooc",
 )
 
 PLUGIN_REGISTRY: dict[str, Plugin] = {}
