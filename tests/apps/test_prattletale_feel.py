@@ -251,7 +251,9 @@ def test_active_command_reaches_every_chain_step():
     req = generator.build_turn_request(
         ctx, ChainLLMConfig(api_base="http://x", model="m"),
         variety=True, dialogue_feel_roll_enabled=False, structured_chat_history=False)
-    assert [s.name for s in req.steps] == ["Turn", "Variety", "Guard"]
+    # The guard step is retired (deterministic repair replaces it); orders must
+    # still reach the turn AND variety step prompts.
+    assert [s.name for s in req.steps] == ["Turn", "Variety"]
     for step in req.steps:
         prompt = step.alternatives[0].prompt
         assert "STANDING ORDERS" in prompt, step.name

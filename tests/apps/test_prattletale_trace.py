@@ -77,8 +77,9 @@ async def test_trace_has_enriched_steps_with_variety(client, monkeypatch):
     assert len(trace["parsed_items"]) == 1
 
     steps = trace["steps"]
-    assert [s["id"] for s in steps] == ["turn", "variety", "guard"]
-    assert [s["number"] for s in steps] == [1, 2, 3]
+    # The guard step is retired (deterministic repair replaces it).
+    assert [s["id"] for s in steps] == ["turn", "variety"]
+    assert [s["number"] for s in steps] == [1, 2]
     # per-step output + prompt were captured from the step dirs
     assert steps[0]["output"] == "out:turn"
     assert steps[0]["prompt"] == "rendered:turn"
@@ -92,7 +93,7 @@ async def test_trace_step_count_drops_without_variety(client, monkeypatch):
     trace = client.get(
         f"/v1/apps/prattletale/conversations/{cid}/turns/{turn['id']}/trace"
     ).json()
-    assert [s["id"] for s in trace["steps"]] == ["turn", "guard"]
+    assert [s["id"] for s in trace["steps"]] == ["turn"]
 
 
 def test_trace_404_for_turn_without_trace(client):

@@ -189,11 +189,11 @@ async def test_config_devtools_end_to_end(client, monkeypatch):
     ctx = generator.build_context(store.get_conversation(cid), dict(_CHARACTER), store.get_transcript(cid))
     assert len(ctx["transcript"].splitlines()) <= 1  # only the most recent visible turn
 
-    # read the enriched trace shape over HTTP (turn -> variety -> guard)
+    # read the enriched trace shape over HTTP (turn -> variety; guard retired)
     trace = client.get(
         f"/v1/apps/prattletale/conversations/{cid}/turns/{next_turn['id']}/trace"
     ).json()
-    assert [s["id"] for s in trace["steps"]] == ["turn", "variety", "guard"]
+    assert [s["id"] for s in trace["steps"]] == ["turn", "variety"]
     assert trace["steps"][0]["output"] == "out:turn"
 
     # delete a turn

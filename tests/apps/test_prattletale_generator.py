@@ -265,17 +265,20 @@ def _ctx() -> dict:
             "user_persona": "p", "transcript": "[User] hi"}
 
 
-def test_build_turn_request_includes_variety_step_by_default():
-    req = generator.build_turn_request(_ctx(), ChainLLMConfig(api_base="http://x", model="m"))
-    assert [s.id for s in req.steps] == ["turn", "variety", "guard"]
+def test_build_turn_request_includes_variety_step_when_enabled():
+    # Format hygiene is no longer a chain "guard" step (it's a post-execution
+    # deterministic pass). The variety pass is added when enabled + prompt present.
+    req = generator.build_turn_request(
+        _ctx(), ChainLLMConfig(api_base="http://x", model="m"), variety=True)
+    assert [s.id for s in req.steps] == ["turn", "variety"]
 
 
 def test_build_turn_request_skips_variety_when_disabled():
     req = generator.build_turn_request(
         _ctx(), ChainLLMConfig(api_base="http://x", model="m"), variety=False
     )
-    assert [s.id for s in req.steps] == ["turn", "guard"]
-    assert [s.number for s in req.steps] == [1, 2]  # numbering stays contiguous
+    assert [s.id for s in req.steps] == ["turn"]
+    assert [s.number for s in req.steps] == [1]
 
 
 def test_whole_turn_pipeline_runs_without_thinking():

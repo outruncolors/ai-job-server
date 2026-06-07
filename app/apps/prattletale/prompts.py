@@ -40,7 +40,7 @@ from .models import ItemType
 
 __all__ = [
     "GenerationError", "TURN", "TURN_SYSTEM", "TURN_GUARD", "VARIETY", "DIRECTOR",
-    "parse_items",
+    "REPAIR", "parse_items",
 ]
 
 
@@ -474,6 +474,41 @@ register(
     tags=("turn", "chat", "director"),
     variables={},
     description="Choose this turn's reply plan (shape/move/stance/avoid) as strict JSON.",
+)
+
+
+# ---- repair (last-resort LLM format fix) -----------------------------------
+
+# Deterministic cleanup (app/apps/prattletale/repair.py) handles format hygiene on
+# every turn with no LLM call. This prompt is the FALLBACK, run only when the
+# deterministic pass + parser still can't produce items: a single LLM pass that
+# reformats the reply into parseable lines WITHOUT changing wording, voice, or
+# meaning (it runs over {{input}} — the raw/cleaned reply handed to it).
+REPAIR = (
+    "The following is a character's text-message reply that failed format "
+    "parsing. Reformat it into clean output ONLY — do not change the wording, "
+    "voice, or meaning, and do not make it safer, blander, or more assistant-like:\n"
+    "<reply>\n{{input}}\n</reply>\n\n"
+    "- Put each message on its own line.\n"
+    "- Start every line with exactly one tag: [say] (spoken words), [do] (a "
+    "physical action), [narration] (a scene/event beat), or [feel] (an inner "
+    "beat). If a line has no tag, prepend the most fitting one.\n"
+    "- DELETE every emoji and emoticon. Remove markdown, code fences, and any "
+    "quotation marks wrapping a whole line.\n"
+    "- Remove any leaked preamble, meta-commentary, OOC notes, or assistant "
+    "boilerplate (\"Sure, here's\", \"As an AI\", and the like).\n"
+    "- Do NOT merge or split the actual messages, and do NOT invent new content.\n\n"
+    "Output only the cleaned tagged lines — nothing else."
+)
+
+register(
+    "prattletale",
+    "repair",
+    title="Chat turn — repair (fallback)",
+    prompt=REPAIR,
+    tags=("turn", "chat", "repair"),
+    variables={},
+    description="Last-resort LLM reformat of a reply the deterministic pass couldn't parse.",
 )
 
 

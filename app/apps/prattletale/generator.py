@@ -34,7 +34,7 @@ from ...chain.models import (
 )
 from ...jobs import create_job, find_job_dir
 from ...llm_config import get_default_as_chain_llm_config
-from ...prompt_pal.service import get_guard, get_text
+from ...prompt_pal.service import get_text
 from ...wildcards import resolve_wildcards
 from ..hoodat.characters_store import get_character
 from ..hoodat.prompts import render_character_context
@@ -49,9 +49,11 @@ from .models import Author, ItemType
 from .voice import reveal_schedule, synthesize_turn
 
 JOB_TYPE = "prattletale_turn"
-# The director pre-pass runs as its own tiny one-step job (reuses the full LLM
-# plumbing: endpoint resolution, model swap, on-disk trace).
+# The director pre-pass and the (conditional) repair pass each run as their own
+# tiny one-step job (reuses the full LLM plumbing: endpoint resolution, model
+# swap, on-disk trace).
 JOB_TYPE_DIRECTOR = "prattletale_director"
+JOB_TYPE_REPAIR = "prattletale_repair"
 
 # Rendered when the device user has no persona, so the prompt's <user_persona>
 # section never collapses to a dangling label with empty contents.
@@ -615,9 +617,9 @@ def build_turn_request(
             steps.append(_llm_step(number, "variety", "Variety",
                                    resolve_wildcards(variety_prompt), thinking=False))
             number += 1
-    guard_prompt = get_guard("prattletale", "turn", variables=prompt_vars)
-    if guard_prompt:
-        steps.append(_llm_step(number, "guard", "Guard", guard_prompt, thinking=False))
+    # Format hygiene is no longer an unconditional LLM guard step — it's a
+    # deterministic post-execution pass in run_model_turn, with an LLM repair
+    # fallback only when the parser still can't produce items.
     return ChainJobRequest(
         title="Prattletale turn",
         input=context_vars.get("transcript", ""),
@@ -664,6 +666,26 @@ async def run_director(
         return None
     await execute_chain_job(status["job_id"], job_dir, request)
     return parse_director_plan(_read_final_output(job_dir))
+
+
+async def run_repair(raw: str, llm: ChainLLMConfig) -> str:
+    """Last-resort LLM reformat of a reply the deterministic pass + parser couldn't
+    handle. Runs as its own tiny one-step job over the cleaned/raw text (``{{input}}``)
+    and returns the reformatted text (``""`` if the job produced nothing). Caller
+    re-runs the deterministic pass + parse on the result."""
+    prompt = get_text("prattletale", "repair")
+    request = ChainJobRequest(
+        title="Prattletale repair",
+        input=raw,
+        llm=llm,
+        steps=[_llm_step(1, "repair", "Repair", prompt, thinking=False)],
+    )
+    status = create_job(JOB_TYPE_REPAIR, request.model_dump(), request.input)
+    job_dir = find_job_dir(status["job_id"])
+    if job_dir is None:  # pragma: no cover — create_job just made it
+        return ""
+    await execute_chain_job(status["job_id"], job_dir, request)
+    return _read_final_output(job_dir)
 
 
 def _read_final_output(job_dir: Path) -> str:
@@ -744,6 +766,7 @@ async def run_model_turn(
     its versions must stay intact — so the caller (the router) surfaces the error.
     """
     from .prompts import parse_items  # lazy: avoids a prompts<->generator import cycle
+    from .repair import repair_output_deterministic
 
     conversation = store.get_conversation(conversation_id)
     transcript = store.get_transcript(conversation_id)
@@ -806,7 +829,18 @@ async def run_model_turn(
 
         await execute_chain_job(job_id, job_dir, request)
         raw = _read_final_output(job_dir)
-        items = parse_items(raw)
+        # Deterministic-first repair: a cheap Python cleanup before the parser. Only
+        # when that still won't parse do we spend an LLM repair call (config-gated).
+        cleaned = repair_output_deterministic(raw)
+        try:
+            items = parse_items(cleaned)
+            repair_info: dict = {"mode": "deterministic", "llm_used": False}
+        except GenerationError:
+            if not bool(config.get("repair_enabled", True)):
+                raise
+            repaired = await run_repair(cleaned or raw, resolved)
+            items = parse_items(repair_output_deterministic(repaired))
+            repair_info = {"mode": "llm", "llm_used": True, "repaired_raw": repaired}
 
         if add_version_turn_id is not None:
             turn = store.add_turn_version(conversation_id, add_version_turn_id, items, job_id=job_id)
@@ -837,6 +871,7 @@ async def run_model_turn(
             "job_id": job_id,
             "context_input": context_vars,
             "raw_final_output": raw,
+            "repair": repair_info,
             "parsed_items": items,
             "steps": _collect_steps(job_dir, request),
             "reveal_schedule": reveal_schedule(turn),
