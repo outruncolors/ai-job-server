@@ -1,21 +1,19 @@
 """The Command plugin registration + its ``send`` action.
 
-The ``send`` action persists a user ``command`` turn (an out-of-character order)
-and then runs the model turn so the partner replies obeying it. It returns both
-turns for the frontend to render. Editing/deleting active commands reuses the
-generic per-item REST endpoints (``PATCH``/``DELETE`` ``…/turns/{turn}/items/{item}``)
-— this plugin owns no edit/delete action of its own.
+A command is a **standing order** — a switch the user flips on. The ``send`` action
+persists a user ``command`` turn (the moment the switch was flipped) and returns it;
+it does **not** generate a partner reply. The order then stays in force, injected as
+a STANDING ORDERS block into every future turn (see ``generator._collect_standing_orders``),
+until the user hides or deletes the command item — switching it back off — via the
+generic per-item REST endpoints (``PATCH``/``DELETE`` ``…/turns/{turn}/items/{item}``).
+This plugin owns no edit/delete action of its own.
 
 A failed validation raises :class:`ValueError` (dispatch maps it → 422).
-:func:`run_model_turn` never raises: on failure it returns a ``system_error`` turn
-as ``model_turn`` (the frontend renders it as a retry bubble); the command turn is
-committed either way.
 """
 
 from __future__ import annotations
 
 from app.apps.prattletale import store
-from app.apps.prattletale.generator import run_model_turn
 
 from ..base import Plugin
 from ..registry import register
@@ -29,11 +27,12 @@ _FRONTEND = [
 
 
 async def run_send_command(conversation_id: str, params: dict) -> dict:
-    """Persist a ``command`` turn, then generate the obeying reply.
+    """Persist a ``command`` turn — switching a standing order on. The partner does
+    **not** reply to the command itself; the order takes effect on the next normal
+    turn and stays in force until switched off.
 
-    ``params``: ``{text: str}`` — the order the partner must follow. Empty text or a
-    missing conversation raises :class:`ValueError` (→ 422). Returns
-    ``{command_turn, model_turn}``."""
+    ``params``: ``{text: str}`` — the order to switch on. Empty text or a missing
+    conversation raises :class:`ValueError` (→ 422). Returns ``{command_turn}``."""
     text = (params.get("text") or "").strip()
     if not text:
         raise ValueError("command text must not be empty")
@@ -44,15 +43,13 @@ async def run_send_command(conversation_id: str, params: dict) -> dict:
     if command_turn is None:  # pragma: no cover — conversation checked above
         raise ValueError("failed to persist command turn")
 
-    # synthesize=False: the live chat path synthesizes each message lazily.
-    model_turn, _job_id = await run_model_turn(conversation_id, synthesize=False)
-    return {"command_turn": command_turn, "model_turn": model_turn}
+    return {"command_turn": command_turn}
 
 
 plugin = Plugin(
     id="command",
     name="Command",
-    description="Issue an out-of-character order the AI must obey on its next reply.",
+    description="Switch on an out-of-character standing order the AI obeys on every reply.",
     frontend=_FRONTEND,
     actions={"send": run_send_command},
     default_enabled=True,

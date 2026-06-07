@@ -1,11 +1,14 @@
 /* Command plugin frontend.
  *
- * Contributes a ⚡ Command composer mode: the main composer input is reused as the
- * order text, and Go (relabeled "Issue") runs the `send` action — which posts a
- * user `command` turn and the obeying model reply. Renders the command bubble
- * (dark card, blue border, ⚡ badge) and, via the generic onRender hook, a header
- * "⚡ N" button that opens a manager modal where active commands can be edited or
- * deleted in place (reusing the core per-item PATCH/DELETE endpoints).
+ * A command is a standing order — a switch the user flips on, not a message the
+ * partner replies to. Contributes a ⚡ Command composer mode: the main composer
+ * input is reused as the order text, and Go (relabeled "Issue") runs the `send`
+ * action — which posts a user `command` turn only (no model reply). The order then
+ * stays in force on every future turn until switched off. Renders the command
+ * bubble (dark card, blue border, ⚡ badge) and, via the generic onRender hook, a
+ * header "⚡ N" button that opens a manager modal where active commands can be
+ * edited or deleted (switched off) in place (reusing the core per-item PATCH/DELETE
+ * endpoints).
  *
  * Loaded by the core only when the plugin is enabled for the conversation. */
 (function () {
@@ -21,9 +24,9 @@
   function renderPanel(container, _c) {
     container.innerHTML =
       '<div class="pt-command-panel">' +
-      '<div class="pt-cmd-explainer">⚡ A <b>command</b> is an out-of-character order the ' +
-      'character must obey on their next reply — even against their character. Type it ' +
-      'below and press <b>Issue</b>.</div>' +
+      '<div class="pt-cmd-explainer">⚡ A <b>command</b> is an out-of-character standing ' +
+      'order — a switch you flip on. The character won\'t reply to it; it stays in force on ' +
+      'every reply until you switch it off. Type it below and press <b>Issue</b>.</div>' +
       '<div class="pt-cmd-msg" hidden></div>' +
       '</div>';
   }
@@ -36,14 +39,12 @@
       if (msg) { msg.hidden = false; msg.className = 'pt-cmd-msg pt-cmd-err'; msg.textContent = 'Type a command first.'; }
       return;
     }
-    if (msg) { msg.hidden = false; msg.className = 'pt-cmd-msg'; msg.textContent = 'Issuing command…'; }
+    if (msg) { msg.hidden = false; msg.className = 'pt-cmd-msg'; msg.textContent = 'Switching command on…'; }
     try {
       var res = await ctx.invokeAction('send', { text: text });
+      // A command is a switch, not a message: append the command bubble only — no
+      // partner reply is generated. The order takes effect on the next normal turn.
       if (res && res.command_turn) ctx.appendTurn(res.command_turn);
-      if (res && res.model_turn) {
-        ctx.appendTurn(res.model_turn);
-        if (ctx.fireTurn) ctx.fireTurn(res.model_turn);   // SFX parity
-      }
       var inp = document.getElementById('pt-input');
       if (inp) inp.value = '';
       ctx.close();   // back to the previous text mode (panel slides down)
@@ -204,7 +205,7 @@
       type: 'command',
       label: '⚡ Command',
       goLabel: 'Issue',
-      placeholder: 'An order the AI must obey on its next reply…',
+      placeholder: 'A standing order the AI obeys until you switch it off…',
     }],
     renderPanel: renderPanel,
     submitPanel: submitPanel,
