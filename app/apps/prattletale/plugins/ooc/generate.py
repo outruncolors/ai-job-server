@@ -58,7 +58,11 @@ async def generate_ooc_reply(conversation_id: str) -> tuple[dict, str]:
             **context_vars,
             "ooc_history": generator.render_ooc_history(transcript.get("turns") or []),
         }
-        prompt = get_text("prattletale", "ooc.reply", variables=context_vars)
+        # Strip internal underscore carriers (lists/dicts) before {{var.*}} substitution.
+        prompt = get_text(
+            "prattletale", "ooc.reply",
+            variables=generator.renderable_vars(context_vars),
+        )
         request = ChainJobRequest(
             title="Prattletale OOC reply",
             input=context_vars.get("ooc_history", ""),

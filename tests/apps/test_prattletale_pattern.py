@@ -76,7 +76,8 @@ def test_build_context_carries_pattern_block_string():
     conv = {"config": {}, "device_user": {}, "scenario": "", "role_instructions": ""}
     transcript = {"turns": [_model_turn("yeah ok sure"), _model_turn("yeah ok fine")]}
     ctx = generator.build_context(conv, {"name": "C"}, transcript)
-    # build_context returns only strings (the bundle is passed as get_text vars).
     assert isinstance(ctx["_pattern_block"], str)
-    assert all(isinstance(v, str) for v in ctx.values())
+    # The renderable vars (what reaches get_text) are all strings; underscore-keyed
+    # carriers like _transcript_messages may be lists/dicts.
+    assert all(isinstance(v, str) for v in generator.renderable_vars(ctx).values())
     assert "RECENT PATTERN" in ctx["_pattern_block"]  # repeated openings present

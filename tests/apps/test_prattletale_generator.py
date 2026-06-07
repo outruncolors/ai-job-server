@@ -95,16 +95,17 @@ async def test_director_plan_injected_into_the_turn_prompt(monkeypatch):
                 '{"reply_shape": {"message_count": 1}, "conversation_move": "DIRECTOR-MOVE",'
                 ' "emotional_temperature": "DIRECTOR-SHADE", "length": "terse"}',
                 encoding="utf-8")
-        else:  # the turn job — capture the rendered turn-step prompt
-            captured["turn_prompt"] = request.steps[0].alternatives[0].prompt
+        else:  # the turn job — capture the structured turn-step messages
+            alt = request.steps[0].alternatives[0]
+            captured["turn_blob"] = "\n".join(m["content"] for m in (alt.messages or []))
             (job_dir / "final_output.txt").write_text('[say] hey', encoding="utf-8")
     monkeypatch.setattr(generator, "execute_chain_job", fake)
 
     turn, _ = await generator.run_model_turn(conv_id)
     assert turn["items"][0]["text"] == "hey"
-    # the director's chosen plan (not a wildcard draw) reached the turn prompt
-    assert "DIRECTOR-SHADE" in captured["turn_prompt"]
-    assert "DIRECTOR-MOVE" in captured["turn_prompt"]
+    # the director's chosen plan (not a wildcard draw) reached the turn messages
+    assert "DIRECTOR-SHADE" in captured["turn_blob"]
+    assert "DIRECTOR-MOVE" in captured["turn_blob"]
 
 
 async def test_director_failure_falls_back_without_sinking_the_reply(monkeypatch):

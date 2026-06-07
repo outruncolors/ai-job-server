@@ -59,7 +59,11 @@ def test_turn_prompt_has_the_token_then_generator_resolves_it():
     assert "%%Prattletale Message Style%%" in raw
 
     seed_message_style_wildcard()
-    req = generator.build_turn_request(_ctx(), ChainLLMConfig(api_base="http://x", model="m"))
+    # The %%Prattletale Message Style%% wildcard lives in the single-prompt TURN;
+    # in structured mode the director plan governs reply shape instead.
+    req = generator.build_turn_request(
+        _ctx(), ChainLLMConfig(api_base="http://x", model="m"),
+        structured_chat_history=False)
     turn_prompt = req.steps[0].alternatives[0].prompt
 
     # token is gone, replaced by one of the style directives
@@ -71,5 +75,7 @@ def test_turn_prompt_has_the_token_then_generator_resolves_it():
 def test_token_left_literal_when_wildcard_absent():
     # if the wildcard hasn't been seeded, the token is left literal (no crash);
     # startup seeding is what guarantees presence in practice.
-    req = generator.build_turn_request(_ctx(), ChainLLMConfig(api_base="http://x", model="m"))
+    req = generator.build_turn_request(
+        _ctx(), ChainLLMConfig(api_base="http://x", model="m"),
+        structured_chat_history=False)
     assert "%%Prattletale Message Style%%" in req.steps[0].alternatives[0].prompt

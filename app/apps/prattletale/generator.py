@@ -84,17 +84,21 @@ def _resolve_llm(llm: Optional[ChainLLMConfig]) -> ChainLLMConfig:
 
 
 def _llm_step(
-    number: int, step_id: str, name: str, prompt: str, *,
+    number: int, step_id: str, name: str, prompt: str = "", *,
     memory: Optional[dict] = None, thinking: Optional[bool] = None,
+    messages: Optional[list[dict]] = None,
 ) -> ChainStep:
     """Build a single-alternative ``llm`` step. When ``memory`` is given, the
     alternative carries a :class:`MemoryStepConfig` so the executor retrieves a
-    memory block and exposes it to the prompt via the ``{{memory}}`` token (and
-    writes ``steps/NNN_<id>/memory.txt`` for the trace). ``thinking`` overrides
-    the project reasoning default (None = default-on; False for the in-character
-    reply, which roleplay best practice runs without a reasoning trace)."""
+    memory block and exposes it via the ``{{memory}}`` token (and writes
+    ``steps/NNN_<id>/memory.txt`` for the trace). When ``messages`` is given the
+    step sends that role array (structured-history mode) instead of the single
+    ``prompt``. ``thinking`` overrides the project reasoning default (None =
+    default-on; False for the in-character reply, which roleplay best practice runs
+    without a reasoning trace)."""
     alt = Alternative(
         prompt=prompt,
+        messages=messages,
         memory=MemoryStepConfig(**memory) if memory else None,
         thinking=thinking,
     )
@@ -155,6 +159,42 @@ def _flatten_transcript(turns: list[dict], character: dict) -> str:
         else:
             lines.append(f"[{_speaker_label(turn.get('author'), character)}] {' '.join(rendered)}")
     return "\n".join(lines)
+
+
+def _transcript_to_messages(turns: list[dict], character: dict) -> list[dict]:
+    """Walk turns into real chat **role messages** (the structured-history path),
+    applying the SAME skip rules as :func:`_flatten_transcript` (drop
+    ``hidden_from_context``, ``system_error``, ``command``, ``ooc``; a turn with no
+    visible items is dropped). Role mapping:
+
+    - user turn  -> ``{"role": "user", "content": …}``
+    - model turn -> ``{"role": "assistant", "content": …}``
+    - summary turn (system author) -> ``{"role": "system", "content": "[Earlier] …"}``
+
+    Item rendering reuses :func:`_render_item` (dialogue/summary as plain text,
+    other visible types as parenthesized stage directions), joined per turn.
+    """
+    messages: list[dict] = []
+    for turn in turns:
+        visible = [
+            it for it in (turn.get("items") or [])
+            if not it.get("hidden_from_context")
+            and it.get("type") != ItemType.system_error.value
+            and it.get("type") != ItemType.command.value
+            and it.get("type") != ItemType.ooc.value
+        ]
+        rendered = [r for r in (_render_item(it) for it in visible) if r]
+        if not rendered:
+            continue
+        content = " ".join(rendered)
+        author = turn.get("author")
+        if author == Author.system.value:
+            messages.append({"role": "system", "content": f"[Earlier] {content}"})
+        elif author == Author.model.value:
+            messages.append({"role": "assistant", "content": content})
+        else:
+            messages.append({"role": "user", "content": content})
+    return messages
 
 
 def _collect_standing_orders(turns: list[dict]) -> list[str]:
@@ -366,6 +406,15 @@ def render_pattern_block(summary: dict) -> str:
     )
 
 
+def renderable_vars(context_vars: dict) -> dict:
+    """``context_vars`` minus the internal underscore-prefixed carriers
+    (``_mem_query``, ``_pattern_block``, ``_transcript_messages`` — some are
+    lists/dicts) that must never reach ``get_text``'s ``{{var.*}}`` substitution
+    (compose treats a non-string variable value as a nested prompt node). Use this
+    at every call site that feeds a context bundle to ``get_text``."""
+    return {k: v for k, v in context_vars.items() if not k.startswith("_")}
+
+
 def build_context(conversation: dict, character: dict, transcript: dict) -> dict[str, str]:
     """Build the prompt variable bundle from the conversation, counterpart sheet,
     and transcript. **Pure** (no LLM, no network) so the later token-budget change
@@ -405,7 +454,77 @@ def build_context(conversation: dict, character: dict, transcript: dict) -> dict
         "_pattern_block": render_pattern_block(
             build_recent_pattern_summary(transcript, character)
         ),
+        # The recent window as real role messages (the structured-history path).
+        # Underscore-prefixed: a list, never rendered into a single-prompt template.
+        "_transcript_messages": _transcript_to_messages(recent, character),
     }
+
+
+# ---- structured chat messages ----------------------------------------------
+
+# The final user turn: a short, strong instruction. Static (no tokens).
+_STRUCTURED_FINAL_INSTRUCTION = (
+    "Write your next text-message reply now. Reply to the latest message above, "
+    "follow the plan for this reply, stay in character, and output only the tagged "
+    "lines — nothing else."
+)
+
+
+def build_structured_messages(
+    context_vars: dict,
+    *,
+    director_block: str,
+    transcript_messages: list[dict],
+) -> list[dict]:
+    """Assemble the turn step's role array (structured-history mode). The context
+    blocks are already resolved strings (from :func:`build_context`), so they go in
+    as **literal** content; only the memory message carries the deferred
+    ``{{memory}}`` token (filled by the executor at run time, after retrieval).
+
+    Order — system framing first, the conversation as real turns, then the
+    strongest-compliance blocks (standing orders, memory, plan) just before the
+    final user instruction:
+
+    1. system: identity + rules + output format (the ``turn_system`` prompt)
+    2. system: character + scenario + role instructions + persona
+    3. system: voice feel + examples (when any)
+    4. (conversation: user/assistant/summary turns)
+    5. system: STANDING ORDERS (when any)
+    6. system: memory (the lone ``{{memory}}`` token)
+    7. system: director plan / feel roll (when any)
+    8. user: final instruction
+    """
+    msgs: list[dict] = [
+        {"role": "system", "content": get_text("prattletale", "turn_system")},
+        {"role": "system", "content": (
+            "WHO YOU ARE:\n<character>\n" + context_vars.get("character", "") + "\n</character>\n\n"
+            "THE SITUATION:\n<scenario>\n" + context_vars.get("scenario", "") + "\n</scenario>\n\n"
+            "HOW TO PLAY THIS ROLE:\n<role_instructions>\n"
+            + context_vars.get("role_instructions", "") + "\n</role_instructions>\n\n"
+            "WHO YOU ARE TEXTING:\n<user_persona>\n"
+            + context_vars.get("user_persona", "") + "\n</user_persona>"
+        )},
+    ]
+    voice = "\n\n".join(
+        b for b in (context_vars.get("voice_feel", ""), context_vars.get("voice_examples", "")) if b
+    )
+    if voice:
+        msgs.append({"role": "system", "content": voice})
+
+    msgs.extend(transcript_messages)
+
+    if (context_vars.get("standing_orders") or "").strip():
+        msgs.append({"role": "system", "content": context_vars["standing_orders"]})
+    # Memory is the only message carrying a template token; the executor fills it.
+    msgs.append({"role": "system", "content": (
+        "THINGS YOU REMEMBER (background only; may be empty). Weave them in naturally "
+        "only when they fit; never read them aloud, list them, or say you 'remember' "
+        "them.\n<memory>\n{{memory}}\n</memory>"
+    )})
+    if (director_block or "").strip():
+        msgs.append({"role": "system", "content": director_block})
+    msgs.append({"role": "user", "content": _STRUCTURED_FINAL_INSTRUCTION})
+    return msgs
 
 
 # ---- request shape ---------------------------------------------------------
@@ -417,6 +536,7 @@ def build_turn_request(
     variety: bool = True,
     dialogue_feel_roll_enabled: bool = True,
     plan: Optional[dict] = None,
+    structured_chat_history: bool = True,
     counterpart_id: str = "",
     session_id: str = "",
 ) -> ChainJobRequest:
@@ -447,15 +567,9 @@ def build_turn_request(
     roll = render_director_plan(plan) if plan else ""
     if not roll:
         roll = resolve_dialogue_feel_roll(counterpart_id, enabled=dialogue_feel_roll_enabled)
-    # Underscore-prefixed context keys (``_mem_query``, ``_pattern_block``) are
-    # internal carriers, never rendered into the turn prompt; drop them so only the
-    # string-valued, intentionally-rendered vars reach get_text's {{var.*}} pass.
-    rendered_vars = {k: v for k, v in context_vars.items() if not k.startswith("_")}
+    # Internal underscore-prefixed carriers never reach the turn prompt's {{var.*}}.
+    rendered_vars = renderable_vars(context_vars)
     prompt_vars = {**rendered_vars, "dialogue_feel_roll": roll}
-    # resolve_wildcards expands %%name%% tokens (e.g. the per-turn message-shape
-    # pick) with a fresh weighted draw each turn — the server-side equivalent of
-    # the frontend wildcard pass, which this prompt never goes through.
-    turn_prompt = resolve_wildcards(get_text("prattletale", "turn", variables=prompt_vars))
     memory = {
         "enabled": True,
         "query": "{{var.mem_query}}",
@@ -475,7 +589,25 @@ def build_turn_request(
     # The whole chat-turn pipeline runs no-thinking: reasoning degrades the
     # in-character reply, and on variety/guard a verbose think trace can exhaust
     # max_tokens and return empty content ("model output produced no items").
-    steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory, thinking=False)]
+    #
+    # The turn step is either a structured role array (default) or the legacy
+    # single flattened prompt. Both carry the SAME memory config (the executor
+    # fills {{memory}} in the structured memory message or the single prompt). In
+    # structured mode the director plan/feel roll is the dedicated plan message; in
+    # single-prompt mode it's spliced through the {{var.dialogue_feel_roll}} slot.
+    if structured_chat_history:
+        messages = build_structured_messages(
+            context_vars,
+            director_block=roll,
+            transcript_messages=context_vars.get("_transcript_messages") or [],
+        )
+        steps = [_llm_step(1, "turn", "Turn", memory=memory, thinking=False, messages=messages)]
+    else:
+        # resolve_wildcards expands %%name%% tokens (e.g. the per-turn message-shape
+        # pick) with a fresh weighted draw each turn — the server-side equivalent of
+        # the frontend wildcard pass, which this prompt never goes through.
+        turn_prompt = resolve_wildcards(get_text("prattletale", "turn", variables=prompt_vars))
+        steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory, thinking=False)]
     number = 2
     if variety:
         variety_prompt = get_text("prattletale", "variety", variables=prompt_vars)
@@ -516,7 +648,7 @@ async def run_director(
     mutates the conversation. The director runs WITH thinking on (the rest of the
     chat pipeline is no-think) for sturdier JSON. The recent-pattern block reaches
     it as ``{{var.pattern_block}}``."""
-    dvars = {k: v for k, v in context_vars.items() if not k.startswith("_")}
+    dvars = renderable_vars(context_vars)
     dvars["pattern_block"] = context_vars.get("_pattern_block", "")
     prompt = get_text("prattletale", "director", variables=dvars)
     request = ChainJobRequest(
@@ -641,6 +773,7 @@ async def run_model_turn(
         variety = bool(config.get("variety_pass_enabled", False))
         roll_enabled = bool(config.get("dialogue_feel_roll_enabled", True))
         director_enabled = bool(config.get("director_enabled", True))
+        structured = bool(config.get("structured_chat_history", True))
         # The per-turn director (default on): an LLM pre-pass that plans the reply.
         # A failed or empty director (-> None) falls back to the wildcard feel roll
         # inside build_turn_request. Never lets a director error sink the reply.
@@ -660,6 +793,7 @@ async def run_model_turn(
             variety=variety,
             dialogue_feel_roll_enabled=roll_enabled,
             plan=plan,
+            structured_chat_history=structured,
             counterpart_id=conversation["counterpart_character_id"],
             session_id=conversation_id,
         )

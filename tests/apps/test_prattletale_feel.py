@@ -168,7 +168,7 @@ def test_build_turn_request_resolves_roll_into_turn_and_variety():
     seed.seed_message_style_wildcard()
     req = generator.build_turn_request(
         _ctx(), ChainLLMConfig(api_base="http://x", model="m"),
-        variety=True, counterpart_id="mara")
+        variety=True, structured_chat_history=False, counterpart_id="mara")
     turn_prompt = req.steps[0].alternatives[0].prompt
     # the per-turn roll is resolved (not a raw token), and the stable profile var
     # passed through context_vars is substituted too
@@ -187,7 +187,8 @@ def test_build_turn_request_roll_disabled_leaves_no_roll_block():
     seed.seed_message_style_wildcard()
     req = generator.build_turn_request(
         _ctx(), ChainLLMConfig(api_base="http://x", model="m"),
-        dialogue_feel_roll_enabled=False, counterpart_id="mara")
+        dialogue_feel_roll_enabled=False, structured_chat_history=False,
+        counterpart_id="mara")
     turn_prompt = req.steps[0].alternatives[0].prompt
     assert "THIS TURN'S DIALOGUE FEEL" not in turn_prompt
     assert "{{var.dialogue_feel_roll}}" not in turn_prompt  # empty var -> blank, not literal
@@ -249,7 +250,7 @@ def test_active_command_reaches_every_chain_step():
     ctx["standing_orders"] = generator._render_standing_orders(["answer only in French"])
     req = generator.build_turn_request(
         ctx, ChainLLMConfig(api_base="http://x", model="m"),
-        variety=True, dialogue_feel_roll_enabled=False)
+        variety=True, dialogue_feel_roll_enabled=False, structured_chat_history=False)
     assert [s.name for s in req.steps] == ["Turn", "Variety", "Guard"]
     for step in req.steps:
         prompt = step.alternatives[0].prompt
@@ -324,7 +325,7 @@ def test_build_turn_request_renders_director_plan_into_prompt():
     }
     req = generator.build_turn_request(
         _ctx(), ChainLLMConfig(api_base="http://x", model="m"),
-        plan=plan, counterpart_id="mara")
+        plan=plan, structured_chat_history=False, counterpart_id="mara")
     tp = req.steps[0].alternatives[0].prompt
     assert "Conversational move: end it" in tp
     assert "Emotional temperature: cold and final" in tp
