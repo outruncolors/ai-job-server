@@ -17,7 +17,7 @@ on Hoodat for every non-user character (sheet, avatar, voice); Hoodat stays app-
   sub-phase, so each chat stays small and self-contained.
 - **[Phase 2 — Config & dev-tools build plan](phase2-config-devtools-build-plan.md)** — per-conversation
   settings, message edit/hide/delete, a per-message action wrapper, a trace viewer, and a node-graph
-  view of the `turn → variety → guard` pipeline.
+  view of the turn pipeline (now: director plan → turn step → deterministic repair).
 - **[Phase 2 session prompts](phase2-prompts/README.md)** — copy-paste session-starters for the
   config / dev-tools sub-phases.
 - **[Phase 3 — Plugins (Summarizer) build plan](phase3-plugins-build-plan.md)** — a hook-based plugin
@@ -36,6 +36,15 @@ hide / delete** (and delete-turn), and a **dev-tools trace viewer + pipeline nod
 adds a **hook-based plugin system** with **Summarizer** as the first plugin (a 📋 Summarize composer
 mode that map-reduces the history into one summary bubble; Keep or Purge). Phase 4 (Model×Model,
 autonomous ticks, group chat) is sketched in the design and gets its own build plan just-in-time.
+
+**Dynamic sequenced chat (`prompt_version` `core-1`).** The turn pipeline is now a per-turn
+**director** (a small LLM pre-pass that returns a JSON plan — move/stance/shape/what to
+reference/avoid — fed a recent-pattern summary so it deliberately breaks ruts), a **structured
+turn** that sends the model a real `system`/`user`/`assistant` message array (not one flattened
+prompt), and **deterministic-first repair** (a Python format pass; an LLM repair runs only on a
+parse failure). The old `variety` pass and LLM `guard` step are **retired**, and the rich director
+**subsumes** the earlier shade/move/cadence feel director (the weighted wildcard feel roll remains
+the fallback). See [Design → Turn-generation pipeline](design.md#turn-generation-pipeline-text-only).
 
 ## How it works (Phase 1)
 
@@ -64,9 +73,10 @@ voice (Prattletale settings); without it Prattletale degrades to text.
 
 - **Config view** (the ⚙ in the chat header) edits the conversation's `title`, `scenario`,
   `role_instructions`, your display name + persona, the **context window** (turns), and the
-  voice / typing-timing / variety toggles — all through one broadened `PATCH /conversations/{id}`
-  (nested `config` patch; flat config keys still accepted for back-compat). The list-view ⚙ stays
-  app-level (narrator voice).
+  behaviour toggles (voice / typing-timing / `director_enabled` / `structured_chat_history` /
+  `repair_enabled` / `debug_prattletale`; `variety_pass_enabled` is retired) — all through one
+  broadened `PATCH /conversations/{id}` (nested `config` patch; flat config keys still accepted for
+  back-compat). The list-view ⚙ stays app-level (narrator voice).
 - **Per-message controls**: hover any bubble for **✏️ edit** (inline, `PATCH …/items/{item_id}`),
   **🚫 hide / 👁 show** from context (toggles `hidden_from_context` — hidden bubbles stay in the
   thread but render muted/struck-through and are dropped from the next turn's context), and **🗑
@@ -74,12 +84,14 @@ voice (Prattletale settings); without it Prattletale degrades to text.
   avatar exposes **🗑 delete-turn** (`DELETE …/turns/{turn_id}`). Edits never re-run the model —
   regeneration stays turn-level **Retry**.
 - **Dev tools**: a model turn's avatar exposes **🔍 trace** → a modal showing the `context_input`
-  bundle, `raw_final_output`, parsed items, reveal schedule, and any error, plus a **node-graph**
-  of that turn's `Turn → (Variety) → Guard` pipeline (read from the trace's enriched `steps`). Each
-  node opens its rendered prompt + output and deep-links to its Prompt Pal entry. The trace is read
-  via `GET …/turns/{turn_id}/trace`; the generator enriches each trace with the ordered `steps`
-  (`{number, id, name, prompt, output}`) by pairing the request steps with the executor's per-step
-  output dirs.
+  bundle, the **director plan** (parsed + raw) and **recent-pattern summary**, the **structured
+  messages** array sent to the model, `raw_final_output`, the **repair** result (deterministic vs
+  LLM), parsed items, reveal schedule, the `prompt_version`, and any error — plus a **node-graph** of
+  that turn's `steps` (now just the `turn` step; variety + guard are retired). Each node opens its
+  rendered prompt + output and deep-links to its Prompt Pal entry. The trace is read via
+  `GET …/turns/{turn_id}/trace`. A read-only **`GET /debug/prompts`** (+ `POST /debug/prompts/{key}/
+  reset`) shows which prompt (stored vs in-code default) is active per live key and the
+  `prompt_version`, so it's never ambiguous which prompt produced a reply.
 
 ## How it works (Phase 3 — plugins)
 
@@ -161,7 +173,7 @@ behind the character*, not the character. The **⌁ OOC** composer mode posts a 
 `send` action then generates the **author's reply** (a second `ooc` item, `author=model`) and returns
 **both** turns. The reply speaks as the author/director — discussing the character, the scene, and
 intentions in the **third person** to help steer the roleplay — and never as the character (the lean
-`ooc.reply` Prompt Pal prompt; a single `llm` step, no memory/variety/feel/guard). Staying in OOC
+`ooc.reply` Prompt Pal prompt; a single `llm` step, no memory/director/feel). Staying in OOC
 mode lets the user keep replying; sending a normal (Essentials) message ends the session. A
 **session** is simply a **maximal run of consecutive `ooc` items**, so the next in-character turn
 ends it for free — no session id is stored. **In-character turns never see OOC content**: the `ooc`

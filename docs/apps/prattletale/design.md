@@ -154,19 +154,37 @@ independently testable stages.
    Isolating this function means the later token-budget change (window unit is currently *turns*,
    not tokens) touches nothing else.
 
-2. **Chain call** — one `execute_chain_job` with `steps=[turn, (variety), guard]`. The prompt step,
-   the optional **variety** pass, and the narrative-editor guard collapse into a single chain; the
-   **last step's** output becomes `final_output.txt`. Scaffold the job with
-   `create_job("prattletale_turn", request.model_dump(), input)` + `find_job_dir`, then
-   `await execute_chain_job(job_id, job_dir, request)`. The **variety** step (gated by
-   `config.variety_pass_enabled`, default on) sits between the draft and the guard: it is given the
-   recent transcript + the drafted reply (`{{previous}}`) and rewrites the draft only when it
-   repeats the structure/opening/length/move of the character's recent messages — the primary lever
-   against conversations getting monotonous. It keeps the canonical message format, so the guard +
-   parser downstream are unchanged.
+2. **Director pre-pass (default on, `config.director_enabled`)** — before drafting, a tiny one-step
+   LLM job (`run_director`, `prattletale_director`) reads the conversation, the character's stable
+   voice, and a deterministic **recent-pattern summary** (`build_recent_pattern_summary`: recent
+   openings, message counts, overused phrases, trailing-question flag) and returns a **strict JSON
+   plan** for the next reply — `reply_shape` (message count / action / narration), `conversation_move`,
+   `emotional_temperature`, `stance`, `must_reference` / `must_include` / `must_avoid`, `length`
+   (`director.py`: `parse_director_plan` validates/normalizes, `render_director_plan` renders it).
+   The plan **subsumes** the old shade/move/cadence feel roll and is the primary lever against
+   monotony — dynamism is decided *before* drafting, not patched in after. On any failure or empty
+   parse it falls back to the weighted wildcard **feel roll** (`resolve_dialogue_feel_roll`), so the
+   plan block is always populated.
 
-3. **`parse_items(raw) -> list[dict]`** — **canonical message format, not JSON.** The model emits one
-   message per line:
+3. **Turn call** — one `execute_chain_job` with a single `turn` step; its output becomes
+   `final_output.txt`. Scaffold with `create_job("prattletale_turn", …)` + `find_job_dir`, then
+   `await execute_chain_job(job_id, job_dir, request)`. By default (`config.structured_chat_history`)
+   the turn step sends the model a **real sequenced role array** (`Alternative.messages`):
+   system framing (identity + rules + output format via the `turn_system` prompt, then character /
+   voice / standing orders / memory / the director plan) followed by the recent window as actual
+   `user`/`assistant`/`summary` messages and a short final `user` instruction
+   (`build_structured_messages` + `_transcript_to_messages`). Memory injects through the lone
+   `{{memory}}` token in the dedicated memory message. The legacy **single flattened prompt** (the
+   `turn` Prompt Pal entry, with the plan spliced through the `{{var.dialogue_feel_roll}}` slot)
+   remains as the fallback when `structured_chat_history` is off. *(The old `variety` pass and LLM
+   `guard` step are **retired** — see below.)*
+
+4. **Deterministic-first repair → `parse_items(raw) -> list[dict]`** — the raw output runs through a
+   cheap Python cleanup (`repair.py::repair_output_deterministic`: strip fences/emoji/preamble, drop
+   empty lines, cap runaway) **before** the parser. Only when the deterministic pass + parser still
+   can't produce items does a last-resort LLM **repair** job (`run_repair`, the `repair` prompt over
+   `{{input}}`; gated by `config.repair_enabled`) reformat the reply. `parse_items` is the single
+   arbiter — **canonical message format, not JSON.** The model emits one message per line:
    ```
    She doesn't look up from the menu.
    "Where else would I be."
@@ -178,8 +196,8 @@ independently testable stages.
    and any unknown tag→`narration`). A stray `_underscore-wrapped_` line is normalized to plain
    narration. Parser: fence-strip, split on newlines; **emoji are stripped deterministically**
    (`_clean_text`/`_EMOJI_RE`) and an item left empty by the scrub is dropped; an empty result raises
-   `GenerationError`. (The prompt + guard also forbid emoji, but the parser scrub guarantees it
-   regardless of the model.)
+   `GenerationError`. (The prompt + deterministic repair also forbid emoji, but the parser scrub
+   guarantees it regardless of the model.)
 
    *Why not JSON?* Hoodat uses JSON because it assembles a fixed-schema record and can afford an
    assemble-only retry. A chat turn is an **open-ended ordered sequence of short strings** where
@@ -187,32 +205,32 @@ independently testable stages.
    JSON doesn't prevent and which the tagged format degrades on gracefully (untagged → dialogue)
    instead of throwing. It also avoids an expensive parse-retry that would *change* the reply.
 
-4. **Persist + trace** — append the model turn, bump `next_turn_seq`/`updated_at`, atomic-write
-   `transcript.json`, and write `traces/<turn>.json` = `{job_id, context_input, raw_final_output,
-   parsed_items, error}`.
+5. **Persist + trace** — append the model turn, bump `next_turn_seq`/`updated_at`, atomic-write
+   `transcript.json`, and write `traces/<turn>.json` = `{job_id, prompt_version, context_input,
+   pattern_summary, director_plan, director_plan_raw, structured_messages, raw_final_output, repair,
+   parsed_items, steps, error}` (so a trace is fully self-describing: what the director planned, the
+   exact role array sent, and whether deterministic-vs-LLM repair ran).
 
-### The narrative editor is a guard
+### Format hygiene is deterministic-first repair (the LLM guard is retired)
 
-Register the `prattletale/turn` prompt with a Prompt Pal **guard** (Hoodat's `SPOKEN_ONLY_GUARD`
-is the precedent). The guard runs as the chain's **final** `llm` step over `{{previous}}` and does
-**format hygiene only**: ensure every line is tagged, strip emoji/markdown and leaked internal
-monologue / meta ("As an AI", "Here's my response:"), drop OOC commentary. Keep the *format
-instruction* in the
-`turn` prompt; the guard must **not merge** multiple bubbles into one. This is why parsing stays
-trivial and the editor is tunable in the Prompt Pal UI with no extra job dir.
+The pipeline used to run an **unconditional LLM guard** step over every reply for format hygiene —
+an extra round-trip that could also normalize voice away or quietly undo a standing order. It is
+**retired**: `repair_output_deterministic` does the hygiene (fences, emoji, preamble, runaway cap) in
+Python before `parse_items`, and the LLM **repair** prompt runs *only* when the deterministic pass
+still won't parse. The seeded `turn` guard is disabled and the `variety` pass seeds empty (both kept
+in Prompt Pal, resurrectable); `migrate_turn_variety_prompts` empties an unedited stored variety and
+disables an unedited stored guard. `parse_items` stays the single arbiter, so parsing stays trivial.
 
-### Message shape is a wildcard
+### Message shape: the director plan (wildcard fallback)
 
 Left alone, the model over-narrates and fires a burst of bubbles every turn. The desired *shape* of
-a reply — how many messages, and whether to include an action or narration — is therefore a
-**wildcard**, `Prattletale Message Style` (seeded if absent by `app/apps/prattletale/seed.py`, then
-tunable in the Wildcards UI). The turn prompt embeds a `%%Prattletale Message Style%%` token in a
-"message shape for this reply" section, and `build_turn_request` resolves it server-side
-(`wildcards.resolve_wildcards`) with a fresh weighted pick each turn — so the per-turn shape follows
-the wildcard's distribution (default 40% single message / 30% action+message / 20% mix with
-narration / 10% burst). Wildcards normally resolve in the browser before a prompt is sent; this
-prompt is built on the server, so resolution happens there. The variety pass and guard then preserve
-that chosen shape (line count/kinds) and only rework wording/format.
+a reply — how many messages, and whether to include an action or narration — is now decided by the
+**director plan**'s `reply_shape`. The legacy `Prattletale Message Style` **wildcard** (seeded by
+`app/apps/prattletale/seed.py`, tunable in the Wildcards UI) lives in the single-prompt `turn` entry
+via a `%%Prattletale Message Style%%` token resolved server-side
+(`wildcards.resolve_wildcards`, fresh weighted pick each turn: default 40% single / 30%
+action+message / 20% mix with narration / 10% burst) — it applies only in the single-prompt fallback
+when `structured_chat_history` is off and the director is unavailable.
 
 ### Commit semantics
 
@@ -224,7 +242,7 @@ the POST is in flight; no polling. JobQueue + polling is deferred to autonomous/
 
 ### Error handling & retry
 
-If the pipeline raises (LLM error, empty parse after guard), the generator calls
+If the pipeline raises (LLM error, empty parse after deterministic + LLM repair), the generator calls
 `store.append_error_turn` — a model turn with a single `type:"system_error"`, `status:"error"`
 item — and the router returns **HTTP 200** with that turn so the UI renders the error bubble
 inline. `system_error` items are always skipped by `build_context`, so a failed turn never poisons
@@ -283,8 +301,8 @@ app-level **narrator** voice (never synthesize user-authored text). Store `media
 `duration_ms` on the item's `audio`. Gate synthesis on `requires_capability("voice")`; when voice
 is off or the capability is unavailable, fall back cleanly to text.
 
-**Synthesis is per-message, not per-turn.** The turn POST computes the whole turn (the
-`turn → variety → guard` chain) and returns its text immediately (`run_model_turn(synthesize=False)`).
+**Synthesis is per-message, not per-turn.** The turn POST computes the whole turn (director plan →
+turn step → deterministic repair) and returns its text immediately (`run_model_turn(synthesize=False)`).
 The client then reveals the messages one at a time. A **background producer** synthesizes the
 turn's clips in order, one at a time (via the per-item `.../audio` endpoint), so upcoming messages
 are usually ready ahead of the playhead; the reveal loop shows each message's "..." indicator and
@@ -298,9 +316,9 @@ turn in one await) remains for non-streaming callers.
 
 ## Risks / open questions (non-blocking)
 
-1. **Guard scope** — keep the canonical-message *format* rule in the `turn` prompt; guard does
-   hygiene only and must not merge bubbles. The unrecognized-line→narration fallback covers a weak
-   guard.
+1. **Repair scope** — format hygiene is deterministic-first (`repair_output_deterministic`); the LLM
+   `repair` prompt runs only on a parse failure and must not merge bubbles or change wording. The
+   unrecognized-line→narration fallback covers a weak repair.
 2. **No automatic retry in the chat path** — a re-generation changes the reply, so parse-failure →
    `system_error` + manual Retry is intentional.
 3. **Context window unit is turns, not tokens** — fine for Phase 1; the token-budget pass is
