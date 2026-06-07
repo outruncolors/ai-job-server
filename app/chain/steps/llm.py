@@ -8,6 +8,15 @@ from typing import Any, Optional
 
 _MAX_TOOL_ITERATIONS = 6
 _GEMMA_TOOL_RE = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
+# Defensive: a reasoning model's think block should arrive in `reasoning_content`
+# (llama.cpp with --reasoning-format auto/deepseek) and never reach us. If a
+# server instead inlines it into `content`, strip a leading <think>…</think> so
+# it doesn't pollute the step output. Belt-and-suspenders for thinking-on steps.
+_THINK_BLOCK_RE = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL)
+
+
+def _strip_think_block(text: str) -> str:
+    return _THINK_BLOCK_RE.sub("", text)
 
 
 def _now_iso() -> str:
@@ -305,5 +314,6 @@ async def run_llm_step(
         output = await _stream_assistant_turn(
             messages, client, request.llm, event_bus, step_index, invocation,
         )
+    output = _strip_think_block(output)
     (step_dir / "output.txt").write_text(output, encoding="utf-8")
     return output, "output.txt", prompt

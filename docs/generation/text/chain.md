@@ -36,8 +36,11 @@ Renders a prompt template, calls the configured LLM, and stores the response as 
 | `tools` | string[] | `[]` | [MCP tools](../../tools/mcp.md) available to this alternative |
 | `preset` | string\|null | null | [LLM preset](../../tools/llm-presets.md) to load before the call. Falls back to `default_preset` from `config/llamacpp.json`. |
 | `requires` | string[] | `[]` | Capabilities (`text`, `vision`) the chosen preset must advertise; validated at sequence-save time (422 on mismatch) |
+| `thinking` | bool\|null | null | Reasoning control. `null` uses the project default (`DEFAULT_THINKING` — on); `true`/`false` force it. Realized as a per-request `thinking_budget_tokens` (`-1` on / `0` off) — no model reload. Set `false` for in-character roleplay replies; leave default for utility/JSON prompts. |
 
 Before each `llm` alternative runs, the executor POSTs `{"preset": "<name>"}` to `/v1/llamacpp/ensure-loaded` on whichever node holds the `llm` capability. If the preset is already loaded the call is a near-instant no-op; otherwise `llama-server` is swapped and the swap is logged. With no preset set anywhere the swap is skipped and the request's `llm` config is used as-is.
+
+**Reasoning ('thinking').** The per-step `thinking` flag is sent to llama.cpp as `thinking_budget_tokens` on the chat-completions body, so toggling it never reloads the model. This is honored **only when the server was launched without a `--reasoning-budget` flag** (CLI default `-1`); the default text preset should therefore set `jinja: true` + `reasoning_format: "auto"` and **omit** `reasoning_budget` from its `args`. With `reasoning_format` parsing on, the model's think block lands in the response's `reasoning_content` (not `content`), so step output stays clean; the executor also strips a stray leading `<think>…</think>` defensively.
 
 Writes `prompt.txt`, `output.txt`, optionally `context.txt`, and `tool_calls.json` when tools fire.
 

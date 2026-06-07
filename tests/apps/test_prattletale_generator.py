@@ -221,3 +221,13 @@ def test_build_turn_request_skips_variety_when_disabled():
     )
     assert [s.id for s in req.steps] == ["turn", "guard"]
     assert [s.number for s in req.steps] == [1, 2]  # numbering stays contiguous
+
+
+def test_turn_step_runs_without_thinking_others_default():
+    # The in-character reply must not emit a reasoning trace; utility passes
+    # (variety/guard) keep the project default (None → thinking on).
+    req = generator.build_turn_request(_ctx(), ChainLLMConfig(api_base="http://x", model="m"))
+    by_id = {s.id: s.primary.thinking for s in req.steps}
+    assert by_id["turn"] is False
+    assert by_id["variety"] is None
+    assert by_id["guard"] is None

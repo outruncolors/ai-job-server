@@ -70,20 +70,26 @@ def _resolve_llm(llm: Optional[ChainLLMConfig]) -> ChainLLMConfig:
             llm = get_default_as_chain_llm_config()
         except RuntimeError as exc:
             raise GenerationError(str(exc)) from exc
-    # Want an in-character reply, not a reasoning trace (same rationale as Hoodat).
-    if llm.chat_template_kwargs is None:
-        llm = llm.model_copy(update={"chat_template_kwargs": {"enable_thinking": False}})
+    # Reasoning is controlled per chain step now (see _llm_step's `thinking`):
+    # the in-character `turn` runs without it, utility steps keep the default.
     return llm
 
 
 def _llm_step(
-    number: int, step_id: str, name: str, prompt: str, *, memory: Optional[dict] = None
+    number: int, step_id: str, name: str, prompt: str, *,
+    memory: Optional[dict] = None, thinking: Optional[bool] = None,
 ) -> ChainStep:
     """Build a single-alternative ``llm`` step. When ``memory`` is given, the
     alternative carries a :class:`MemoryStepConfig` so the executor retrieves a
     memory block and exposes it to the prompt via the ``{{memory}}`` token (and
-    writes ``steps/NNN_<id>/memory.txt`` for the trace)."""
-    alt = Alternative(prompt=prompt, memory=MemoryStepConfig(**memory) if memory else None)
+    writes ``steps/NNN_<id>/memory.txt`` for the trace). ``thinking`` overrides
+    the project reasoning default (None = default-on; False for the in-character
+    reply, which roleplay best practice runs without a reasoning trace)."""
+    alt = Alternative(
+        prompt=prompt,
+        memory=MemoryStepConfig(**memory) if memory else None,
+        thinking=thinking,
+    )
     return ChainStep(
         number=number, id=step_id, name=name, type="llm",
         alternatives=[alt],
@@ -284,7 +290,9 @@ def build_turn_request(
         "top_k": 6,
         "max_chars": 1200,
     }
-    steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory)]
+    # The in-character reply runs without reasoning (it degrades roleplay); the
+    # downstream variety/guard utility passes keep the default (thinking on).
+    steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory, thinking=False)]
     number = 2
     if variety:
         variety_prompt = get_text("prattletale", "variety", variables=prompt_vars)

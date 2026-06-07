@@ -79,8 +79,7 @@ def _llm_step(number: int, step_id: str, name: str, prompt: str) -> ChainStep:
 def _resolve_llm(llm: Optional[ChainLLMConfig]) -> ChainLLMConfig:
     if llm is None:
         llm = get_default_as_chain_llm_config()
-    if llm.chat_template_kwargs is None:  # prose/JSON, not a reasoning trace
-        llm = llm.model_copy(update={"chat_template_kwargs": {"enable_thinking": False}})
+    # Reasoning is the project default now (controlled per chain step).
     return llm
 
 
