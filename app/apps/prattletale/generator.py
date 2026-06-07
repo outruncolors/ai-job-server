@@ -39,8 +39,8 @@ from ...wildcards import resolve_wildcards
 from ..hoodat.characters_store import get_character
 from ..hoodat.prompts import render_character_context
 from . import store
+from .director import parse_director_plan, render_director_plan
 from .feel import (
-    parse_director_roll,
     render_voice_examples,
     render_voice_feel,
     resolve_dialogue_feel_roll,
@@ -49,9 +49,9 @@ from .models import Author, ItemType
 from .voice import reveal_schedule, synthesize_turn
 
 JOB_TYPE = "prattletale_turn"
-# The optional feel-director pre-pass runs as its own tiny one-step job (reuses
-# the full LLM plumbing: endpoint resolution, model swap, on-disk trace).
-JOB_TYPE_DIRECTOR = "prattletale_feel_director"
+# The director pre-pass runs as its own tiny one-step job (reuses the full LLM
+# plumbing: endpoint resolution, model swap, on-disk trace).
+JOB_TYPE_DIRECTOR = "prattletale_director"
 
 # Rendered when the device user has no persona, so the prompt's <user_persona>
 # section never collapses to a dangling label with empty contents.
@@ -416,7 +416,7 @@ def build_turn_request(
     *,
     variety: bool = True,
     dialogue_feel_roll_enabled: bool = True,
-    dialogue_feel_roll: Optional[str] = None,
+    plan: Optional[dict] = None,
     counterpart_id: str = "",
     session_id: str = "",
 ) -> ChainJobRequest:
@@ -434,17 +434,22 @@ def build_turn_request(
     user just said and injects the result into the prompt's ``{{memory}}`` token
     (fail-soft — an empty/disabled subsystem yields an empty block). Only the turn
     step retrieves; the variety/guard passes run over ``{{previous}}``.
+
+    The per-turn ``plan`` (the director's validated JSON) is rendered into the
+    strong-compliance block and injected through the ``{{var.dialogue_feel_roll}}``
+    slot — it subsumes the old shade/move/cadence roll. When ``plan`` is None
+    (director off or failed) the block falls back to the weighted wildcard feel
+    roll, so that slot is always populated the same self-contained way.
     """
-    # The per-turn Dialogue Feel roll — added to the prompt vars so both the turn
-    # and the variety step see the same roll. ``dialogue_feel_roll`` (the
-    # context-aware director's output) overrides when provided; otherwise it's a
-    # fresh weighted draw of the Move / Shade / Cadence wildcards (character-override
-    # aware). Empty when disabled, the director yielded nothing, or wildcards absent.
-    roll = (dialogue_feel_roll if dialogue_feel_roll is not None
-            else resolve_dialogue_feel_roll(counterpart_id, enabled=dialogue_feel_roll_enabled))
-    # Underscore-prefixed context keys (``_mem_query``, ``_pattern_summary`` — the
-    # last a dict) are internal carriers, never rendered into a prompt; drop them so
-    # only string-valued vars reach get_text's {{var.*}} substitution.
+    # The director plan is the per-turn behavior block; fall back to the weighted
+    # wildcard feel roll when the director produced nothing. Either way it lands in
+    # the {{var.dialogue_feel_roll}} slot (a self-contained block, or "").
+    roll = render_director_plan(plan) if plan else ""
+    if not roll:
+        roll = resolve_dialogue_feel_roll(counterpart_id, enabled=dialogue_feel_roll_enabled)
+    # Underscore-prefixed context keys (``_mem_query``, ``_pattern_block``) are
+    # internal carriers, never rendered into the turn prompt; drop them so only the
+    # string-valued, intentionally-rendered vars reach get_text's {{var.*}} pass.
     rendered_vars = {k: v for k, v in context_vars.items() if not k.startswith("_")}
     prompt_vars = {**rendered_vars, "dialogue_feel_roll": roll}
     # resolve_wildcards expands %%name%% tokens (e.g. the per-turn message-shape
@@ -494,35 +499,39 @@ def build_turn_request(
     )
 
 
-async def direct_feel_roll(
+async def run_director(
     context_vars: dict[str, str],
     llm: ChainLLMConfig,
     *,
     counterpart_id: str = "",
     session_id: str = "",
-) -> str:
-    """Run the feel director: a one-step LLM pre-pass that *chooses* this turn's
-    dialogue feel from the conversation (vs the blind wildcard draw). Returns the
-    parsed ``<dialogue_feel_roll>`` block, or ``""`` if it produced nothing usable
-    (the caller then falls back to the wildcard draw).
+) -> Optional[dict]:
+    """Run the per-turn director: a one-step LLM pre-pass that *plans* the next
+    reply (shape, move, stance, what to reference/avoid) as strict JSON. Returns
+    the validated/normalized plan dict, or ``None`` when nothing usable parsed (the
+    caller then falls back to the weighted wildcard feel roll).
 
-    Runs as its own tiny on-disk job so it reuses the full LLM plumbing and is
-    independently traceable; it never mutates the conversation."""
+    Runs as its own tiny on-disk job so it reuses the full LLM plumbing (endpoint
+    resolution, model swap, on-disk trace) and is independently traceable; it never
+    mutates the conversation. The director runs WITH thinking on (the rest of the
+    chat pipeline is no-think) for sturdier JSON. The recent-pattern block reaches
+    it as ``{{var.pattern_block}}``."""
     dvars = {k: v for k, v in context_vars.items() if not k.startswith("_")}
-    prompt = get_text("prattletale", "feel_director", variables=dvars)
+    dvars["pattern_block"] = context_vars.get("_pattern_block", "")
+    prompt = get_text("prattletale", "director", variables=dvars)
     request = ChainJobRequest(
-        title="Prattletale feel director",
+        title="Prattletale director",
         input=context_vars.get("transcript", ""),
         llm=llm,
-        steps=[_llm_step(1, "feel_director", "Feel Director", prompt, thinking=False)],
+        steps=[_llm_step(1, "director", "Director", prompt, thinking=True)],
         variables={"counterpart_id": counterpart_id, "session_id": session_id},
     )
     status = create_job(JOB_TYPE_DIRECTOR, request.model_dump(), request.input)
     job_dir = find_job_dir(status["job_id"])
     if job_dir is None:  # pragma: no cover — create_job just made it
-        return ""
+        return None
     await execute_chain_job(status["job_id"], job_dir, request)
-    return parse_director_roll(_read_final_output(job_dir))
+    return parse_director_plan(_read_final_output(job_dir))
 
 
 def _read_final_output(job_dir: Path) -> str:
@@ -629,28 +638,28 @@ async def run_model_turn(
         resolved = _resolve_llm(llm)
         context_vars = build_context(conversation, character, transcript)
         config = conversation.get("config") or {}
-        variety = bool(config.get("variety_pass_enabled", True))
+        variety = bool(config.get("variety_pass_enabled", False))
         roll_enabled = bool(config.get("dialogue_feel_roll_enabled", True))
-        director_enabled = bool(config.get("dialogue_feel_director_enabled", False))
-        # Context-aware roll (opt-in): let a director LLM choose the feel; a failed
-        # or empty director (-> None) falls back to the wildcard draw inside
-        # build_turn_request. Never lets a director error sink the reply.
-        roll_override: Optional[str] = None
-        if roll_enabled and director_enabled:
+        director_enabled = bool(config.get("director_enabled", True))
+        # The per-turn director (default on): an LLM pre-pass that plans the reply.
+        # A failed or empty director (-> None) falls back to the wildcard feel roll
+        # inside build_turn_request. Never lets a director error sink the reply.
+        plan: Optional[dict] = None
+        if director_enabled:
             try:
-                roll_override = await direct_feel_roll(
+                plan = await run_director(
                     context_vars, resolved,
                     counterpart_id=conversation["counterpart_character_id"],
                     session_id=conversation_id,
-                ) or None
+                )
             except Exception:  # noqa: BLE001 — director is best-effort; fall back to wildcards
-                roll_override = None
+                plan = None
         request = build_turn_request(
             context_vars,
             resolved,
             variety=variety,
             dialogue_feel_roll_enabled=roll_enabled,
-            dialogue_feel_roll=roll_override,
+            plan=plan,
             counterpart_id=conversation["counterpart_character_id"],
             session_id=conversation_id,
         )

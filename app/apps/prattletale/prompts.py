@@ -38,7 +38,7 @@ from ...prompt_pal.registry import register
 from .generator import GenerationError  # canonical home; re-exported here for the parser
 from .models import ItemType
 
-__all__ = ["GenerationError", "TURN", "TURN_GUARD", "VARIETY", "parse_items"]
+__all__ = ["GenerationError", "TURN", "TURN_GUARD", "VARIETY", "DIRECTOR", "parse_items"]
 
 
 # ---- turn prompt + format-hygiene guard ------------------------------------
@@ -367,6 +367,53 @@ register(
     tags=("turn", "chat", "feel"),
     variables={},
     description="Pick this turn's dialogue feel (shade/move/cadence) from conversation context.",
+)
+
+
+# ---- director (rich per-turn JSON plan) ------------------------------------
+
+# The per-turn director: a small LLM pre-pass that reads the conversation, the
+# character's stable voice, and the recent-pattern summary, and returns a STRICT
+# JSON plan for the next reply (shape, move, stance, what to reference/avoid). The
+# plan is parsed + rendered (app/apps/prattletale/director.py) into a strong-
+# compliance block injected at the end of generation — so dynamism is decided
+# BEFORE drafting. It subsumes the old shade/move/cadence feel roll. On any failure
+# the caller falls back to the weighted wildcard feel roll. Plan the BEHAVIOR,
+# never the words.
+DIRECTOR = (
+    "You are the dialogue director for a live text-message roleplay. Read the "
+    "conversation and decide how the character plays THIS ONE next reply. You do "
+    "NOT write the reply — you only output a JSON plan for it.\n\n"
+    "THE CHARACTER (keep your plan consistent with this voice; may be empty):\n"
+    "{{var.voice_feel}}\n\n"
+    "THE CONVERSATION SO FAR (oldest first; react to the LAST line):\n"
+    "<transcript>\n{{var.transcript}}\n</transcript>\n\n"
+    "{{var.pattern_block}}\n\n"
+    "Output STRICT JSON and nothing else — no prose, no code fence. Schema:\n"
+    "{\n"
+    '  "reply_shape": {"message_count": <1-4>, "include_action": <true|false>, '
+    '"include_narration": <true|false>},\n'
+    '  "conversation_move": "<one short instruction, e.g. push back then concede one point>",\n'
+    '  "emotional_temperature": "<2-6 words>",\n'
+    '  "stance": "<the character\'s posture toward the other person right now>",\n'
+    '  "must_reference": "<the specific thing in their last message to engage>",\n'
+    '  "must_include": "<one concrete beat or detail to land, or empty string>",\n'
+    '  "must_avoid": ["<phrase or move to avoid, drawn from RECENT PATTERN>"],\n'
+    '  "length": "<terse|short|medium>"\n'
+    "}\n\n"
+    "Make every field specific to THIS moment and in character — never generic. "
+    "Vary message_count and length away from the recent pattern. Do not ask a "
+    "question every turn. Output only the JSON object."
+)
+
+register(
+    "prattletale",
+    "director",
+    title="Chat turn — director",
+    prompt=DIRECTOR,
+    tags=("turn", "chat", "director"),
+    variables={},
+    description="Choose this turn's reply plan (shape/move/stance/avoid) as strict JSON.",
 )
 
 

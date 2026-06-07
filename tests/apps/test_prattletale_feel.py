@@ -314,27 +314,36 @@ def test_parse_director_roll_empty_when_unusable():
     assert feel.parse_director_roll("") == ""
 
 
-def test_build_turn_request_uses_director_override_verbatim():
-    # an explicit roll override is used as-is (no wildcard draw needed)
-    override = feel.parse_director_roll("Emotional shade: cold\nMove: end it\nCadence: flat")
+def test_build_turn_request_renders_director_plan_into_prompt():
+    # a director plan is rendered into the {{var.dialogue_feel_roll}} slot verbatim
+    plan = {
+        "reply_shape": {"message_count": 2, "include_action": False, "include_narration": False},
+        "conversation_move": "end it", "emotional_temperature": "cold and final",
+        "stance": "", "must_reference": "", "must_include": "", "must_avoid": [],
+        "length": "terse",
+    }
     req = generator.build_turn_request(
         _ctx(), ChainLLMConfig(api_base="http://x", model="m"),
-        dialogue_feel_roll=override, counterpart_id="mara")
+        plan=plan, counterpart_id="mara")
     tp = req.steps[0].alternatives[0].prompt
-    assert "Emotional shade: cold" in tp and "Move: end it" in tp
+    assert "Conversational move: end it" in tp
+    assert "Emotional temperature: cold and final" in tp
 
 
-async def test_director_roll_runs_one_step_job_and_parses(monkeypatch):
-    # stub the LLM: the director job writes three labeled lines
+async def test_run_director_runs_one_step_job_and_parses(monkeypatch):
+    # stub the LLM: the director job writes a JSON plan
     async def fake(job_id, job_dir, request, event_bus=None):
-        assert request.steps[0].id == "feel_director"
+        assert request.steps[0].id == "director"
         (job_dir / "final_output.txt").write_text(
-            "Emotional shade: wary\nMove: ask one sharp question\nCadence: short",
+            '{"reply_shape": {"message_count": 1}, "conversation_move": "ask one sharp question",'
+            ' "emotional_temperature": "wary", "length": "short"}',
             encoding="utf-8")
     monkeypatch.setattr(generator, "execute_chain_job", fake)
-    block = await generator.direct_feel_roll(
+    plan = await generator.run_director(
         _ctx(), ChainLLMConfig(api_base="http://x", model="m"), counterpart_id="mara")
-    assert "Emotional shade: wary" in block and "Move: ask one sharp question" in block
+    assert plan is not None
+    assert plan["conversation_move"] == "ask one sharp question"
+    assert plan["emotional_temperature"] == "wary"
 
 
 # ---- build_context wires the stable blocks ---------------------------------
