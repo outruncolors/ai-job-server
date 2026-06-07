@@ -20,6 +20,7 @@ The pipeline is split into discrete, independently testable stages:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -238,6 +239,133 @@ def _latest_user_text(turns: list[dict]) -> str:
     return ""
 
 
+# ---- recent-pattern analysis (pure; feeds the director only) ----------------
+
+# Trivial openers ignored when collecting "recent openings" — they carry no
+# structural signal worth varying. Lowercased, punctuation-stripped.
+_PATTERN_STOP_OPENERS = {"i", "the", "a", "an", "and", "but", "so", "oh", "ok", "okay"}
+_WORD_RE = re.compile(r"[a-z0-9']+")
+
+
+def _model_dialogue_items(turn: dict) -> list[str]:
+    """Visible dialogue texts of a model turn, in order (empty for non-model or
+    item-less turns). Mirrors the context skip rules: system_error excluded."""
+    if turn.get("author") != Author.model.value:
+        return []
+    out: list[str] = []
+    for it in (turn.get("items") or []):
+        if it.get("hidden_from_context"):
+            continue
+        if it.get("type") != ItemType.dialogue.value:
+            continue
+        text = (it.get("text") or "").strip()
+        if text:
+            out.append(text)
+    return out
+
+
+def _visible_model_item_count(turn: dict) -> int:
+    """How many visible (non-error, non-hidden) items a model turn committed."""
+    if turn.get("author") != Author.model.value:
+        return 0
+    return sum(
+        1 for it in (turn.get("items") or [])
+        if not it.get("hidden_from_context")
+        and it.get("type") != ItemType.system_error.value
+    )
+
+
+def build_recent_pattern_summary(
+    transcript: dict, character: dict, *, lookback: int = 6
+) -> dict:
+    """Cheap, deterministic analysis of the character's OWN recent model turns —
+    fed to the **director** prompt only (never the final generation), so the
+    director can deliberately break a rut. Pure (no LLM, string-only).
+
+    - ``recent_openings`` — the first ~3 content words of each recent model turn's
+      first dialogue line (trivial openers dropped), newest last.
+    - ``recent_message_counts`` — visible item count per recent model turn.
+    - ``last_model_ended_with_question`` — did the most recent model turn's last
+      dialogue line end on a ``?``.
+    - ``overused_phrases`` — 2-/3-grams recurring across recent model dialogue
+      (count >= 2), capped.
+    """
+    turns = transcript.get("turns") or []
+    model_turns = [t for t in turns if t.get("author") == Author.model.value][-lookback:]
+
+    recent_openings: list[str] = []
+    for t in model_turns:
+        dlg = _model_dialogue_items(t)
+        if not dlg:
+            continue
+        words = _WORD_RE.findall(dlg[0].lower())
+        # Skip only *leading* trivial openers (they carry no structural signal),
+        # then keep the next few words verbatim.
+        i = 0
+        while i < len(words) and words[i] in _PATTERN_STOP_OPENERS:
+            i += 1
+        kept = words[i:i + 3]
+        if kept:
+            recent_openings.append(" ".join(kept))
+
+    recent_message_counts = [_visible_model_item_count(t) for t in model_turns]
+
+    last_model_ended_with_question = False
+    for t in reversed(model_turns):
+        dlg = _model_dialogue_items(t)
+        if dlg:
+            last_model_ended_with_question = dlg[-1].rstrip().endswith("?")
+            break
+
+    # n-gram frequency across all recent model dialogue.
+    counts: dict[str, int] = {}
+    for t in model_turns:
+        for line in _model_dialogue_items(t):
+            words = _WORD_RE.findall(line.lower())
+            for n in (2, 3):
+                for i in range(len(words) - n + 1):
+                    gram = " ".join(words[i:i + n])
+                    counts[gram] = counts.get(gram, 0) + 1
+    overused_phrases = [g for g, c in counts.items() if c >= 2]
+    # Prefer longer (3-gram) repeats first, then alphabetical for determinism; cap.
+    overused_phrases.sort(key=lambda g: (-len(g.split()), g))
+    overused_phrases = overused_phrases[:5]
+
+    return {
+        "recent_openings": recent_openings,
+        "recent_message_counts": recent_message_counts,
+        "last_model_ended_with_question": last_model_ended_with_question,
+        "overused_phrases": overused_phrases,
+    }
+
+
+def render_pattern_block(summary: dict) -> str:
+    """Render the RECENT PATTERN block for the director prompt, or ``""`` when
+    there is nothing notable yet (same vanish-when-empty convention as the feel
+    blocks, so the ``{{var.pattern_block}}`` token simply disappears)."""
+    openings = summary.get("recent_openings") or []
+    counts = summary.get("recent_message_counts") or []
+    overused = summary.get("overused_phrases") or []
+    ended_q = summary.get("last_model_ended_with_question")
+    lines: list[str] = []
+    if openings:
+        lines.append("Recent openings: " + "; ".join(openings))
+    if counts:
+        lines.append("Recent message counts: " + ", ".join(str(c) for c in counts))
+    if overused:
+        lines.append("Overused phrases: " + "; ".join(overused))
+    if ended_q:
+        lines.append("The last reply ended on a question.")
+    if not lines:
+        return ""
+    body = "\n".join(f"- {ln}" for ln in lines)
+    return (
+        "RECENT PATTERN — what this character has been doing lately. Deliberately "
+        "BREAK these patterns so the conversation does not get monotonous:\n"
+        f"{body}"
+    )
+
+
 def build_context(conversation: dict, character: dict, transcript: dict) -> dict[str, str]:
     """Build the prompt variable bundle from the conversation, counterpart sheet,
     and transcript. **Pure** (no LLM, no network) so the later token-budget change
@@ -269,6 +397,14 @@ def build_context(conversation: dict, character: dict, transcript: dict) -> dict
         "voice_feel": render_voice_feel(character, conversation),
         "voice_examples": render_voice_examples(character, conversation),
         "_mem_query": _latest_user_text(recent) or transcript_text,
+        # Recent-pattern block for the director prompt (over the WHOLE transcript's
+        # recent model turns, its own lookback). Underscore-prefixed: never rendered
+        # into the turn prompt. build_context returns only strings (the bundle is
+        # passed as get_text `variables=` by several callers), so the raw summary
+        # dict for the trace is recomputed in run_model_turn, not carried here.
+        "_pattern_block": render_pattern_block(
+            build_recent_pattern_summary(transcript, character)
+        ),
     }
 
 
@@ -306,7 +442,11 @@ def build_turn_request(
     # aware). Empty when disabled, the director yielded nothing, or wildcards absent.
     roll = (dialogue_feel_roll if dialogue_feel_roll is not None
             else resolve_dialogue_feel_roll(counterpart_id, enabled=dialogue_feel_roll_enabled))
-    prompt_vars = {**context_vars, "dialogue_feel_roll": roll}
+    # Underscore-prefixed context keys (``_mem_query``, ``_pattern_summary`` — the
+    # last a dict) are internal carriers, never rendered into a prompt; drop them so
+    # only string-valued vars reach get_text's {{var.*}} substitution.
+    rendered_vars = {k: v for k, v in context_vars.items() if not k.startswith("_")}
+    prompt_vars = {**rendered_vars, "dialogue_feel_roll": roll}
     # resolve_wildcards expands %%name%% tokens (e.g. the per-turn message-shape
     # pick) with a fresh weighted draw each turn — the server-side equivalent of
     # the frontend wildcard pass, which this prompt never goes through.
@@ -368,7 +508,8 @@ async def direct_feel_roll(
 
     Runs as its own tiny on-disk job so it reuses the full LLM plumbing and is
     independently traceable; it never mutates the conversation."""
-    prompt = get_text("prattletale", "feel_director", variables=context_vars)
+    dvars = {k: v for k, v in context_vars.items() if not k.startswith("_")}
+    prompt = get_text("prattletale", "feel_director", variables=dvars)
     request = ChainJobRequest(
         title="Prattletale feel director",
         input=context_vars.get("transcript", ""),
