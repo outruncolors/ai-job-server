@@ -284,18 +284,53 @@ async def run_llm_step(
         extra[mem_cfg.inject_as] = block
         (step_dir / "memory.txt").write_text(block, encoding="utf-8")
 
-    rendered = render_template(
-        alt.prompt,
-        input=request.input,
-        previous=text_output,
-        context=context,
-        step_index=step_index,
-        step_name=step.name,
-        step_inputs=step_inputs,
-        step_outputs=step_outputs,
-        variables=variables,
-        extra=extra,
-    )
+    def _render(text: str) -> str:
+        return render_template(
+            text,
+            input=request.input,
+            previous=text_output,
+            context=context,
+            step_index=step_index,
+            step_name=step.name,
+            step_inputs=step_inputs,
+            step_outputs=step_outputs,
+            variables=variables,
+            extra=extra,
+        )
+
+    # Structured-chat path: an explicit role array (no tools). Each message's
+    # `content` is a template rendered with the same token set as `prompt`; the
+    # legacy `{{context}}` splice is single-prompt only and skipped here (the
+    # array carries its own structure). `prompt.txt` records role-tagged blocks
+    # so the trace stays readable.
+    msgs_template = getattr(alt, "messages", None)
+    if msgs_template and not alt.tools:
+        rendered_msgs = [
+            {"role": m.get("role", "user"), "content": _render(m.get("content", ""))}
+            for m in msgs_template
+        ]
+        prompt = "\n\n".join(
+            f"[{m['role'].upper()}]\n{m['content']}" for m in rendered_msgs
+        )
+        (step_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+        if event_bus is not None:
+            event_bus.emit(
+                "step_input",
+                step_number=step_index,
+                invocation=invocation,
+                rendered_prompt=prompt,
+                context=context or None,
+            )
+        output, reasoning = await _stream_assistant_turn(
+            rendered_msgs, client, request.llm, event_bus, step_index, invocation,
+        )
+        output = _strip_think_block(output)
+        (step_dir / "output.txt").write_text(output, encoding="utf-8")
+        if reasoning:
+            (step_dir / "reasoning.txt").write_text(reasoning, encoding="utf-8")
+        return output, "output.txt", prompt
+
+    rendered = _render(alt.prompt)
     if context and "{{context}}" not in alt.prompt:
         prompt = f"<START CONTEXT>\n{context}\n<END CONTEXT>\n\n{rendered}"
     else:

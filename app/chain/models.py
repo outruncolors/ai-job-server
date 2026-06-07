@@ -49,6 +49,7 @@ _ALTERNATIVE_FIELDS = {
     "target_step",
     "fall_through",
     "memory",
+    "messages",
     "thinking",
 }
 
@@ -135,6 +136,13 @@ class Alternative(BaseModel):
     fall_through: bool = False
     # optional memory retrieval (llm steps): populates {{memory}} before rendering
     memory: Optional[MemoryStepConfig] = None
+    # optional structured chat (llm steps, no-tools only): a role array whose
+    # `content` values are templates rendered with the same token set as `prompt`
+    # (+ {{memory}}). When set, the step sends these messages instead of wrapping
+    # the single `prompt` in one user turn — so callers can hand the model a real
+    # sequenced conversation. Each item: {"role": "system"|"user"|"assistant",
+    # "content": "<template>"}. Ignored when `tools` is set.
+    messages: Optional[list[dict]] = None
 
 
 class ChainStep(BaseModel):

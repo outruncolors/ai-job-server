@@ -164,3 +164,102 @@ async def test_run_llm_step_emits_chunk_events_to_bus(tmp_path):
     inputs = [e for e in bus.history() if e.type == "step_input"]
     assert len(inputs) == 1
     assert "world" in inputs[0].payload["rendered_prompt"]
+
+
+async def test_run_llm_step_sends_structured_messages(tmp_path):
+    """When `alt.messages` is set, the step renders each content template and
+    sends a real role array (not the single `prompt`), and records role-tagged
+    blocks in prompt.txt for the trace."""
+    from app.chain.models import (
+        Alternative, ChainJobRequest, ChainLLMConfig, ChainStep,
+    )
+    from app.chain.steps.llm import run_llm_step
+
+    alt = Alternative(messages=[
+        {"role": "system", "content": "You are {{var.name}}."},
+        {"role": "user", "content": "Earlier: {{input}}"},
+        {"role": "user", "content": "Reply now."},
+    ])
+    step = ChainStep(name="turn", alternatives=[alt])
+    req = ChainJobRequest(
+        input="hello",
+        llm=ChainLLMConfig(api_base="http://fake", model="fake"),
+        steps=[step],
+        variables={"name": "Ada"},
+    )
+
+    captured: dict = {}
+
+    class FakeClient:
+        def chat_stream(self, messages, llm_config, tools=None):
+            captured["messages"] = messages
+
+            async def gen():
+                yield StreamChunk(content="ok", finish_reason="stop")
+            return gen()
+
+    step_dir = tmp_path / "step"
+    step_dir.mkdir()
+    output, fname, prompt = await run_llm_step(
+        step_dir, step, alt, req, FakeClient(), "hello", 1,
+        variables={"name": "Ada"},
+    )
+    assert output == "ok"
+    # The role array reached the client with each content template rendered.
+    assert captured["messages"] == [
+        {"role": "system", "content": "You are Ada."},
+        {"role": "user", "content": "Earlier: hello"},
+        {"role": "user", "content": "Reply now."},
+    ]
+    # prompt.txt is the readable role-tagged concatenation.
+    saved = (step_dir / "prompt.txt").read_text(encoding="utf-8")
+    assert "[SYSTEM]\nYou are Ada." in saved
+    assert "[USER]\nReply now." in saved
+    assert prompt == saved
+
+
+async def test_run_llm_step_messages_resolves_memory_token(tmp_path, monkeypatch):
+    """A {{memory}} token inside a structured message is resolved from the step's
+    retrieved memory block, landing in exactly the message that carries it."""
+    from app.chain.models import (
+        Alternative, ChainJobRequest, ChainLLMConfig, ChainStep, MemoryStepConfig,
+    )
+    from app.chain.steps import llm as llm_mod
+    from app.chain.steps.llm import run_llm_step
+
+    async def fake_block(*args, **kwargs):
+        return "REMEMBERED FACTS"
+
+    monkeypatch.setattr(llm_mod, "_retrieve_memory_block", fake_block)
+
+    alt = Alternative(
+        memory=MemoryStepConfig(enabled=True, query="q", scopes=[]),
+        messages=[
+            {"role": "system", "content": "Background:\n{{memory}}"},
+            {"role": "user", "content": "Reply."},
+        ],
+    )
+    step = ChainStep(name="turn", alternatives=[alt])
+    req = ChainJobRequest(
+        input="x",
+        llm=ChainLLMConfig(api_base="http://fake", model="fake"),
+        steps=[step],
+    )
+
+    captured: dict = {}
+
+    class FakeClient:
+        def chat_stream(self, messages, llm_config, tools=None):
+            captured["messages"] = messages
+
+            async def gen():
+                yield StreamChunk(content="ok", finish_reason="stop")
+            return gen()
+
+    step_dir = tmp_path / "step"
+    step_dir.mkdir()
+    await run_llm_step(step_dir, step, alt, req, FakeClient(), "x", 1)
+    contents = [m["content"] for m in captured["messages"]]
+    assert "REMEMBERED FACTS" in contents[0]
+    # Only the message with the token carries the block.
+    assert "REMEMBERED FACTS" not in contents[1]
