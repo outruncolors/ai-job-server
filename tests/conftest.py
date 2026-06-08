@@ -108,6 +108,13 @@ def patch_server_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def patch_textdiff_dir(tmp_path, monkeypatch):
+    """Redirect textdiff proposal storage to a temp directory for each test."""
+    import app.textdiff.store as td
+    monkeypatch.setattr(td, "TEXTDIFF_DIR", tmp_path / "textdiff")
+
+
+@pytest.fixture(autouse=True)
 def patch_comfyui_config(tmp_path, monkeypatch):
     """Redirect ComfyUI config to tmp dir and reset singleton."""
     import app.comfyui.config as cfg
