@@ -115,6 +115,13 @@ def patch_textdiff_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def patch_tomeberry_dir(tmp_path, monkeypatch):
+    """Redirect Tomeberry tale storage to a temp directory for each test."""
+    import app.apps.tomeberry.store as ts
+    monkeypatch.setattr(ts, "TOMEBERRY_DIR", tmp_path / "tomeberry")
+
+
+@pytest.fixture(autouse=True)
 def patch_comfyui_config(tmp_path, monkeypatch):
     """Redirect ComfyUI config to tmp dir and reset singleton."""
     import app.comfyui.config as cfg

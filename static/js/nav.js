@@ -32,6 +32,7 @@
       { href: '/apps/blaboratory/', label: 'Blaboratory', page: 'apps' },
       { href: '/apps/hoodat/',      label: 'Hoodat',      page: 'apps' },
       { href: '/apps/prattletale/', label: 'Prattletale', page: 'apps' },
+      { href: '/apps/tomeberry/',   label: 'Tomeberry',   page: 'apps' },
     ]},
     // Quick Actions are not links — each `action` dispatches to a handler in
     // window.runQuickAction (defined below). Commonly-repeated chores live here.

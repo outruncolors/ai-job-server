@@ -23,6 +23,13 @@
       blurb: 'Text a Hoodat character; the model replies in a burst of short, typed bubbles.',
       glyph: '💬',
     },
+    {
+      href: '/apps/tomeberry/',
+      name: 'Tomeberry',
+      tagline: 'A studio for tales of any length.',
+      blurb: 'Guide a tale from a vague seed to a finished draft — outline, write, revise, and track it with an AI co-author.',
+      glyph: '📖',
+    },
   ];
 
   const esc = (s) => String(s)
