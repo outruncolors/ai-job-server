@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from . import prompts as _prompts  # noqa: F401 — import-time register_all()
 from . import store
 from .models import (
     ConceptCreate,
