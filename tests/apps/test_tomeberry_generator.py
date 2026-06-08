@@ -68,7 +68,7 @@ async def test_draft_creates_manuscript_proposal(monkeypatch):
     # a textdiff proposal was persisted
     from app.textdiff import store as ds
 
-    proposals = ds.list_proposals("tomeberry", f"{tid}/{scene['id']}")
+    proposals = ds.list_proposals("tomeberry", tid)
     assert len(proposals) == 1
     assert proposals[0].after == "brand new prose"
     # trace records resolved + unresolved + substitutions
@@ -96,7 +96,7 @@ async def test_revise_parses_json_revised_text(monkeypatch):
     )
     from app.textdiff import store as ds
 
-    p = ds.list_proposals("tomeberry", f"{tid}/{scene['id']}")[0]
+    p = ds.list_proposals("tomeberry", tid)[0]
     assert p.after == "a much better draft"
     # the summary becomes the assistant message text
     assistant = [m for m in store.get_assistant(tid)["messages"] if m["role"] == "assistant"][-1]

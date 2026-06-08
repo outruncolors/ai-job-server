@@ -435,7 +435,9 @@ def _make_proposal_for_mode(
 ):
     """Return (proposal_ref|None, textdiff Proposal|None, assistant_text)."""
     proposes = spec.get("proposes")
-    scope_key = f"{tale_id}/{(current_unit or {}).get('id', 'tale')}"
+    # Proposals are content-addressed, so a flat per-tale scope_key is safe and
+    # keeps the /v1/textdiff/{app}/{scope_key}/{id} route path slash-free.
+    scope_key = tale_id
 
     if proposes == "manuscript_diff":
         after = parsed.get("text")
@@ -515,8 +517,7 @@ async def accept_request(tale_id: str, request_id: str) -> Optional[dict]:
 
     if scope_kind in ("selection", "unit"):
         target_id = proposal_ref.get("target_concept_id")
-        scope_key = f"{tale_id}/{target_id or 'tale'}"
-        proposal = diff_store.get_proposal("tomeberry", scope_key, proposal_ref.get("diff_id"))
+        proposal = diff_store.get_proposal("tomeberry", tale_id, proposal_ref.get("diff_id"))
         concept = store.get_concept(tale_id, target_id) if target_id else None
         if proposal is None or concept is None:
             return None

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Tomeberry · Apps</title>
+  <link rel="stylesheet" href="/css/responsive.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav id="topnav"></nav>
+
+  <!-- ===== tale list ===== -->
+  <section id="tb-list-view">
+    <header id="tb-header">
+      <a href="/apps/" class="back-link">&larr; Apps</a>
+      <h1>📖 Tomeberry</h1>
+      <p class="subtitle">A studio for tales of any length.</p>
+    </header>
+    <div id="tb-list-toolbar">
+      <button type="button" id="tb-new">+ New tale</button>
+    </div>
+    <main id="tb-list"></main>
+  </section>
+
+  <!-- ===== studio ===== -->
+  <section id="tb-studio" hidden>
+    <header id="tb-topbar">
+      <button type="button" id="tb-back" class="tb-icon" title="Back to tales">&larr;</button>
+      <input type="text" id="tb-title" class="tb-title" title="Tale title">
+      <span id="tb-unit-chip" class="tb-chip" title="Current unit"></span>
+      <span class="tb-spacer"></span>
+      <select id="tb-mode" class="tb-mode" title="Mode"></select>
+      <select id="tb-saved-prompt" class="tb-saved" title="Saved prompt (extra guidance)"></select>
+      <span id="tb-pane-ind" class="tb-pane-ind" title="Active pane"></span>
+      <button type="button" id="tb-debug-toggle" class="tb-icon" title="Toggle debug panel">🐞</button>
+    </header>
+
+    <div id="tb-body">
+      <!-- left: content / organization -->
+      <div id="tb-left">
+        <div id="tb-left-tabs">
+          <button type="button" class="tb-tab active" data-pane="content">Content</button>
+          <button type="button" class="tb-tab" data-pane="organization">Organization</button>
+        </div>
+        <div id="tb-content-pane" class="tb-pane">
+          <div id="tb-content-empty" class="tb-empty">Select a unit in Organization to write it.</div>
+          <div id="tb-content-head" hidden>
+            <span id="tb-content-title"></span>
+            <span id="tb-content-meta"></span>
+          </div>
+          <div id="tb-editor" class="tb-editor" contenteditable="true" spellcheck="true" hidden></div>
+          <div id="tb-proposal-bar" class="tb-proposal-bar" hidden>
+            <span id="tb-proposal-label"></span>
+            <button type="button" id="tb-accept" class="tb-accept">Accept</button>
+            <button type="button" id="tb-reject" class="tb-reject">Reject</button>
+            <button type="button" id="tb-iterate" class="tb-iterate">Iterate…</button>
+          </div>
+        </div>
+        <div id="tb-org-pane" class="tb-pane" hidden></div>
+      </div>
+
+      <!-- right: assistant -->
+      <div id="tb-assistant">
+        <div id="tb-assistant-log"></div>
+        <footer id="tb-composer">
+          <textarea id="tb-input" rows="2" placeholder="Ask Tomeberry… (Enter to send, Shift+Enter for newline)"></textarea>
+          <button type="button" id="tb-send">Send</button>
+        </footer>
+      </div>
+
+      <!-- debug drawer -->
+      <div id="tb-debug" class="tb-debug" hidden>
+        <div class="tb-debug-head">
+          <span>Debug — requests</span>
+          <button type="button" id="tb-debug-close" class="tb-icon">×</button>
+        </div>
+        <div id="tb-debug-list"></div>
+        <div id="tb-debug-detail"></div>
+      </div>
+    </div>
+  </section>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/escape.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="/js/nav.js"></script>
+  <script src="state.js"></script>
+  <script src="content_pane.js"></script>
+  <script src="organization_pane.js"></script>
+  <script src="assistant_pane.js"></script>
+  <script src="debug_panel.js"></script>
+  <script src="topbar.js"></script>
+  <script src="tomeberry.js"></script>
+  <script src="/js/nav-mobile.js"></script>
+</body>
+</html>

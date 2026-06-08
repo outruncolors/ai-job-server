@@ -234,3 +234,14 @@ def get_request(tid: str, rid: str):
     if trace is None:
         raise HTTPException(status_code=404, detail="request not found")
     return trace
+
+
+@router.get("/tales/{tid}/proposals/{diff_id}")
+def get_proposal(tid: str, diff_id: str):
+    from ...textdiff import render_inline
+    from ...textdiff import store as diff_store
+
+    p = diff_store.get_proposal("tomeberry", tid, diff_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="proposal not found")
+    return {"proposal": p.model_dump(), "segments": [s.model_dump() for s in render_inline(p)]}

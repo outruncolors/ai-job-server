@@ -61,7 +61,7 @@ async def test_reject_leaves_body_untouched(monkeypatch):
     # the full before/after still inspectable in the textdiff store
     from app.textdiff import store as ds
 
-    assert ds.list_proposals("tomeberry", f"{tid}/{scene['id']}")[0].after == "discard me"
+    assert ds.list_proposals("tomeberry", tid)[0].after == "discard me"
 
 
 async def test_accept_concept_payload_creates_concepts(monkeypatch):
