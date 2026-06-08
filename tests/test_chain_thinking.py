@@ -49,9 +49,13 @@ def test_budget_off_when_thinking_false():
     assert _budget_for(Alternative(prompt="x", thinking=False)) == 0
 
 
-def test_budget_on_when_thinking_true_or_default():
+def test_budget_on_when_thinking_true():
     assert _budget_for(Alternative(prompt="x", thinking=True)) == -1
-    assert _budget_for(Alternative(prompt="x")) == -1  # None → DEFAULT_THINKING (on)
+
+
+def test_budget_default_tracks_project_default():
+    # An unset (None) thinking flag follows DEFAULT_THINKING, whichever way it points.
+    assert _budget_for(Alternative(prompt="x")) == (-1 if DEFAULT_THINKING else 0)
 
 
 # ---- client puts thinking_budget_tokens on the wire ------------------------

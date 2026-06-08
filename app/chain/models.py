@@ -54,10 +54,10 @@ _ALTERNATIVE_FIELDS = {
 }
 
 
-# Project-wide default for whether an LLM step uses reasoning. Thinking is the
-# default (it improves utility/JSON prompts); only steps that explicitly set
-# `thinking=False` (e.g. an in-character roleplay reply) suppress it.
-DEFAULT_THINKING = True
+# Project-wide default for whether an LLM step uses reasoning. Temporarily OFF:
+# a step uses reasoning only if it explicitly sets `thinking=True` (e.g. the
+# director's JSON plan). Steps that leave `thinking=None` run without reasoning.
+DEFAULT_THINKING = False
 
 
 class ChainLLMConfig(BaseModel):
