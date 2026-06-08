@@ -81,32 +81,45 @@ _EXECUTORS: dict[str, Callable[[dict], Any]] = {
 
 
 async def execute(name: str, arguments: dict) -> ToolCallResult | ToolCallError:
-    ok, err = validate_call(name, arguments)
-    if not ok:
-        status = "unknown_tool" if get_tool(name) is None else "invalid"
-        return ToolCallError(tool=name, error=err or "validation failed", validation_status=status)
+    """Route a tool call: legacy in-process builtin, else the MCP gateway.
 
-    executor = _EXECUTORS.get(name)
-    if executor is None:
-        return ToolCallError(
+    The 6 legacy builtins still run in-process during the transition (and also as
+    a fallback on nodes without the ``mcp`` capability). Any other name is routed
+    to the local-or-peer gateway via the peer-forwarding client, so the chain LLM
+    step's seam (``mcp_execute(name, args)``) is preserved unchanged.
+    """
+    if name in _EXECUTORS:
+        ok, err = validate_call(name, arguments)
+        if not ok:
+            status = "unknown_tool" if get_tool(name) is None else "invalid"
+            return ToolCallError(
+                tool=name, error=err or "validation failed", validation_status=status
+            )
+        executor = _EXECUTORS[name]
+        t0 = time.monotonic()
+        try:
+            result = executor(arguments)
+        except Exception as exc:
+            return ToolCallError(tool=name, error=str(exc), validation_status="invalid")
+        return ToolCallResult(
             tool=name,
-            error=f"No executor registered for tool: {name}",
-            validation_status="invalid",
+            result=result,
+            execution_ms=round((time.monotonic() - t0) * 1000, 2),
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
+
+    # Not a legacy builtin → route to the MCP gateway (local or peer).
+    from .client import mcp_call_tool
 
     t0 = time.monotonic()
-    try:
-        result = executor(arguments)
-    except Exception as exc:
-        return ToolCallError(
+    resp = await mcp_call_tool(name, arguments)
+    if resp.get("ok"):
+        return ToolCallResult(
             tool=name,
-            error=str(exc),
-            validation_status="invalid",
+            result=resp.get("result"),
+            execution_ms=round((time.monotonic() - t0) * 1000, 2),
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
-
-    return ToolCallResult(
-        tool=name,
-        result=result,
-        execution_ms=round((time.monotonic() - t0) * 1000, 2),
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
+    msg = resp.get("error", "gateway call failed")
+    status = "unknown_tool" if "not found" in msg.lower() else "invalid"
+    return ToolCallError(tool=name, error=msg, validation_status=status)

@@ -3,6 +3,13 @@ python-multipart==0.0.20
 uvicorn[standard]==0.34.2
 pydantic==2.11.4
 httpx==0.28.1
+# Official MCP SDK — the real Model Context Protocol host/client used by the
+# MCP gateway process (app/mcp/gateway/). NOTE: mcp pulls in a newer starlette,
+# but FastAPI 0.115 pins starlette<0.47, so starlette is held at 0.46.2 below.
+# The gateway only uses the mcp *client* (stdio / streamable-http) + low-level
+# server for the first-party stub, neither of which needs starlette's SSE server.
+mcp==1.27.2
+starlette==0.46.2
 pytest==8.3.5
 pytest-asyncio==0.26.0
 anyio==4.9.0

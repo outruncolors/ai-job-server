@@ -202,3 +202,44 @@ def resolve_tools(names: list[str]) -> list[ToolDefinition]:
         else:
             result.append(td)
     return result
+
+
+async def openai_tools_for(names: list[str]) -> list[dict]:
+    """OpenAI function schemas for the requested tool names.
+
+    Merges legacy in-process builtins (converted via ``to_openai_schema``) with
+    gateway-aggregated tools (raw JSON Schema passthrough), fetched local-or-peer.
+    The gateway is consulted only when a requested name isn't a legacy builtin, so
+    chains using only builtins never touch the network.
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
+    out: list[dict] = []
+    missing: list[str] = []
+    for name in names:
+        td = get_tool(name)
+        if td is not None:
+            out.append(to_openai_schema(td))
+        else:
+            missing.append(name)
+    if missing:
+        from .client import mcp_list_tools
+
+        by_name = {t["name"]: t for t in await mcp_list_tools()}
+        for name in missing:
+            t = by_name.get(name)
+            if t is None:
+                log.warning("MCP tool %r not found (builtin or gateway) — skipping", name)
+                continue
+            out.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t["name"],
+                        "description": t.get("description", ""),
+                        "parameters": t.get("input_schema") or {"type": "object"},
+                    },
+                }
+            )
+    return out

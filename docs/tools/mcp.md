@@ -1,55 +1,127 @@
-# MCP Tools
+# MCP — Model Context Protocol
 
-The MCP page hosts a tiny registry of structured tools that LLM chain steps can call. Tools are defined in code (`app/mcp/registry.py`), exposed through `/v1/mcp/*`, and surfaced to the LLM in OpenAI tool-use format.
+ai-job-server is a **real MCP host**. A long-lived **MCP gateway process** per machine
+uses the official [`mcp`](https://pypi.org/project/mcp/) Python SDK to connect to real
+MCP servers (stdio children or Streamable-HTTP endpoints), performs the `initialize`
+handshake, keeps the sessions alive, and aggregates their **tools / resources / prompts**
+into one namespace. The FastAPI control plane (`/v1/mcp/...`) fronts the gateway exactly
+as it fronts llama-server — same supervised, multi-machine, boots-with-the-machine model.
 
-## Built-in tools
+> **History.** The old `app/mcp/` was a bespoke in-process registry of 6 Python tools
+> over a plain REST API — not MCP. Those 6 builtins still work (see *Builtins bridge*),
+> but everything is now a thin shell over the standardized gateway.
 
-| Name | Purpose |
-|------|---------|
-| `random_integer` | Returns an integer in `[min, max]`. |
-| `generate_name` | Generates a random US name. Params: `gender` (`male`/`female`), `include_middle_name`, `include_last_name`. |
-| `format_voice_segments` | Returns an array of `{text, delay_ms}` segments. Used by voice auto-segmentation; safe to expose to other steps if you want similar structure. |
-| `save_image_prompt` | Saves a named entry to the image-prompts library. Params: `name`, `prompt`, `workflow?`. Mirrors the `image_prompt` chain step. |
-| `save_wildcard` | Creates or appends to a [wildcard](wildcards.md) list. Params: `name`, `value`, `mode` (`"append"` (default) / `"create"`). Mirrors the `save_wildcard` chain step. |
-| `create_ticket` | Files a ticket on the [tick queue](ticks.md). Params: `title`, `description?`, `file_hints?`. Mirrors the `create_ticket` chain step. |
+## Architecture — two ports
 
-There is no runtime registration mechanism — adding a tool means editing the registry and executor. Each of the three "save" tools above has a one-to-one chain step type with the same payload, so you can choose whether the work happens inside an LLM tool loop (mid-prompt) or as a direct chain step (no LLM in the loop).
+| Plane | Process | Port | What lives there |
+|---|---|---|---|
+| **Control** | FastAPI (`uvicorn app.main:app`) | ~8090 | `/v1/mcp/*` routes; supervises the gateway |
+| **Data** | MCP gateway (`python -m app.mcp.gateway`) | ~8082 | aggregated tools/resources/prompts, `tools/call`, `resources/read`, `prompts/get`, `/health` |
 
-## What's on the page
+Mirrors the `llm` → llama-server split: `config/server.json` peers carry the FastAPI
+port; the gateway port is fetched from the peer's `/v1/mcp/config` for discovery.
 
-- **Left** — list of tools with name and description
-- **Right** — a "Try it" form auto-generated from the tool's JSON schema (text fields for strings, number fields for ints/floats, checkboxes for bools, dropdowns for enums). **Run** invokes the tool and prints the JSON result plus timing.
+## Capability + supervision
+
+- Add `"mcp"` to a node's `capabilities` in `config/server.json`.
+- `MCPManager` (`app/mcp/manager.py`) is a singleton supervised by the `app/main.py`
+  lifespan: on startup `adopt() or start()`, on shutdown `stop()` (SIGTERM→SIGKILL on the
+  process group). Because the existing systemd unit `scripts/systemd/ai-job-server.service`
+  (`Restart=on-failure`) starts uvicorn on boot, the gateway comes up with the machine —
+  **no new systemd unit required** (matches comfyui/llamacpp). An adopted gateway also
+  survives a FastAPI-only restart.
+
+## Config (both gitignored under `config/`)
+
+- **`config/mcp.json`** — gateway runtime config (`MCPConfig`): `host`, `port` (8082),
+  `autostart`, `python`, `entrypoint`, `workspace_root`.
+- **`config/mcp_servers.json`** — the roster of MCP servers (`MCPServersConfig`):
+
+  ```json
+  {
+    "servers": [
+      { "id": "builtins", "transport": "stdio",
+        "command": ".venv/bin/python", "args": ["-m", "app.mcp.builtins_server"] },
+      { "id": "fs", "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "{workspace_root}"] },
+      { "id": "remote", "transport": "http", "url": "http://host:9000/mcp" }
+    ]
+  }
+  ```
+
+  `{workspace_root}` in stdio args expands to `MCPConfig.workspace_root`. Set `enabled:false`
+  to keep an entry without connecting. The default roster ships only the first-party
+  `builtins` server — add `fs`/`git`/etc. once `npx`/`uvx` and a workspace root are chosen.
+
+## Routes
+
+**Control** (gated `requires_capability("mcp")`): `POST /v1/mcp/start|stop|restart`,
+`GET /v1/mcp/status`, `GET/PUT /v1/mcp/config`, `GET/PUT /v1/mcp/servers`,
+`POST /v1/mcp/servers/{id}/reconnect`.
+
+**Data** (NOT route-gated — peer-forwarding): `GET /v1/mcp/tools|resources|prompts`,
+`POST /v1/mcp/tools/{name}/call`, `POST /v1/mcp/resources/read`,
+`POST /v1/mcp/prompts/{name}/get`. These resolve to the **local-or-peer** gateway via
+`app/mcp/client.py`, so any node can use MCP even without the capability locally.
+
+## Multi-machine / peer-forwarding
+
+`app/mcp/client.py` mirrors `app/chain/llm_swap.py`: if `"mcp"` is local it talks straight
+to `127.0.0.1:<gateway port>`; otherwise it forwards to the peer's gated `/v1/mcp/*` routes
+(which resolve locally on the peer). The gateway port itself stays bound to localhost — all
+cross-node access goes through the capability-gated control plane. `mcp` shows up in
+`/v1/server/peers` automatically because health reports `get_local_capabilities()`.
+
+> **Co-location.** filesystem/git MCP servers act on the gateway machine's local disk.
+> Tomeberry tale workspaces live where `config/tomeberry/` lives (the `web` node). So by
+> default give the **same node both `web` and `mcp`** (or make workspace paths peer-aware).
+
+## Builtins bridge
+
+The 6 legacy builtins (`random_integer`, `generate_name`, `format_voice_segments`,
+`save_image_prompt`, `save_wildcard`, `create_ticket`) are exposed over *real* MCP by the
+first-party stdio server `app/mcp/builtins_server.py` (the `builtins` roster entry, names
+`builtins__*`). `app/mcp/executor.execute()` routes a call by name: a legacy builtin runs
+in-process (also the fallback on nodes without `mcp`); anything else is forwarded to the
+gateway. `registry.openai_tools_for()` merges builtins + gateway tools into OpenAI schemas
+— so the chain LLM step's seam is unchanged.
 
 ## Using tools in a chain
 
-Set the `tools` field of an `llm` step to a list of tool names:
+Set an `llm` step's `tools` to a list of tool names (builtin or `<server>__<tool>`):
 
 ```json
 {
   "name": "Pick",
   "type": "llm",
-  "tools": ["random_integer", "generate_name"],
-  "prompt": "Pick a number between 1 and 10, then a name for that number."
+  "tools": ["random_integer", "fs__read_file"],
+  "prompt": "Read notes.txt from the workspace, then pick a number for it."
 }
 ```
 
-When `tools` is non-empty, the step enters a tool-use loop:
+The step runs an OpenAI tool-use loop (max 6 iterations); both standard `tool_calls` and
+llama.cpp's Gemma `<tool_call>…</tool_call>` tokens are handled. Tool names are namespaced
+`<server_id>__<tool>` to stay within OpenAI's `[a-zA-Z0-9_-]` charset and avoid collisions.
 
-1. Send the prompt and tool schemas to the LLM.
-2. If the response contains tool calls, validate the arguments, execute each tool, append the results as `tool` role messages, and call the LLM again.
-3. Stop when the LLM produces a final text response or the loop hits 6 iterations.
+## Security
 
-Both standard `tool_calls` and llama.cpp's Gemma-style `<tool_call>...</tool_call>` token format are handled (the executor has a regex fallback for the latter). All tool invocations and results are written to `tool_calls.json` in the step's job directory.
+External server processes can touch the filesystem. Confine the filesystem server to a
+workspace root via its allowed-roots arg (`{workspace_root}`); validate configured roots;
+never expose arbitrary roots by default. Tomeberry additionally validates that file paths
+fall under a specific tale's `workspace/` before calling.
 
-## Endpoints
+## The MCP page (`/mcp/`)
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/v1/mcp/tools` | List with full input schemas |
-| POST | `/v1/mcp/tools/{name}/call` | Execute the named tool with validated arguments |
+Gateway status + start/stop/restart, per-server status with reconnect, the aggregated
+tools/resources/prompts lists, and a schema-driven "try it" tester for any tool.
 
 ## Gotchas
 
-- The 6-iteration cap on the tool loop guards against infinite loops; a step that hits it is treated as completed with whatever output the LLM produced.
-- Unknown tool names in `step.tools` are silently skipped (logged warning) — the step still runs without those tools.
-- Tools don't see prior chain state. If you need access to `{{previous}}` or `{{context}}`, render it into the prompt instead.
+- The 6-iteration tool-loop cap guards against runaway loops.
+- Unknown tool names in `step.tools` are skipped (logged) — the step still runs.
+- A flaky MCP server degrades to `down` (with auto-reconnect/backoff) without taking the
+  gateway down; the other servers keep working.
+- `mcp` pulls a newer `starlette` than FastAPI 0.115 allows, so `requirements.txt` pins
+  `starlette==0.46.2`. The gateway only uses the mcp *client* + low-level stdio server,
+  neither of which needs starlette's SSE server.

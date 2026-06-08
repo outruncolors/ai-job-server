@@ -62,11 +62,11 @@ async def _execute_llm_with_tools(
     import logging
     from ...mcp.executor import execute as mcp_execute
     from ...mcp.models import ToolCallError
-    from ...mcp.registry import resolve_tools, to_openai_schema
+    from ...mcp.registry import openai_tools_for
 
     log = logging.getLogger(__name__)
-    tool_defs = resolve_tools(alt.tools)
-    openai_tools = [to_openai_schema(td) for td in tool_defs]
+    # Merge legacy builtins + gateway-aggregated MCP tools (local-or-peer).
+    openai_tools = await openai_tools_for(alt.tools)
 
     messages: list[dict] = [
         {

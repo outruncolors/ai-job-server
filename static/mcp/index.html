@@ -12,10 +12,28 @@
 
 <nav id="topnav"></nav>
 
+<div id="gateway-bar">
+  <div id="gw-status">
+    <span class="gw-dot" id="gw-dot"></span>
+    <span id="gw-text">MCP gateway: …</span>
+  </div>
+  <div id="gw-actions">
+    <button onclick="gwStart()">Start</button>
+    <button onclick="gwStop()">Stop</button>
+    <button onclick="gwRestart()">Restart</button>
+    <button onclick="refreshAll()">Refresh</button>
+  </div>
+</div>
+<div id="server-list"></div>
+
 <div id="panels">
   <div id="panel-left">
-    <div class="section-label">Tools</div>
+    <div class="section-label">Tools <span id="tool-count" class="count"></span></div>
     <div id="tool-list"></div>
+    <div class="section-label">Resources <span id="res-count" class="count"></span></div>
+    <div id="res-list"></div>
+    <div class="section-label">Prompts <span id="prompt-count" class="count"></span></div>
+    <div id="prompt-list"></div>
   </div>
   <div id="panel-right">
     <div id="try-empty" class="empty">Select a tool to try it.</div>

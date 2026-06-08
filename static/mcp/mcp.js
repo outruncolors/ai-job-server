@@ -1,11 +1,92 @@
   let _tools = [];
   let _selected = null;
 
+  // ---- gateway + servers ---------------------------------------------------
+
+  async function loadGatewayStatus() {
+    const dot = document.getElementById('gw-dot');
+    const text = document.getElementById('gw-text');
+    const serverList = document.getElementById('server-list');
+    try {
+      const s = await api('/mcp/status');
+      const running = !!s.running;
+      dot.className = 'gw-dot ' + (running ? 'up' : 'down');
+      text.textContent = running
+        ? `MCP gateway: running on :${s.port}` + (s.pid ? ` (pid ${s.pid})` : '')
+        : 'MCP gateway: stopped';
+      const servers = s.servers || [];
+      serverList.innerHTML = servers.length === 0
+        ? (running ? '<div class="muted">No MCP servers connected. Edit config/mcp_servers.json.</div>' : '')
+        : servers.map(sv => `
+          <div class="server-card ${_escHtml(sv.status)}">
+            <span class="srv-dot ${_escHtml(sv.status)}"></span>
+            <span class="srv-id">${_escHtml(sv.id)}</span>
+            <span class="srv-meta">${_escHtml(sv.transport)} · ${sv.tools}t/${sv.resources}r/${sv.prompts}p · ${_escHtml(sv.status)}${sv.error ? ' · ' + _escHtml(sv.error) : ''}</span>
+            <button class="srv-reconnect" onclick="gwReconnect(${_escHtml(JSON.stringify(sv.id))})">reconnect</button>
+          </div>`).join('');
+    } catch (e) {
+      dot.className = 'gw-dot down';
+      text.textContent = 'MCP gateway: ' + (e.message.includes('503') ? 'not on this node' : 'error');
+      serverList.innerHTML = '';
+    }
+  }
+
+  async function gwStart() { await gwAction('start', 'Starting gateway…'); }
+  async function gwStop() { await gwAction('stop', 'Stopping gateway…'); }
+  async function gwRestart() { await gwAction('restart', 'Restarting gateway…'); }
+
+  async function gwAction(action, msg) {
+    try {
+      toast('info', msg);
+      await api('/mcp/' + action, 'POST');
+      await refreshAll();
+      toast('success', 'Gateway ' + action + ' ok');
+    } catch (e) {
+      toast('error', 'Gateway ' + action + ' failed: ' + e.message);
+    }
+  }
+
+  async function gwReconnect(id) {
+    try {
+      await api('/mcp/servers/' + encodeURIComponent(id) + '/reconnect', 'POST');
+      await refreshAll();
+      toast('success', 'Reconnected ' + id);
+    } catch (e) {
+      toast('error', 'Reconnect failed: ' + e.message);
+    }
+  }
+
+  async function refreshAll() {
+    await Promise.all([loadGatewayStatus(), loadTools(), loadResources(), loadPrompts()]);
+  }
+
+  async function loadResources() {
+    try {
+      const data = await api('/mcp/resources');
+      const list = data.resources || [];
+      document.getElementById('res-count').textContent = list.length ? `(${list.length})` : '';
+      document.getElementById('res-list').innerHTML = list.length === 0
+        ? '<div class="muted">none</div>'
+        : list.map(r => `<div class="mini-row"><span class="mini-name">${_escHtml(r.name || r.uri)}</span><span class="mini-meta">${_escHtml(r.mimeType || '')}</span></div>`).join('');
+    } catch (e) { /* not on this node */ }
+  }
+
+  async function loadPrompts() {
+    try {
+      const data = await api('/mcp/prompts');
+      const list = data.prompts || [];
+      document.getElementById('prompt-count').textContent = list.length ? `(${list.length})` : '';
+      document.getElementById('prompt-list').innerHTML = list.length === 0
+        ? '<div class="muted">none</div>'
+        : list.map(p => `<div class="mini-row"><span class="mini-name">${_escHtml(p.name)}</span><span class="mini-meta">${_escHtml(p.description || '')}</span></div>`).join('');
+    } catch (e) { /* not on this node */ }
+  }
 
   async function loadTools() {
     try {
       const data = await api('/mcp/tools');
       _tools = data.tools || [];
+      document.getElementById('tool-count').textContent = _tools.length ? `(${_tools.length})` : '';
       renderToolList();
     } catch (e) {
       toast('error', 'Failed to load tools: ' + e.message);
@@ -124,4 +205,10 @@
     btn.disabled = false;
   }
 
-  loadTools();
+  window.gwStart = gwStart;
+  window.gwStop = gwStop;
+  window.gwRestart = gwRestart;
+  window.gwReconnect = gwReconnect;
+  window.refreshAll = refreshAll;
+
+  refreshAll();

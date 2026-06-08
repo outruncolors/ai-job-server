@@ -221,6 +221,20 @@ async def lifespan(app: FastAPI):
                 await embed_mgr.start()
         except Exception as exc:
             print(f"embed server start skipped: {exc}")
+    # MCP gateway: a supervised, boots-with-the-machine MCP host. Adopt an
+    # already-running gateway (e.g. after a FastAPI-only restart), else start one
+    # when autostart is on. Best-effort: a missing SDK / bad roster must not block
+    # startup. The lifespan's shutdown block tears it down again.
+    if "mcp" in get_local_capabilities():
+        from .mcp.config import get_config as get_mcp_config
+        from .mcp.manager import get_manager as get_mcp_manager
+
+        try:
+            mcp_mgr = get_mcp_manager()
+            if not await mcp_mgr.adopt() and get_mcp_config().autostart:
+                await mcp_mgr.start()
+        except Exception as exc:
+            print(f"MCP gateway start skipped: {exc}")
     # Seed any registered app prompts (Blaboratory, Hoodat, …) into the Prompt
     # Pal store so they are editable in the UI. Seed-if-absent — never clobbers
     # a user's edits. Best-effort: a bad prompt file must not block startup.
@@ -275,6 +289,13 @@ async def lifespan(app: FastAPI):
             await get_embed_manager().stop()
         except Exception as exc:
             print(f"embed server stop skipped: {exc}")
+    if "mcp" in get_local_capabilities():
+        try:
+            from .mcp.manager import get_manager as get_mcp_manager
+
+            await get_mcp_manager().stop()
+        except Exception as exc:
+            print(f"MCP gateway stop skipped: {exc}")
     await stop_sim_clock(persist=False)
     await stop_peer_poller()
     await stop_scheduler()
