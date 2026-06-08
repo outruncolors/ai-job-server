@@ -17,6 +17,7 @@ from .models import (
     LinkCreate,
     MoveBody,
     PremiseUpdate,
+    RequestCreate,
     TaleCreate,
     TaleUpdate,
 )
@@ -165,6 +166,18 @@ def remove_link(tid: str, cid: str, rel: str, target: str):
     if concept is None:
         raise HTTPException(status_code=404, detail="concept not found")
     return concept
+
+
+# ---- assistant requests (generation) --------------------------------------
+
+
+@router.post("/tales/{tid}/requests")
+async def create_request(tid: str, body: RequestCreate):
+    if store.get_tale(tid) is None:
+        raise HTTPException(status_code=404, detail="tale not found")
+    from .generator import run_assistant_request
+
+    return await run_assistant_request(tid, body.model_dump())
 
 
 # ---- assistant + traces (read) --------------------------------------------

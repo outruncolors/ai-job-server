@@ -175,3 +175,14 @@ class LinkCreate(BaseModel):
     rel: str
     target_id: str
     note: str = ""
+
+
+class RequestCreate(BaseModel):
+    text: str = ""
+    mode: Optional[str] = None
+    saved_prompt_key: Optional[str] = None
+    active_pane: str = "content"
+    current_unit_id: Optional[str] = None
+    scope: Optional[dict[str, Any]] = None  # {kind, selected_text, char_range}
+    iterate_of: Optional[str] = None
+    context_concept_ids: list[str] = Field(default_factory=list)
