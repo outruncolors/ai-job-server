@@ -455,6 +455,31 @@ def new_message_id() -> str:
     return f"msg_{uuid.uuid4().hex[:8]}"
 
 
+def find_request_message(
+    tale_id: str, request_id: str, kind: Optional[str] = "proposal", thread_id: str = "main"
+) -> Optional[dict]:
+    thread = get_assistant(tale_id, thread_id)
+    for m in thread["messages"]:
+        if m.get("request_id") == request_id and (kind is None or m.get("kind") == kind):
+            return m
+    return None
+
+
+def set_proposal_status(
+    tale_id: str, request_id: str, status: str, thread_id: str = "main"
+) -> Optional[dict]:
+    """Set the proposal status on every proposal message of ``request_id``."""
+    thread = get_assistant(tale_id, thread_id)
+    found = None
+    for m in thread["messages"]:
+        if m.get("request_id") == request_id and m.get("proposal"):
+            m["proposal"]["status"] = status
+            found = m
+    if found is not None:
+        _atomic_write(_assistant_file(tale_id, thread_id), thread)
+    return found
+
+
 # ---- traces ----------------------------------------------------------------
 
 

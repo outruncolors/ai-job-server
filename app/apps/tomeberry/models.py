@@ -177,6 +177,10 @@ class LinkCreate(BaseModel):
     note: str = ""
 
 
+class IterateBody(BaseModel):
+    text: str = ""
+
+
 class RequestCreate(BaseModel):
     text: str = ""
     mode: Optional[str] = None

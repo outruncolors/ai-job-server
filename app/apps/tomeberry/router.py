@@ -15,6 +15,7 @@ from .models import (
     ConceptCreate,
     ConceptPatch,
     LinkCreate,
+    IterateBody,
     MoveBody,
     PremiseUpdate,
     RequestCreate,
@@ -178,6 +179,36 @@ async def create_request(tid: str, body: RequestCreate):
     from .generator import run_assistant_request
 
     return await run_assistant_request(tid, body.model_dump())
+
+
+@router.post("/tales/{tid}/requests/{rid}/accept")
+async def accept_request(tid: str, rid: str):
+    from .generator import accept_request as _accept
+
+    result = await _accept(tid, rid)
+    if result is None:
+        raise HTTPException(status_code=404, detail="no pending proposal for this request")
+    return result
+
+
+@router.post("/tales/{tid}/requests/{rid}/reject")
+def reject_request(tid: str, rid: str):
+    from .generator import reject_request as _reject
+
+    result = _reject(tid, rid)
+    if result is None:
+        raise HTTPException(status_code=404, detail="request not found")
+    return result
+
+
+@router.post("/tales/{tid}/requests/{rid}/iterate")
+async def iterate_request(tid: str, rid: str, body: IterateBody):
+    from .generator import iterate_request as _iterate
+
+    result = await _iterate(tid, rid, body.text)
+    if result is None:
+        raise HTTPException(status_code=404, detail="request not found")
+    return result
 
 
 # ---- assistant + traces (read) --------------------------------------------

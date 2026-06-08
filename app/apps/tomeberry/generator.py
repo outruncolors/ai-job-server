@@ -493,6 +493,163 @@ def _make_proposal_for_mode(
     return None, None, _chat_text(parsed)
 
 
+# ---- accept / reject / iterate (Phase 5) ----------------------------------
+
+
+def _update_trace_action(tale_id: str, request_id: str, action: str) -> None:
+    trace = store.get_trace(tale_id, request_id)
+    if trace is not None:
+        trace["user_action"] = action
+        store.write_trace(tale_id, request_id, trace)
+
+
+async def accept_request(tale_id: str, request_id: str) -> Optional[dict]:
+    """Apply the proposal attached to ``request_id``. Returns a result or None."""
+    trace = store.get_trace(tale_id, request_id)
+    msg = store.find_request_message(tale_id, request_id, kind="proposal")
+    if trace is None or msg is None:
+        return None
+    proposal_ref = msg.get("proposal") or {}
+    scope_kind = (proposal_ref.get("scope") or {}).get("kind")
+    result: dict = {"request_id": request_id, "applied": scope_kind}
+
+    if scope_kind in ("selection", "unit"):
+        target_id = proposal_ref.get("target_concept_id")
+        scope_key = f"{tale_id}/{target_id or 'tale'}"
+        proposal = diff_store.get_proposal("tomeberry", scope_key, proposal_ref.get("diff_id"))
+        concept = store.get_concept(tale_id, target_id) if target_id else None
+        if proposal is None or concept is None:
+            return None
+        body = concept.get("body", "")
+        from ...textdiff import apply_proposal
+        from ...textdiff.diff import ConflictError
+
+        if scope_kind == "selection":
+            if proposal.before and proposal.before in body:
+                new_body = body.replace(proposal.before, proposal.after, 1)
+            else:
+                new_body = proposal.after  # selection drifted → fall back to after
+        else:
+            try:
+                new_body = apply_proposal(body, proposal)
+            except ConflictError:
+                new_body = apply_proposal(body, proposal, force=True)
+        store.update_concept(
+            tale_id, target_id, {"body": new_body},
+            history=HistoryEntry(at=_now(), kind="accepted", request_id=request_id, diff_id=proposal.id, summary="accepted edit"),
+        )
+        result["concept_id"] = target_id
+
+    elif scope_kind == "concept":
+        payload = proposal_ref.get("payload") or {}
+        created = _apply_concept_payload(tale_id, payload, request_id)
+        result["created_concept_ids"] = created
+
+    elif scope_kind == "structure":
+        payload = proposal_ref.get("payload") or {}
+        result["ops_applied"] = _apply_structure_ops(tale_id, payload)
+
+    store.set_proposal_status(tale_id, request_id, "accepted")
+    _update_trace_action(tale_id, request_id, "accepted")
+    store.append_assistant_message(
+        tale_id,
+        {
+            "id": store.new_message_id(), "role": "marker", "kind": "status",
+            "text": "✓ accepted", "at": _now(), "request_id": request_id,
+        },
+    )
+    return result
+
+
+def reject_request(tale_id: str, request_id: str) -> Optional[dict]:
+    msg = store.find_request_message(tale_id, request_id, kind="proposal")
+    if msg is None and store.get_trace(tale_id, request_id) is None:
+        return None
+    store.set_proposal_status(tale_id, request_id, "rejected")
+    _update_trace_action(tale_id, request_id, "rejected")
+    store.append_assistant_message(
+        tale_id,
+        {
+            "id": store.new_message_id(), "role": "marker", "kind": "status",
+            "text": "✗ rejected", "at": _now(), "request_id": request_id,
+        },
+    )
+    return {"request_id": request_id, "status": "rejected"}
+
+
+async def iterate_request(tale_id: str, request_id: str, feedback: str) -> Optional[dict]:
+    """Re-run a request threading the prior attempt + ``feedback``."""
+    prior = store.get_trace(tale_id, request_id)
+    if prior is None:
+        return None
+    store.set_proposal_status(tale_id, request_id, "superseded")
+    _update_trace_action(tale_id, request_id, "iterated")
+    new_request = {
+        "text": feedback,
+        "mode": prior.get("mode"),
+        "current_unit_id": prior.get("current_structural_unit"),
+        "scope": prior.get("scope") or {},
+        "active_pane": prior.get("active_pane", "content"),
+        "saved_prompt_key": prior.get("saved_prompt_key"),
+        "iterate_of": request_id,
+    }
+    return await run_assistant_request(tale_id, new_request)
+
+
+def _apply_concept_payload(tale_id: str, payload: dict, request_id: str) -> list[str]:
+    """Create concept(s) from a develop (single record) or track ({concepts:[]}) payload."""
+    records = []
+    if isinstance(payload, dict) and isinstance(payload.get("concepts"), list):
+        records = payload["concepts"]
+    elif isinstance(payload, dict) and payload.get("concept_class"):
+        records = [payload]
+    created: list[str] = []
+    for rec in records:
+        if not isinstance(rec, dict) or not rec.get("concept_class"):
+            continue
+        c = store.create_concept(
+            tale_id,
+            {
+                "concept_class": rec["concept_class"],
+                "type": rec.get("type") or "character",
+                "title": rec.get("title") or "",
+                "body": rec.get("body") or "",
+                "links": rec.get("links") or [],
+                "metadata": {"model_generated": True, "source_request_id": request_id},
+            },
+        )
+        if c:
+            created.append(c["id"])
+    return created
+
+
+def _apply_structure_ops(tale_id: str, payload: dict) -> int:
+    ops = payload.get("ops", []) if isinstance(payload, dict) else []
+    applied = 0
+    for op in ops:
+        if not isinstance(op, dict):
+            continue
+        kind = op.get("op")
+        if kind == "add":
+            c = store.create_concept(
+                tale_id,
+                {
+                    "concept_class": "structural_unit",
+                    "type": op.get("type") or "scene",
+                    "title": op.get("title") or "",
+                    "parent_id": op.get("parent_id"),
+                },
+            )
+            applied += 1 if c else 0
+        elif kind == "move" and op.get("target_id"):
+            if store.move_concept(tale_id, op["target_id"], op.get("parent_id"), op.get("order", 0)):
+                applied += 1
+        elif kind == "link" and op.get("target_id") and op.get("parent_id"):
+            if store.add_link(tale_id, op["parent_id"], {"rel": op.get("rel") or "relates_to", "target_id": op["target_id"]}):
+                applied += 1
+    return applied
+
+
 def _chat_text(parsed: dict) -> str:
     if parsed.get("kind") == "text":
         return parsed.get("text") or "(no response)"
