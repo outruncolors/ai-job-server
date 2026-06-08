@@ -62,6 +62,14 @@ def test_cycle_is_left_literal_not_infinite():
     assert "%%A%%" in out
 
 
+def test_brace_wc_cross_refs_are_cycle_checked_on_save():
+    # Post-migration entries cross-reference via {{wc.name}}; cycle detection must
+    # see that spelling too (app.wildcards._extract_refs recognizes both).
+    wildcards.create_wildcard("A", [{"text": "go {{wc.B}}"}])
+    with pytest.raises(ValueError, match="Cycle"):
+        wildcards.create_wildcard("B", [{"text": "back {{wc.A}}"}])
+
+
 def test_weight_dominates_selection():
     wildcards.create_wildcard("Pick", [
         {"text": "rare", "weight": 1},

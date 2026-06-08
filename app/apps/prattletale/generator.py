@@ -35,7 +35,7 @@ from ...chain.models import (
 from ...jobs import create_job, find_job_dir
 from ...llm_config import get_default_as_chain_llm_config
 from ...prompt_pal.service import get_text
-from ...wildcards import resolve_wildcards
+from ...prompt_template import render
 from ..hoodat.characters_store import get_character
 from ..hoodat.prompts import render_character_context
 from . import store
@@ -458,6 +458,24 @@ def renderable_vars(context_vars: dict) -> dict:
     return {k: v for k, v in context_vars.items() if not k.startswith("_")}
 
 
+def pt_scope_vars(conversation_id: str) -> dict[str, str]:
+    """The in-scope ``{{var.*}}`` names a user may interpolate in a chat message.
+
+    Kept small and predictable — the frontend popover registers the same set so
+    what the user sees offered is what resolves: ``char`` (the counterpart's name),
+    ``scenario``, and ``persona`` (the device user's). Unknown ``{{var.X}}`` falls
+    back to the literal ``X`` at send time (``render(final=True)``).
+    """
+    conversation = store.get_conversation(conversation_id) or {}
+    char_id = conversation.get("counterpart_character_id")
+    character = get_character(char_id) if char_id else None
+    return {
+        "char": ((character or {}).get("name") or "").strip(),
+        "scenario": (conversation.get("scenario") or "").strip(),
+        "persona": ((conversation.get("device_user") or {}).get("persona") or "").strip(),
+    }
+
+
 def build_context(conversation: dict, character: dict, transcript: dict) -> dict[str, str]:
     """Build the prompt variable bundle from the conversation, counterpart sheet,
     and transcript. **Pure** (no LLM, no network) so the later token-budget change
@@ -646,17 +664,23 @@ def build_turn_request(
         )
         steps = [_llm_step(1, "turn", "Turn", memory=memory, thinking=False, messages=messages)]
     else:
-        # resolve_wildcards expands %%name%% tokens (e.g. the per-turn message-shape
-        # pick) with a fresh weighted draw each turn — the server-side equivalent of
-        # the frontend wildcard pass, which this prompt never goes through.
-        turn_prompt = resolve_wildcards(get_text("prattletale", "turn", variables=prompt_vars))
+        # render() expands {{wc.}}/%%name%% (e.g. the per-turn message-shape pick)
+        # with a fresh weighted draw each turn, plus {{ctx.}}/{{var.}} — the unified
+        # server-side pass this prompt would otherwise never go through. get_text has
+        # already composed the in-scope {{var.*}}; passing prompt_vars again lets any
+        # var referenced *inside* a wildcard/context expansion resolve too.
+        turn_prompt = render(
+            get_text("prattletale", "turn", variables=prompt_vars),
+            variables=prompt_vars, final=True,
+        ).text
         steps = [_llm_step(1, "turn", "Turn", turn_prompt, memory=memory, thinking=False)]
     number = 2
     if variety:
         variety_prompt = get_text("prattletale", "variety", variables=prompt_vars)
         if variety_prompt.strip():
             steps.append(_llm_step(number, "variety", "Variety",
-                                   resolve_wildcards(variety_prompt), thinking=False))
+                                   render(variety_prompt, variables=prompt_vars, final=True).text,
+                                   thinking=False))
             number += 1
     # Format hygiene is no longer an unconditional LLM guard step — it's a
     # deterministic post-execution pass in run_model_turn, with an LLM repair

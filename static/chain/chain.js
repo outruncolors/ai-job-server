@@ -979,15 +979,8 @@
         variableOverrides = got;
       }
 
-      // Resolve %%wildcard%% tokens inside every alternative's text fields.
-      for (const step of steps) {
-        for (const alt of step.alternatives) {
-          for (const k of ['prompt','voice_pre','voice_post','ctx_pre','ctx_post',
-                            'image_prompt_name','wildcard_name','ticket_title_template','ticket_description_template']) {
-            if (alt[k]) alt[k] = await resolveWildcards(alt[k]);
-          }
-        }
-      }
+      // Token resolution ({{wc.}}/{{ctx.}}/{{var.}} and legacy %%) happens
+      // server-side in the chain executor — send the raw alternative text.
 
       const body = {
         schema_version: 2,
@@ -1148,6 +1141,18 @@
     }
 
     // ── Init ────────────────────────────────────────────────────────
+    // Tell the {{…}} popover which {{var.*}} are in scope on this page. The live
+    // function form reads the variable rows on each open, so freshly-typed names
+    // appear without re-registering.
+    if (window.PromptTokens) {
+      window.PromptTokens.registerVariables(document.body, () =>
+        [...document.querySelectorAll('#chain-variables-list .var-row')]
+          .map(r => ({
+            name: (r.querySelector('.var-name').value || '').trim(),
+            value: r.querySelector('.var-default').value,
+          }))
+          .filter(v => v.name));
+    }
     Promise.all([_loadChainPresets(), _loadLlmModelPresets(), loadContextItems(), loadVoicePresets(), loadSeqs(), loadMcpTools()]).then(() => {
       _renderVariablesPane();
       if (_recreateId) {

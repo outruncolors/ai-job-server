@@ -3,7 +3,7 @@
 The middle nav group. These aren't job runners — they're building blocks the generation pages consume.
 
 - **[Context](context.md)** — reusable text blocks injected into LLM prompts as `{{context}}`.
-- **[Wildcards](wildcards.md)** — `%%token%%` placeholders that expand to weighted random entries at job submission.
+- **[Wildcards](wildcards.md)** — `{{wc.name}}` (legacy `%%name%%`) placeholders that expand to weighted random entries at job submission.
 - **[Ticks](ticks.md)** — schedules that fire saved [sequences](../generation/text/sequences.md) on intervals or cron.
 - **[MCP](mcp.md)** — the tool registry that LLM steps can call (random integers, name generation, voice segment formatting).
 - **[Packs](packs.md)** — curated bundles of cruddables (the unified envelope format); browse + apply, export/extend, and `/add-pack`.

@@ -25,6 +25,9 @@ _DIR: Path = PROJECT_ROOT / "config" / "wildcards"
 _INDEX_PATH: Path = _DIR / "index.json"
 
 _TOKEN_RE = re.compile(r"%%([^%]+)%%")
+# Wildcard entries cross-reference each other in BOTH spellings after the migration:
+# legacy ``%%name%%`` and the unified ``{{wc.name}}``. Cycle detection must see both.
+_WC_BRACE_RE = re.compile(r"\{\{\s*wc\.([^{}]+?)\s*\}\}")
 
 TYPE_NAME = "wildcard"
 
@@ -71,8 +74,11 @@ def _entries_of(doc: dict) -> list[dict]:
 def _extract_refs(entries: list[dict]) -> list[str]:
     refs: list[str] = []
     for e in entries or []:
-        for m in _TOKEN_RE.finditer(e.get("text") or ""):
+        text = e.get("text") or ""
+        for m in _TOKEN_RE.finditer(text):
             refs.append(m.group(1).lower())
+        for m in _WC_BRACE_RE.finditer(text):
+            refs.append(m.group(1).strip().lower())
     return refs
 
 

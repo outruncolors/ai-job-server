@@ -2165,6 +2165,21 @@
     else if (e.key === 'x' || e.key === 'X') { e.preventDefault(); if (_draft.length) removeStaged(_draft.length - 1); }
   }
 
+  // Tell the {{…}} popover which {{var.*}} are in scope when composing a message.
+  // Mirrors the server's generator.pt_scope_vars so what's offered is what resolves.
+  if (window.PromptTokens) {
+    window.PromptTokens.registerVariables(document.body, () => {
+      const conv = _current && _current.conversation;
+      if (!conv) return [];
+      const cp = counterpartOf(conv);
+      return [
+        { name: 'char', value: (cp && cp.name) || '' },
+        { name: 'scenario', value: conv.scenario || '' },
+        { name: 'persona', value: (conv.device_user && conv.device_user.persona) || '' },
+      ];
+    });
+  }
+
   wire();
   showView();
 })();

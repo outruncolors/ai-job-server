@@ -26,6 +26,13 @@ def test_chain_tokens_and_unresolved_vars_left_intact():
     assert compose(node) == "use {{previous}} and {{var.missing}}"
 
 
+def test_stage1_leaves_new_namespaces_intact_with_no_literal_fallback():
+    # compose is stage-1/non-final: wc/ctx and unresolved vars survive for the
+    # stage-2 resolver; the var literal-fallback must NOT fire here.
+    node = {"prompt": "{{wc.mood}} {{ctx.lore}} {{var.missing}} and %%legacy%%"}
+    assert compose(node) == "{{wc.mood}} {{ctx.lore}} {{var.missing}} and %%legacy%%"
+
+
 def test_stored_prompt_id_reference():
     db = {"frag": {"prompt": "stored fragment"}}
     node = {"prompt": "<<{{var.f}}>>", "variables": {"f": {"prompt_id": "frag"}}}

@@ -48,6 +48,43 @@ _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
 )
 
+# Legacy wildcard syntax → the unified ``{{wc.name}}`` spelling. The resolver still
+# READS ``%%name%%`` (see app.prompt_template), so this rewrite is cosmetic-but-
+# canonical and idempotent: ``{{wc.x}}`` contains no ``%%`` so a second pass is a no-op.
+_LEGACY_WC_RE = re.compile(r"%%([^%\n]+)%%")
+
+
+def _rewrite_legacy_wc(text: str) -> str:
+    return _LEGACY_WC_RE.sub(lambda m: "{{wc." + m.group(1).strip() + "}}", text)
+
+
+def _deep_rewrite_strings(obj):
+    """Rewrite ``%%name%%`` → ``{{wc.name}}`` in every string leaf of a JSON value.
+
+    Returns ``(new_obj, count)``. Only string *values* change — dict keys (variable
+    names, ids) and non-strings are untouched — so it is safe to run over a whole
+    ``data`` blob regardless of type-specific shape (entries, content, step graphs,
+    nested prompt nodes, character sheets).
+    """
+    if isinstance(obj, str):
+        new = _rewrite_legacy_wc(obj)
+        return new, (1 if new != obj else 0)
+    if isinstance(obj, list):
+        out, count = [], 0
+        for v in obj:
+            nv, c = _deep_rewrite_strings(v)
+            out.append(nv)
+            count += c
+        return out, count
+    if isinstance(obj, dict):
+        out, count = {}, 0
+        for k, v in obj.items():
+            nv, c = _deep_rewrite_strings(v)
+            out[k] = nv
+            count += c
+        return out, count
+    return obj, 0
+
 # Per-type slug fallback when a doc has no usable name (mirrors each store's own
 # id-fallback so a nameless legacy doc gets the same base it would have on create).
 _FALLBACK = {
@@ -155,6 +192,7 @@ class _TypePlan:
     finals: list[dict] = field(default_factory=list)   # envelopes with final ids
     remap: dict[str, str] = field(default_factory=dict)  # old_id -> new_id (changed only)
     reslugged: int = 0
+    text_rewrites: int = 0  # count of string leaves rewritten %% -> {{wc.}}
     dropped_duplicates: list[str] = field(default_factory=list)  # prompt_pal (app,key) dups
     errors: list[str] = field(default_factory=list)
 
@@ -196,6 +234,15 @@ def _plan_type(driver: _Driver) -> _TypePlan:
             plan.errors.append(f"{raw.get('id')!r}: {exc}")
     if driver.type_name == "prompt_pal":
         envs = _dedupe_prompt_pal(envs, plan)
+
+    # Rewrite legacy %%wildcard%% → {{wc.wildcard}} in every envelope's data blob.
+    for env in envs:
+        data = env.get("data")
+        if isinstance(data, (dict, list)):
+            new_data, c = _deep_rewrite_strings(data)
+            if c:
+                env["data"] = new_data
+                plan.text_rewrites += c
 
     # Docs with a real (non-uuid) id keep it; reserve those ids first.
     kept = [e for e in envs if not _is_uuid(e.get("id"))]
@@ -293,6 +340,7 @@ def run_migration(*, dry_run: bool = False) -> dict:
             name: {
                 "total": len(p.finals),
                 "reslugged": p.reslugged,
+                "text_rewrites": p.text_rewrites,
                 "remap": dict(p.remap),
                 "dropped_duplicates": list(p.dropped_duplicates),
                 "errors": list(p.errors),

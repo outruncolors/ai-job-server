@@ -228,7 +228,7 @@ a reply — how many messages, and whether to include an action or narration —
 **director plan**'s `reply_shape`. The legacy `Prattletale Message Style` **wildcard** (seeded by
 `app/apps/prattletale/seed.py`, tunable in the Wildcards UI) lives in the single-prompt `turn` entry
 via a `%%Prattletale Message Style%%` token resolved server-side
-(`wildcards.resolve_wildcards`, fresh weighted pick each turn: default 40% single / 30%
+(`prompt_template.render`, fresh weighted pick each turn: default 40% single / 30%
 action+message / 20% mix with narration / 10% burst) — it applies only in the single-prompt fallback
 when `structured_chat_history` is off and the director is unavailable.
 

@@ -9,11 +9,14 @@ A *prompt* is JSON: ``{"prompt": "<text with {{var.NAME}}>", "variables": {...}}
 
 Composition recurses until the full text is built; ``max_depth`` guards cycles.
 
-Only ``{{var.NAME}}`` tokens are substituted — chain tokens like ``{{input}}`` /
-``{{previous}}`` are left intact so the chain executor (``app/chain/template.py``)
-can resolve them at run time. We reuse that module's tokenizer for the pass.
-``{{var.NAME}}`` tokens with no matching variable are left intact too, so a
-parent compose or the chain's own variables can still fill them.
+This is **stage-1** resolution and is always non-final: only in-scope
+``{{var.NAME}}`` tokens are substituted. The new-namespace tokens (``{{wc.NAME}}`` /
+``{{ctx.NAME}}``), the chain tokens (``{{input}}`` / ``{{previous}}`` / …) and any
+``{{var.NAME}}`` with no matching variable are all left intact — and crucially the
+var literal-fallback never fires here — so the **stage-2** resolver
+(``app.prompt_template.render(..., final=True)`` at execution) still sees them and a
+parent compose or the chain's own variables can still fill them. We reuse that
+module's tokenizer for the pass.
 
 This module is shared infrastructure under ``app/prompt_pal/`` — Prompt Pal is
 the project-wide registry for the internal LLM prompts apps use. It was promoted
@@ -25,7 +28,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional, Union
 
-from ..chain.template import _TOKEN_RE
+from ..prompt_template import _TOKEN_RE
 
 PromptNode = Union[str, dict]
 PromptStore = Callable[[str], Optional[PromptNode]]

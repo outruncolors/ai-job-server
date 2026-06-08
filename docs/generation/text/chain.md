@@ -90,7 +90,7 @@ Adds an entry to a wildcard list. `mode=append` (default) merges into the existi
 
 | Alt field | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `wildcard_name` | string | required | Name template (used in `%%name%%` references elsewhere) |
+| `wildcard_name` | string | required | Name template (used in `{{wc.name}}` references elsewhere) |
 | `wildcard_mode` | `"append"` \| `"create"` | `"append"` | |
 | `prompt` | string | `""` | Entry text template; falls back to `text_output` when empty |
 
@@ -157,7 +157,7 @@ Programmatic submission attaches variables to the request body:
 
 ## Template variables
 
-Rendered in any template-ish alternative field (`prompt`, `image_prompt_name`, `wildcard_name`, `ticket_title_template`, `ticket_description_template`, `ctx_pre`, `ctx_post`, …):
+Rendered **server-side** in any template-ish alternative field (`prompt`, `voice_pre`, `voice_post`, `image_prompt_name`, `wildcard_name`, `ticket_title_template`, `ticket_description_template`, `ctx_pre`, `ctx_post`, `messages[].content`, …) by the unified engine (`app/prompt_template.py`):
 
 | Token | Resolves to |
 |-------|-------------|
@@ -168,11 +168,13 @@ Rendered in any template-ish alternative field (`prompt`, `image_prompt_name`, `
 | `{{step_name}}` | The current step's `name` |
 | `{{N_input}}` | The rendered prompt that was fed to step number `N` on its most recent visit |
 | `{{N_output}}` | The output of step number `N` on its most recent visit |
-| `{{var.NAME}}` | Caller-overridden value, falling back to the variable's `default` |
+| `{{var.NAME}}` | The caller-overridden value (falling back to the variable's `default`); if `NAME` is not in scope at all, the literal string `NAME` |
+| `{{wc.NAME}}` | A [wildcard](../../tools/wildcards.md) pick (weighted-random); legacy `%%NAME%%` is read as an alias |
+| `{{ctx.NAME}}` | A [context item](../../tools/context.md)'s full content (by slug or name), else the literal `NAME` |
 
-Unknown tokens render as the empty string (a forward reference to a not-yet-run step is legal because of gotos).
+Unknown *chain* tokens (e.g. a not-yet-run `{{N_output}}`, legal because of gotos) render as the empty string. The `{{var.}}`/`{{ctx.}}` literal fallback is what distinguishes those namespaces.
 
-[Wildcards](../../tools/wildcards.md) (`%%name%%`) expand alongside template tokens. The frontend resolves them before the request is sent, so what lands in `request.json` is the expanded text.
+Resolution is server-side: the chain page sends the raw alternative text, and the executor resolves every field above as each step runs — so a fresh wildcard draw happens per run, and what lands in each step's `prompt.txt` is the expanded text.
 
 ## Job layout
 

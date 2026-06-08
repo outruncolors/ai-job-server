@@ -35,7 +35,7 @@ re-import, and bundle into **Packs**.
 | `prompt_pal` | `{ "app": str, "key": str, "prompt": str, "variables": {}, "guard": {}\|null }` |
 | `hoodat_character` | the `Character` body (identity fields + `appearance`/`personality`/`background`/`speaking_style` blocks + `experiences`/`qa` + `avatar_path`) + `content_version` |
 
-Wildcards are referenced by **name** (`%%name%%`); context items and sequences are
+Wildcards are referenced by **name** (`{{wc.name}}`, legacy `%%name%%`); context items and sequences are
 referenced by **id**. Because every `id` is a stable human slug, those reference sites
 (`chain_sequence` step `sequence_id` / `context_ids`, and hoodat avatar files keyed by
 `data.avatar_path`) stay readable and portable across machines.

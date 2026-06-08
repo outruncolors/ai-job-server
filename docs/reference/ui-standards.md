@@ -40,7 +40,7 @@ Every page must load these files in this exact order:
 <body>
   <!-- JS: nav → shared utilities → page script → mobile nav -->
   <script src="/js/nav.js"></script>
-  <!-- optional page deps (wildcards.js, voice-segments.js) -->
+  <!-- optional page deps (prompt-tokens.js, voice-segments.js) -->
   <script src="/js/api.js"></script>
   <script src="/js/escape.js"></script>
   <script src="/js/poll.js"></script>    <!-- only if page polls jobs -->

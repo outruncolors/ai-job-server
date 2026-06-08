@@ -9,7 +9,9 @@ app/
   jobs.py                Job lifecycle: create, list, get, delete, artifact tracking
   server.py              get_server_stats(), schedule_restart(), 5s job-count cache
   llm_config.py          LLM preset CRUD (config/llm_config.json)
-  wildcards.py           Wildcard CRUD + %%token%% expansion
+  prompt_template.py     render() — the ONE prompt engine: {{var.}} {{wc.}} {{ctx.}}
+                         + chain tokens + legacy %%name%%, shared by every surface
+  wildcards.py           Wildcard CRUD + store (resolution lives in prompt_template)
   voice_presets.py       Voice preset CRUD
   voice_presets_router.py  GET/POST/DELETE /v1/voice-presets, /from-job
   audio_utils.py         WAV concatenation with silence padding
@@ -22,8 +24,9 @@ app/
                          v1-shorthand keys onto a single alternative.
     sequences.py         Sequence CRUD (schema_version 2), DFS cycle detection,
                          step-number / goto-target / weight validation
-    template.py          render_template() — {{input}} {{previous}} {{context}}
-                         {{step_index}} {{step_name}} {{N_input}} {{N_output}} {{var.NAME}}
+    template.py          back-compat shim re-exporting app/prompt_template.py
+                         ({{input}} {{previous}} {{context}} {{step_index}} {{step_name}}
+                         {{N_input}} {{N_output}} {{var.}} {{wc.}} {{ctx.}})
     context.py           resolve_context_ids()
     context_library.py   Context item CRUD
     llm_client.py        OpenAICompatibleLLMClient (httpx)
@@ -192,9 +195,16 @@ POST /v1/jobs/chain
 
 Step runners under `app/chain/steps/` raise on failure. The executor owns all status writes and log appends — step modules never import from `executor.py`, which keeps the dependency graph acyclic.
 
-## Wildcard expansion
+## Prompt tokens (one engine)
 
-`%%token%%` tokens in any prompt-like field (chain step prompts, voice text, image prompts, context pre/post) are replaced just before submission. Replacement is weighted-random per occurrence using the wildcard's entry weights. What's persisted in `request.json` is the expanded text — reruns won't re-roll.
+`app/prompt_template.py` `render()` is the single resolver behind every prompt-bearing field (chain steps, image/voice generation, Prattletale prompts + chat input). It resolves, in one pass:
+
+- `{{var.name}}` — a caller/scope variable, else (at the final stage) the literal `name`.
+- `{{wc.name}}` — a wildcard (weighted-random); legacy `%%name%%` is read as an alias.
+- `{{ctx.name}}` — a context item's content (by slug or name), else the literal `name`.
+- chain tokens — `{{input}}` `{{previous}}` `{{context}}` `{{step_index}}` `{{step_name}}` `{{N_input}}` `{{N_output}}` and any `extra` key (`{{memory}}`).
+
+Resolution is **server-side** (the browser sends raw text and only previews the result); image/voice routes return the resolved text + substitutions on the 202. Wildcard/context expansions are **re-scanned** for nested tokens; runtime data (`{{input}}`/`{{previous}}`/`{{N_output}}`/`{{memory}}`/`{{var.}}` values) is **inert** to prevent token injection. Cycles are blocked (visiting set + depth-16 cap). What's persisted in a step's `prompt.txt` / `request.json` is the expanded text — reruns re-roll only because the executor renders fresh each run. `%%name%%` is the legacy spelling, migrated to `{{wc.name}}` by `app/cruddables/migrate.py` but still readable. Prompt Pal's `compose()` is the non-final stage-1 pass (var-only); `render(final=True)` is stage-2.
 
 ## Key design decisions
 

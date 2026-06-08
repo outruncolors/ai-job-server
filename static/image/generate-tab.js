@@ -378,17 +378,14 @@ async function submitGenerate() {
   const workflow = sel.value;
   if (!workflow) return;
 
-  const rawPrompt = (document.getElementById('gen-prompt').value || '').trim();
-  const { resolved: prompt, substitutions } = await resolveWildcardsTracked(rawPrompt);
+  // Send the RAW prompt; the server resolves {{wc.}}/{{ctx.}}/{{var.}} (and legacy
+  // %%) and returns the resolved text + substitutions for the display below.
+  const prompt = (document.getElementById('gen-prompt').value || '').trim();
   const statusEl = document.getElementById('gen-status');
   const imagesEl = document.getElementById('gen-images');
   imagesEl.innerHTML = '';
   statusEl.style.color = '#888';
   statusEl.textContent = 'Submitting…';
-  renderResolvedPrompt(
-    document.getElementById('gen-resolved-prompt'),
-    [{ resolved: prompt, substitutions }],
-  );
 
   if (_pollHandle) { _pollHandle.stop(); _pollHandle = null; }
 
@@ -425,6 +422,7 @@ async function submitGenerate() {
 
   try {
     const job = await api('/jobs/image', 'POST', body);
+    renderResolvedPrompt(document.getElementById('gen-resolved-prompt'), job.resolved_items);
     _currentJobId = job.job_id;
     statusEl.textContent = 'Job ' + job.job_id + ' — queued';
     OutputConsole.create(document.querySelector('#tab-generate #panel-right'), { pageKey: 'image-generate' }).start(_currentJobId);

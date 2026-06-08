@@ -462,6 +462,14 @@ async def execute_chain_job(
                     alt.prompt, request=request, text_output=text_output, context="",
                     step=step, step_inputs=step_inputs, step_outputs=step_outputs, variables=variables,
                 )
+                voice_pre = _render(
+                    alt.voice_pre or "", request=request, text_output=text_output, context="",
+                    step=step, step_inputs=step_inputs, step_outputs=step_outputs, variables=variables,
+                )
+                voice_post = _render(
+                    alt.voice_post or "", request=request, text_output=text_output, context="",
+                    step=step, step_inputs=step_inputs, step_outputs=step_outputs, variables=variables,
+                )
                 step_inputs[ptr].append(rendered_prompt or text_output)
                 speak_text = rendered_prompt.strip() or text_output
                 _emit("step_input", step_number=ptr, invocation=inv,
@@ -469,7 +477,7 @@ async def execute_chain_job(
                 output_file = await run_voice_step(
                     step_dir, step, alt, speak_text, client=client, llm_config=request.llm,
                     event_bus=event_bus, job_id=job_id, step_number=ptr, invocation=inv,
-                    step_dir_name=step_dir_name,
+                    step_dir_name=step_dir_name, voice_pre=voice_pre, voice_post=voice_post,
                 )
                 step_outputs[ptr].append("")
                 _write_step_status(
@@ -487,10 +495,20 @@ async def execute_chain_job(
 
             elif step.type == "write_context":
                 from .steps.write_context import run_write_context_step
+                ctx_pre = _render(
+                    alt.ctx_pre or "", request=request, text_output=text_output, context="",
+                    step=step, step_inputs=step_inputs, step_outputs=step_outputs, variables=variables,
+                )
+                ctx_post = _render(
+                    alt.ctx_post or "", request=request, text_output=text_output, context="",
+                    step=step, step_inputs=step_inputs, step_outputs=step_outputs, variables=variables,
+                )
                 step_inputs[ptr].append(text_output)
                 _emit("step_input", step_number=ptr, invocation=inv,
                       rendered_prompt=text_output)
-                output_file = run_write_context_step(step_dir, step, alt, text_output)
+                output_file = run_write_context_step(
+                    step_dir, step, alt, text_output, ctx_pre=ctx_pre, ctx_post=ctx_post
+                )
                 step_outputs[ptr].append("")
                 _write_step_status(
                     step_dir,

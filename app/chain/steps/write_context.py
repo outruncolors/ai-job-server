@@ -10,11 +10,20 @@ def run_write_context_step(
     step: Any,
     alt: Any,
     text_output: str,
+    ctx_pre: str | None = None,
+    ctx_post: str | None = None,
 ) -> str:
-    """Execute a write_context step. Returns the output filename."""
+    """Execute a write_context step. Returns the output filename.
+
+    ``ctx_pre`` / ``ctx_post`` are the template-rendered wrap-around text (resolved
+    by the executor via the unified engine); they fall back to the raw alternative
+    fields when omitted.
+    """
     from ..context_library import create_item, list_items, update_item
 
-    parts = [p for p in [alt.ctx_pre, text_output, alt.ctx_post] if p]
+    pre = ctx_pre if ctx_pre is not None else alt.ctx_pre
+    post = ctx_post if ctx_post is not None else alt.ctx_post
+    parts = [p for p in [pre, text_output, post] if p]
     entry = "\n\n".join(parts)
 
     existing = next((item for item in list_items() if item["title"] == alt.ctx_name), None)

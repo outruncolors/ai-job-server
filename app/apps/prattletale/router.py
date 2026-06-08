@@ -23,9 +23,15 @@ from pydantic import BaseModel, Field
 from ...cruddables.envelope import now_iso
 from ...prompt_pal import service as pp_service
 from ...prompt_pal import store as pp_store
+from ...prompt_template import render
 from ..hoodat.characters_store import get_character
 from . import settings_store, store, voice
-from .generator import PRATTLETALE_PROMPT_VERSION, GenerationError, run_model_turn
+from .generator import (
+    PRATTLETALE_PROMPT_VERSION,
+    GenerationError,
+    pt_scope_vars,
+    run_model_turn,
+)
 from .models import ConversationConfig, DeviceUser, DialogueFeel
 from .plugins import registry as plugin_registry
 
@@ -206,9 +212,16 @@ def put_settings(body: SettingsPatch):
 
 @router.post("/conversations/{conversation_id}/turns")
 async def create_turn(conversation_id: str, body: TurnCreate):
-    user_turn = store.append_user_turn(
-        conversation_id, [item.model_dump() for item in body.items]
-    )
+    # Resolve {{wc.}}/{{ctx.}}/{{var.}} (and legacy %%) in what the user typed, so
+    # the transcript + chat bubble store what was actually sent. Scope vars mirror
+    # the popover's registered set (generator.pt_scope_vars).
+    scope = pt_scope_vars(conversation_id)
+    resolved_items = []
+    for item in body.items:
+        data = item.model_dump()
+        data["text"] = render(data.get("text") or "", variables=scope, final=True).text
+        resolved_items.append(data)
+    user_turn = store.append_user_turn(conversation_id, resolved_items)
     if user_turn is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     # Don't synthesize here: the response returns text immediately and the client

@@ -39,7 +39,10 @@ scroll to, flash, and open a specific prompt. This is what Hoodat's per-field
   wins** (your edits take effect), otherwise the **in-code default** is used. Both
   are run through `compose`, which substitutes `{{var.NAME}}` tokens (and resolves
   any `{"prompt_id": …}` references via the store) while leaving chain tokens like
-  `{{input}}` / `{{previous}}` intact for the [chain executor](../generation/text/chain.md).
+  `{{input}}` / `{{previous}}` — and the `{{wc.}}` / `{{ctx.}}` namespaces — intact
+  for the [chain executor](../generation/text/chain.md). `compose` is **stage-1**
+  (variable-only, always non-final: it never applies the `{{var.}}` literal fallback);
+  the **stage-2** resolver is `app.prompt_template.render(…, final=True)` at execution.
   `id_for(app, key)` returns the entry id for `?highlight=` links.
 - **A prompt is a compose node.** `prompt` + `variables` are exactly the
   `{prompt, variables}` shape `compose` (`app/prompt_pal/compose.py`) understands.

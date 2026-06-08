@@ -32,8 +32,9 @@
         <h2 id="form-heading">New Item</h2>
       </div>
 
-      <label>Title</label>
-      <input id="f-title" type="text" placeholder="Item title…">
+      <label>Title <span class="hint">(referenced as {{ctx.name}} in prompts)</span></label>
+      <input id="f-title" type="text" placeholder="Item title…" oninput="_updateCtxPreview()">
+      <div id="f-title-preview" class="name-preview"></div>
 
       <label>Tags <span class="hint">(comma-separated)</span></label>
       <input id="f-tags" type="text" placeholder="api, reference, docs…">

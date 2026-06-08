@@ -25,7 +25,7 @@ function renderList() {
     const desc = (wc.description || '').trim();
     const descHtml = desc ? `<div class="wc-item-desc">${_escHtml(desc)}</div>` : '';
     return `<div class="wc-item${sel}" onclick="editWildcard('${_escHtml(wc.id)}')">
-      <div class="wc-item-name"><em>%%</em>${_escHtml(wc.name)}<em>%%</em></div>
+      <div class="wc-item-name"><em>{{wc.</em>${_escHtml(wc.name)}<em>}}</em></div>
       ${descHtml}
       <div class="wc-item-count">${count} ${count === 1 ? 'entry' : 'entries'}</div>
     </div>`;
@@ -34,7 +34,7 @@ function renderList() {
 
 function _updatePreview() {
   const name = document.getElementById('f-name').value.trim();
-  document.getElementById('f-name-preview').textContent = name ? `%%${name}%%` : '';
+  document.getElementById('f-name-preview').textContent = name ? `{{wc.${name}}}` : '';
 }
 
 function _renderEntries(entries) {
@@ -102,7 +102,7 @@ function editWildcard(id) {
   _editingId = id;
   document.getElementById('form-heading').textContent = 'Edit Wildcard';
   document.getElementById('f-name').value = wc.name || '';
-  document.getElementById('f-name-preview').textContent = wc.name ? `%%${wc.name}%%` : '';
+  document.getElementById('f-name-preview').textContent = wc.name ? `{{wc.${wc.name}}}` : '';
   document.getElementById('f-description').value = wc.description || '';
   document.getElementById('btn-delete').style.display = 'inline-block';
   document.getElementById('form-msg').textContent = '';
@@ -149,7 +149,7 @@ function _wcErrDetail(e) {
 async function deleteWildcard() {
   if (!_editingId) return;
   const wc = _wildcards.find(w => w.id === _editingId);
-  const name = wc ? `"%%${wc.name}%%"` : 'this wildcard';
+  const name = wc ? `"{{wc.${wc.name}}}"` : 'this wildcard';
   if (!confirm(`Delete ${name}? This cannot be undone.`)) return;
   try {
     await api('/wildcards/' + _editingId, 'DELETE');

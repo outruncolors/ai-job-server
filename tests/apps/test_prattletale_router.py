@@ -130,6 +130,20 @@ def test_post_turn_returns_user_and_model(client):
     assert [t["author"] for t in transcript["turns"]] == ["user", "model"]
 
 
+def test_post_turn_resolves_tokens_in_user_text(client):
+    # {{var.scenario}} is an in-scope chat var (generator.pt_scope_vars); it must
+    # resolve when the message is sent, and an unknown var falls back to its literal.
+    conv = _create(client)
+    r = client.post(
+        f"/v1/apps/prattletale/conversations/{conv['id']}/turns",
+        json={"items": [{"type": "dialogue", "text": "re: {{var.scenario}} and {{var.nope}}"}]},
+    )
+    assert r.status_code == 200, r.text
+    text = r.json()["user_turn"]["items"][0]["text"]
+    assert "1am, rain outside." in text
+    assert "nope" in text and "{{var." not in text
+
+
 def test_post_turn_missing_conversation_404(client):
     r = client.post(
         "/v1/apps/prattletale/conversations/nope/turns",

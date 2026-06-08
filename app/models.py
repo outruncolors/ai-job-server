@@ -87,6 +87,10 @@ class JobCreatedResponse(BaseModel):
     job_type: str
     status: str
     created_at: datetime
+    # Server-resolved prompt(s) for the submit-driven "resolved prompt" display
+    # (image/voice). Each item is {label?, resolved, substitutions:[{token,value}]}.
+    # None for job types that don't resolve a prompt server-side.
+    resolved_items: Optional[list[dict]] = None
 
 
 class JobListResponse(BaseModel):

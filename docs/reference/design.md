@@ -13,7 +13,7 @@ The browser is the primary interface. curl is a peer, not an afterthought.
 - **Voice presets** — named 3–10 s WAV samples plus captions. Used as reference audio for OmniVoice's speaker-conditioned mode.
 - **Context library** — flat list of text items injected into LLM prompts as `{{context}}`. `write_context` steps feed outputs back in.
 - **Sequences** — saved, reusable step lists. Cycle detection at save (422) and a depth guard at run time.
-- **Wildcards** — `%%token%%` placeholders that expand to weighted random entries across every prompt-bearing field on the site.
+- **Wildcards** — `{{wc.name}}` (legacy `%%name%%`) placeholders that expand to weighted random entries across every prompt-bearing field on the site.
 - **Ticks** — cron-/interval-driven scheduled runs of a sequence with overlap protection.
 - **ComfyUI integration** — long-lived managed subprocess (adopted if already running), workflow validation, prompt injection into the `PROMPT` node, history polling, artifact collection.
 - **Server domain** — live resource stats, hot restart via `os.execv`, LLM preset management.

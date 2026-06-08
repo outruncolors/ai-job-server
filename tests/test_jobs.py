@@ -71,6 +71,20 @@ def test_image_job_files_written(client, tmp_path):
     assert logs == ""
 
 
+def test_image_job_resolves_prompt_server_side(client, tmp_path):
+    # The browser sends RAW text; the server resolves it (here, an unknown var
+    # falls back to its literal) and returns the authoritative draw for the UI.
+    r = client.post("/v1/jobs/image", json={"workflow": "txt2img", "prompt": "a {{var.who}} cat"})
+    assert r.status_code == 202
+    body = r.json()
+    assert body["resolved_items"] == [
+        {"resolved": "a who cat", "substitutions": [{"token": "{{var.who}}", "value": "who"}]}
+    ]
+    # The persisted job text is the resolved text (backend = source of truth).
+    job_dir = next(iter(tmp_path.glob(f"*/{body['job_id']}")))
+    assert (job_dir / "input.txt").read_text() == "a who cat"
+
+
 # ---------------------------------------------------------------------------
 # Voice job creation
 # ---------------------------------------------------------------------------
@@ -82,6 +96,19 @@ def test_create_voice_job(client):
     body = r.json()
     assert body["status"] == "queued"
     assert body["job_type"] == "voice"
+
+
+def test_voice_job_resolves_text_and_segments(client):
+    r = client.post("/v1/jobs/voice", json={"text": "say {{var.x}}"})
+    assert r.json()["resolved_items"] == [
+        {"resolved": "say x", "substitutions": [{"token": "{{var.x}}", "value": "x"}]}
+    ]
+    r2 = client.post(
+        "/v1/jobs/voice", json={"segments": [{"text": "{{var.a}}"}, {"text": "{{var.b}}"}]}
+    )
+    items = r2.json()["resolved_items"]
+    assert [i["resolved"] for i in items] == ["a", "b"]
+    assert items[0]["label"] == "Segment 1"
 
 
 def test_create_voice_job_with_options(client):

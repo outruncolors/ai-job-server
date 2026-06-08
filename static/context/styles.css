@@ -2,6 +2,9 @@
 #panel-left  { width: var(--panel-w-md); flex-shrink: 0; padding: 20px 22px; }
 #panel-right { padding: 24px 32px; }
 
+/* Live "{{ctx.name}}" preview under the Title field (mirrors the wildcards page). */
+.name-preview { color: var(--color-accent); font-size: 0.78rem; min-height: 1.2em; margin-top: 4px; letter-spacing: 0.02em; }
+
 /* ── Item list ── */
 .ctx-item {
   border: 1px solid #1e1e1e; border-radius: 3px; padding: 10px 12px; margin-bottom: 6px;

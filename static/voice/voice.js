@@ -105,13 +105,9 @@
       document.getElementById('duration-warn').style.display = 'none';
       document.getElementById('save-wrap').style.display = 'none';
       _createJobId = null; msg.textContent = '';
-      const rawText = document.getElementById('create-text').value.trim();
-      const { resolved: text, substitutions } = await resolveWildcardsTracked(rawText);
+      // Send raw text; the server resolves tokens and returns resolved_items.
+      const text = document.getElementById('create-text').value.trim();
       if (!text) { msg.style.color = '#e44'; msg.textContent = 'Enter sample text first.'; return; }
-      renderResolvedPrompt(
-        document.getElementById('create-resolved-prompt'),
-        [{ resolved: text, substitutions }],
-      );
       const body = {
         text,
         speed:          parseFloat(document.getElementById('create-spd').value),
@@ -125,6 +121,7 @@
       try {
         hint.style.display = 'none';
         const job = await api('/jobs/voice', 'POST', body);
+        renderResolvedPrompt(document.getElementById('create-resolved-prompt'), job.resolved_items);
         OutputConsole.create(document.querySelector('#voice-view #panel-right'), { pageKey: 'voice' }).start(job.job_id);
         msg.style.color = '#fa0'; msg.textContent = 'Generating sample…';
         if (_createPollHandle) { _createPollHandle.stop(); _createPollHandle = null; }
@@ -258,12 +255,10 @@
       if (!presetId) { msg.style.color = '#e44'; msg.textContent = 'Select a voice preset first.'; return; }
       const autoSeg = document.getElementById('use-auto-segment').checked;
       let body;
-      let resolvedForDisplay = [];
       if (autoSeg) {
-        const rawText = document.getElementById('use-auto-text').value.trim();
-        const { resolved: text, substitutions } = await resolveWildcardsTracked(rawText);
+        // Send raw transcript; server resolves tokens before auto-segmenting.
+        const text = document.getElementById('use-auto-text').value.trim();
         if (!text) { msg.style.color = '#e44'; msg.textContent = 'Enter transcript text.'; return; }
-        resolvedForDisplay = [{ resolved: text, substitutions }];
         const segPreset = _getSegPreset();
         if (!segPreset) { msg.style.color = '#e44'; msg.textContent = 'No LLM preset — add one in the Chain page first.'; return; }
         if (!segPreset.api_base) { msg.style.color = '#e44'; msg.textContent = `Preset "${segPreset.name}" has no API base URL — fill it in on the Chain page.`; return; }
@@ -281,14 +276,9 @@
         if (lang && lang !== 'Auto') body.language = lang;
       } else {
         const segsContainer = document.getElementById('use-segments-list');
-        const rawSegments = vsCollectSegments(segsContainer);
-        if (rawSegments.length === 0) { msg.style.color = '#e44'; msg.textContent = 'Enter text in at least one segment.'; return; }
-        const tracked = await Promise.all(rawSegments.map(async s => {
-          const { resolved, substitutions } = await resolveWildcardsTracked(s.text);
-          return { seg: { ...s, text: resolved }, resolved, substitutions };
-        }));
-        const segments = tracked.map(t => t.seg);
-        resolvedForDisplay = tracked.map(t => ({ resolved: t.resolved, substitutions: t.substitutions }));
+        const segments = vsCollectSegments(segsContainer);
+        if (segments.length === 0) { msg.style.color = '#e44'; msg.textContent = 'Enter text in at least one segment.'; return; }
+        // Send raw segment text; the server resolves each and returns resolved_items.
         segments[segments.length - 1].delay_ms = 0;
         body = {
           segments,
@@ -302,8 +292,8 @@
       }
       try {
         hint.style.display = 'none';
-        renderResolvedPrompt(document.getElementById('use-resolved-prompt'), resolvedForDisplay);
         const job = await api('/jobs/voice', 'POST', body);
+        renderResolvedPrompt(document.getElementById('use-resolved-prompt'), job.resolved_items);
         OutputConsole.create(document.querySelector('#voice-view #panel-right'), { pageKey: 'voice' }).start(job.job_id);
         msg.style.color = '#fa0'; msg.textContent = 'Synthesizing…';
         if (_usePollHandle) { _usePollHandle.stop(); _usePollHandle = null; }

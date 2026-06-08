@@ -36,6 +36,11 @@
       }).join('');
     }
 
+    function _updateCtxPreview() {
+      const name = document.getElementById('f-title').value.trim();
+      document.getElementById('f-title-preview').textContent = name ? `{{ctx.${name}}}` : '';
+    }
+
     function newItem() {
       _editingId = null;
       document.getElementById('form-heading').textContent = 'New Item';
@@ -45,6 +50,7 @@
       document.getElementById('f-content').value = '';
       document.getElementById('btn-delete').style.display = 'none';
       document.getElementById('form-msg').textContent = '';
+      _updateCtxPreview();
       renderList();
       document.getElementById('f-title').focus();
     }
@@ -60,6 +66,7 @@
       document.getElementById('f-content').value = item.content || '';
       document.getElementById('btn-delete').style.display = 'inline-block';
       document.getElementById('form-msg').textContent = '';
+      _updateCtxPreview();
       renderList();
     }
 

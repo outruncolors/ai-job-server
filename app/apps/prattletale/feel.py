@@ -28,7 +28,8 @@ from __future__ import annotations
 
 import re
 
-from ...wildcards import list_wildcards, resolve_wildcards
+from ...prompt_template import render
+from ...wildcards import list_wildcards
 from .seed import (
     CADENCE_WILDCARD_NAME,
     DIALOGUE_MOVE_WILDCARD_NAME,
@@ -186,9 +187,9 @@ def _resolve_category(base_name: str, character_id: str, existing_lower: set[str
     for name in candidates:
         if name.lower() not in existing_lower:
             continue
-        # resolve_wildcards returns the literal %%token%% when the wildcard has no
-        # entries; "%%" in the result means "no real pick" -> try the next one.
-        picked = resolve_wildcards(f"%%{name}%%").strip()
+        # render() leaves the literal %%token%% when the wildcard has no entries;
+        # "%%" in the result means "no real pick" -> try the next one.
+        picked = render(f"%%{name}%%", final=True).text.strip()
         if picked and "%%" not in picked:
             return picked
     return ""

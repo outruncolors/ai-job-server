@@ -21,8 +21,15 @@ async def run_voice_step(
     step_number: int = 0,
     invocation: int = 0,
     step_dir_name: str = "",
+    voice_pre: str | None = None,
+    voice_post: str | None = None,
 ) -> str:
-    """Execute a voice step. Returns the output filename."""
+    """Execute a voice step. Returns the output filename.
+
+    ``voice_pre`` / ``voice_post`` are the template-rendered wrap-around text (the
+    executor resolves them via the unified engine); they fall back to the raw
+    alternative fields when omitted.
+    """
     from ...omnivoice.config import get_config
     from ...omnivoice.manager import get_manager
     from ...voice_presets import get_preset, resolve_preset_wav
@@ -143,7 +150,9 @@ async def run_voice_step(
                 from ...omnivoice.constants import DEFAULT_VOICE_PREPROCESS_PROMPT
                 preprocess_prompt = config.voice_preprocess_prompt or DEFAULT_VOICE_PREPROCESS_PROMPT
                 text = await client.generate(f"{preprocess_prompt}\n\n{text}", llm_config)
-            parts = [p for p in [alt.voice_pre, text, alt.voice_post] if p]
+            pre = voice_pre if voice_pre is not None else alt.voice_pre
+            post = voice_post if voice_post is not None else alt.voice_post
+            parts = [p for p in [pre, text, post] if p]
             tts_text = "\n\n".join(parts) if parts else text
             await runner.run(tts_text, output_path, step_dir, **common_run_kwargs)
     finally:

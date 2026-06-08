@@ -36,6 +36,7 @@ from .chain.context_library import (
 )
 from .chain.executor import execute_chain_job, list_chain_steps, patch_initial_chain_status
 from .chain.models import ChainJobRequest
+from .prompt_template import render as _render_prompt
 from .chain.sequences import delete_sequence, duplicate_sequence, list_sequences, save_sequence
 from .image_prompts import (
     create_prompt,
@@ -315,6 +316,13 @@ def health():
     return HealthResponse(status="ok", timestamp=datetime.now(timezone.utc))
 
 
+def _resolve_prompt_field(text: str) -> tuple[str, list[dict]]:
+    """Resolve a prompt-bearing field through the unified engine, returning the
+    final text plus its ``[{token, value}]`` substitutions for the UI preview."""
+    res = _render_prompt(text or "", final=True, track=True)
+    return res.text, [{"token": s.token, "value": s.value} for s in res.substitutions]
+
+
 @app.post(
     "/v1/jobs/image",
     response_model=JobCreatedResponse,
@@ -322,6 +330,11 @@ def health():
     dependencies=[Depends(requires_capability("image"))],
 )
 async def create_image_job(req: ImageJobRequest):
+    # Backend is the source of truth for prompt resolution: resolve {{wc.}}/{{ctx.}}/
+    # {{var.}} (and legacy %%) here so the persisted request + the runner see the
+    # final text, and the 202 carries the authoritative draw for the UI preview.
+    resolved, subs = _resolve_prompt_field(req.prompt)
+    req.prompt = resolved
     input_text = req.prompt
     data = create_job("image", req.model_dump(), input_text)
     job_id = data["job_id"]
@@ -333,7 +346,9 @@ async def create_image_job(req: ImageJobRequest):
         )
 
     await get_job_queue().enqueue(job_id, runner)
-    return JobCreatedResponse(**data)
+    return JobCreatedResponse(
+        **data, resolved_items=[{"resolved": resolved, "substitutions": subs}]
+    )
 
 
 @app.post(
@@ -343,6 +358,19 @@ async def create_image_job(req: ImageJobRequest):
     dependencies=[Depends(requires_capability("voice"))],
 )
 async def create_voice_job(req: VoiceJobRequest):
+    # Resolve prompts server-side (see create_image_job). One display item per
+    # segment, or a single unlabeled item for plain `text`.
+    resolved_items: list[dict] = []
+    if req.segments:
+        for i, seg in enumerate(req.segments):
+            seg.text, subs = _resolve_prompt_field(seg.text)
+            resolved_items.append(
+                {"label": f"Segment {i + 1}", "resolved": seg.text, "substitutions": subs}
+            )
+    if req.text:
+        req.text, subs = _resolve_prompt_field(req.text)
+        resolved_items.insert(0, {"resolved": req.text, "substitutions": subs})
+
     input_text = req.text or (req.segments[0].text if req.segments else "")
     data = create_job("voice", req.model_dump(), input_text)
     job_id = data["job_id"]
@@ -352,7 +380,7 @@ async def create_voice_job(req: VoiceJobRequest):
         await execute_voice_job(job_id, job_dir, req, get_config(), get_manager())
 
     await get_job_queue().enqueue(job_id, runner)
-    return JobCreatedResponse(**data)
+    return JobCreatedResponse(**data, resolved_items=resolved_items or None)
 
 
 @app.post("/v1/jobs/chain", response_model=JobCreatedResponse, status_code=202)
