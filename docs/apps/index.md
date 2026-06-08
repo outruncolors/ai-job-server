@@ -19,6 +19,16 @@ logic in their own package (`app/apps/<name>/`, `static/apps/<name>/`).
   A hook-based plugin system (per-conversation enable + generic action dispatch +
   a `window.PtPlugins` frontend API) ships with **Summarizer**: a 📋 Summarize mode
   that map-reduces the history into one summary bubble (Keep or Purge).
+- **[Tomeberry](tomeberry/index.md)** — a Cursor-like two-pane studio for tales of
+  any length. A left pane swaps between a rich contenteditable **Content** editor
+  (inline accept/reject proposal spans) and an **Organization** view (premise,
+  structural tree, narrative constructs, story entities, relationships); a
+  persistent right **Assistant** pane drives 10 co-author modes
+  (Discover/Draft/Develop · Organize/Revise/Plan · Edit/Diagnose/Track · Publish)
+  over the chain executor. Tale-scoped project folders, a propose→accept/reject/
+  iterate diff loop on `app/textdiff`, a full per-request debug panel, starter
+  templates, and tale export. Reads/writes workspace files through the standardized
+  [MCP](../tools/mcp.md) gateway.
 
 Blaboratory and Hoodat dogfood the cross-app [Prompt Pal](../tools/prompt-pal.md) registry and
 the FieldControls hover affordance. The single bridge from the systems UI is one

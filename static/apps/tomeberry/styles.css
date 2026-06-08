@@ -83,6 +83,7 @@ body { margin: 0; }
 .tb-iterate { background: #141414; color: #cba; border: 1px solid #443; border-radius: 4px; padding: 5px 12px; cursor: pointer; }
 
 /* ===== organization pane ===== */
+.tb-org-toolbar { display: flex; gap: 8px; margin-bottom: 16px; }
 .tb-org-section { margin-bottom: 22px; }
 .tb-org-label { color: #678; font-size: 0.7rem; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
 .tb-mini { background: #141414; color: #9ab; border: 1px solid #262626; border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 0.68rem; }

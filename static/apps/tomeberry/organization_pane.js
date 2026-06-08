@@ -46,6 +46,10 @@
     const tree = TB.hierarchy && TB.hierarchy.root ? TB.hierarchy.root : null;
 
     p.innerHTML = `
+      <div class="tb-org-toolbar">
+        <button id="tb-apply-template" class="tb-mini">+ Apply template</button>
+        <button id="tb-export" class="tb-mini">⤓ Export</button>
+      </div>
       <div class="tb-org-section">
         <div class="tb-org-label">Premise</div>
         <textarea id="tb-premise" rows="3" placeholder="What is this tale about?">${_escHtml(premise.body || '')}</textarea>
@@ -87,6 +91,8 @@
       toast('success', 'Premise saved');
     });
     p.querySelector('#tb-add-chapter').addEventListener('click', () => Org.addUnit(TB.tale.structural_root_id, 'chapter'));
+    p.querySelector('#tb-apply-template').addEventListener('click', () => Org.applyTemplate());
+    p.querySelector('#tb-export').addEventListener('click', () => Org.exportTale());
 
     p.querySelectorAll('[data-write]').forEach((el) =>
       el.addEventListener('click', () => Org.selectUnit(el.getAttribute('data-write')))
@@ -213,6 +219,46 @@
         Org.showLinks(id);
       })
     );
+  };
+
+  Org.applyTemplate = async function () {
+    let templates = [];
+    try {
+      templates = (await TB.api.templates()).templates || [];
+    } catch (e) {
+      toast('error', 'Could not load templates');
+      return;
+    }
+    if (!templates.length) return;
+    const menu = templates.map((t, i) => `${i + 1}. ${t.name}`).join('\n');
+    const pick = prompt('Apply which template?\n' + menu, '1');
+    if (pick === null) return;
+    const idx = parseInt(pick, 10) - 1;
+    const tpl = templates[idx];
+    if (!tpl) return;
+    try {
+      const res = await TB.api.applyTemplate(TB.tale.id, tpl.id);
+      toast('success', `Added ${res.created.length} concept(s) from "${tpl.name}"`);
+      await TB.refreshConcepts();
+      Org.render();
+    } catch (err) {
+      toast('error', 'Apply failed: ' + err.message);
+    }
+  };
+
+  Org.exportTale = async function () {
+    try {
+      const bundle = await TB.api.exportTale(TB.tale.id);
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${TB.tale.id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast('error', 'Export failed: ' + err.message);
+    }
   };
 
   window.TB = window.TB || {};

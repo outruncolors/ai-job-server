@@ -1,0 +1,256 @@
+{
+  "id": "starters",
+  "name": "Tomeberry starter templates",
+  "description": "Three-act skeleton, hero's-journey beat sheet, and a character sheet.",
+  "tags": [
+    "Pack",
+    "tomeberry",
+    "template"
+  ],
+  "items": [
+    {
+      "schema_version": 1,
+      "type": "tomeberry_template",
+      "id": "three_act",
+      "name": "Three-act skeleton",
+      "description": "Setup / Confrontation / Resolution with a scene each.",
+      "tags": [
+        "Pack",
+        "tomeberry",
+        "structure"
+      ],
+      "data": {
+        "concepts": [
+          {
+            "ref": "a1",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "part",
+            "title": "Act One \u2014 Setup",
+            "body": "",
+            "order": 0,
+            "links": []
+          },
+          {
+            "ref": "a1s1",
+            "parent_ref": "a1",
+            "concept_class": "structural_unit",
+            "type": "scene",
+            "title": "Opening image",
+            "body": "",
+            "order": 0,
+            "links": []
+          },
+          {
+            "ref": "a2",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "part",
+            "title": "Act Two \u2014 Confrontation",
+            "body": "",
+            "order": 1,
+            "links": []
+          },
+          {
+            "ref": "a2s1",
+            "parent_ref": "a2",
+            "concept_class": "structural_unit",
+            "type": "scene",
+            "title": "Midpoint",
+            "body": "",
+            "order": 0,
+            "links": []
+          },
+          {
+            "ref": "a3",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "part",
+            "title": "Act Three \u2014 Resolution",
+            "body": "",
+            "order": 2,
+            "links": []
+          },
+          {
+            "ref": "a3s1",
+            "parent_ref": "a3",
+            "concept_class": "structural_unit",
+            "type": "scene",
+            "title": "Climax",
+            "body": "",
+            "order": 0,
+            "links": []
+          }
+        ]
+      },
+      "created_at": "2026-06-08T03:41:00.343718+00:00",
+      "updated_at": "2026-06-08T03:41:00.343731+00:00"
+    },
+    {
+      "schema_version": 1,
+      "type": "tomeberry_template",
+      "id": "heros_journey",
+      "name": "Hero's journey beat sheet",
+      "description": "Twelve classic beats as structural units.",
+      "tags": [
+        "Pack",
+        "tomeberry",
+        "structure"
+      ],
+      "data": {
+        "concepts": [
+          {
+            "ref": "b0",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Ordinary World",
+            "body": "",
+            "order": 0,
+            "links": []
+          },
+          {
+            "ref": "b1",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Call to Adventure",
+            "body": "",
+            "order": 1,
+            "links": []
+          },
+          {
+            "ref": "b2",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Refusal of the Call",
+            "body": "",
+            "order": 2,
+            "links": []
+          },
+          {
+            "ref": "b3",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Meeting the Mentor",
+            "body": "",
+            "order": 3,
+            "links": []
+          },
+          {
+            "ref": "b4",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Crossing the Threshold",
+            "body": "",
+            "order": 4,
+            "links": []
+          },
+          {
+            "ref": "b5",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Tests, Allies, Enemies",
+            "body": "",
+            "order": 5,
+            "links": []
+          },
+          {
+            "ref": "b6",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Approach to the Inmost Cave",
+            "body": "",
+            "order": 6,
+            "links": []
+          },
+          {
+            "ref": "b7",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "The Ordeal",
+            "body": "",
+            "order": 7,
+            "links": []
+          },
+          {
+            "ref": "b8",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Reward",
+            "body": "",
+            "order": 8,
+            "links": []
+          },
+          {
+            "ref": "b9",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "The Road Back",
+            "body": "",
+            "order": 9,
+            "links": []
+          },
+          {
+            "ref": "b10",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Resurrection",
+            "body": "",
+            "order": 10,
+            "links": []
+          },
+          {
+            "ref": "b11",
+            "parent_ref": "root",
+            "concept_class": "structural_unit",
+            "type": "beat",
+            "title": "Return with the Elixir",
+            "body": "",
+            "order": 11,
+            "links": []
+          }
+        ]
+      },
+      "created_at": "2026-06-08T03:41:00.343734+00:00",
+      "updated_at": "2026-06-08T03:41:00.343735+00:00"
+    },
+    {
+      "schema_version": 1,
+      "type": "tomeberry_template",
+      "id": "character_sheet",
+      "name": "Character sheet",
+      "description": "A story-entity template with prompts to fill in.",
+      "tags": [
+        "Pack",
+        "tomeberry",
+        "entity"
+      ],
+      "data": {
+        "concepts": [
+          {
+            "ref": "char",
+            "parent_ref": null,
+            "concept_class": "story_entity",
+            "type": "character",
+            "title": "New character",
+            "order": 0,
+            "links": [],
+            "body": "Role:\nWant (external goal):\nNeed (internal lesson):\nWound / backstory:\nVoice & mannerisms:\nArc:\n"
+          }
+        ]
+      },
+      "created_at": "2026-06-08T03:41:00.343736+00:00",
+      "updated_at": "2026-06-08T03:41:00.343737+00:00"
+    }
+  ]
+}

@@ -526,3 +526,57 @@ def list_traces(tale_id: str) -> list[dict]:
 
 def new_request_id() -> str:
     return f"req_{uuid.uuid4().hex[:8]}"
+
+
+# ---- templates + export ----------------------------------------------------
+
+
+def apply_template(tale_id: str, template_data: dict) -> Optional[dict]:
+    """Copy a template's concept records into the tale. Returns {created: [ids]}."""
+    tale = get_tale(tale_id)
+    if tale is None:
+        return None
+    root_id = tale.get("structural_root_id")
+    ref_map: dict[str, str] = {}
+    created: list[str] = []
+    for rec in template_data.get("concepts", []):
+        parent_ref = rec.get("parent_ref")
+        if parent_ref in (None, "", "root"):
+            parent_id = root_id if rec.get("concept_class") == "structural_unit" else None
+        else:
+            parent_id = ref_map.get(parent_ref)
+        c = create_concept(
+            tale_id,
+            {
+                "concept_class": rec.get("concept_class", "structural_unit"),
+                "type": rec.get("type") or "scene",
+                "title": rec.get("title") or "",
+                "body": rec.get("body") or "",
+                "parent_id": parent_id,
+                "order": rec.get("order"),
+                "links": rec.get("links") or [],
+            },
+        )
+        if c:
+            created.append(c["id"])
+            if rec.get("ref"):
+                ref_map[rec["ref"]] = c["id"]
+    rebuild_hierarchy(tale_id)
+    return {"created": created}
+
+
+def export_tale(tale_id: str) -> Optional[dict]:
+    """Bundle the whole tale (tale + concepts + hierarchy + assistant + traces)."""
+    tale = get_tale(tale_id)
+    if tale is None:
+        return None
+    traces = [get_trace(tale_id, t["request_id"]) for t in list_traces(tale_id)]
+    return {
+        "schema_version": 1,
+        "exported_at": _now(),
+        "tale": tale,
+        "concepts": list_concepts(tale_id),
+        "hierarchy": get_hierarchy(tale_id),
+        "assistant": get_assistant(tale_id),
+        "traces": [t for t in traces if t is not None],
+    }

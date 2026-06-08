@@ -10,6 +10,7 @@ from .adapters.context_item import ContextItemAdapter
 from .adapters.hoodat_character import HoodatCharacterAdapter
 from .adapters.image_prompt import ImagePromptAdapter
 from .adapters.prompt_pal import PromptPalAdapter
+from .adapters.tomeberry_template import TomeberryTemplateAdapter
 from .adapters.wildcard import WildcardAdapter
 from .base import CruddableAdapter
 
@@ -20,6 +21,7 @@ _ADAPTERS: list[CruddableAdapter] = [
     ChainSequenceAdapter(),
     PromptPalAdapter(),
     HoodatCharacterAdapter(),
+    TomeberryTemplateAdapter(),
 ]
 
 REGISTRY: dict[str, CruddableAdapter] = {a.type_name: a for a in _ADAPTERS}

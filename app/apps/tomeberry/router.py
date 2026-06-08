@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from . import prompts as _prompts  # noqa: F401 — import-time register_all()
 from . import store
 from .models import (
+    ApplyTemplateBody,
     ConceptCreate,
     ConceptPatch,
     LinkCreate,
@@ -63,6 +64,34 @@ def update_tale(tid: str, body: TaleUpdate):
 def delete_tale(tid: str):
     if not store.delete_tale(tid):
         raise HTTPException(status_code=404, detail="tale not found")
+
+
+@router.get("/templates")
+def list_templates():
+    from . import templates_store
+
+    return {"templates": templates_store.list_templates()}
+
+
+@router.post("/tales/{tid}/apply-template")
+def apply_template(tid: str, body: ApplyTemplateBody):
+    from . import templates_store
+
+    tpl = templates_store.get_template(body.template_id)
+    if tpl is None:
+        raise HTTPException(status_code=404, detail="template not found")
+    result = store.apply_template(tid, tpl.get("data") or {})
+    if result is None:
+        raise HTTPException(status_code=404, detail="tale not found")
+    return result
+
+
+@router.get("/tales/{tid}/export")
+def export_tale(tid: str):
+    bundle = store.export_tale(tid)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="tale not found")
+    return bundle
 
 
 @router.put("/tales/{tid}/premise")

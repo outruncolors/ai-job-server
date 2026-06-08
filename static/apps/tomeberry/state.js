@@ -50,6 +50,9 @@
     requests: (tid) => api(`${base}/tales/${tid}/requests`),
     requestDetail: (tid, rid) => api(`${base}/tales/${tid}/requests/${rid}`),
     proposal: (tid, diffId) => api(`${base}/tales/${tid}/proposals/${diffId}`),
+    templates: () => api(`${base}/templates`),
+    applyTemplate: (tid, template_id) => api(`${base}/tales/${tid}/apply-template`, 'POST', { template_id }),
+    exportTale: (tid) => api(`${base}/tales/${tid}/export`),
     savedPrompts: () => api('/prompt-pal/entries?app=tomeberry').catch(() => ({ entries: [] })),
   };
 

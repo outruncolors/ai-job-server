@@ -181,6 +181,10 @@ class IterateBody(BaseModel):
     text: str = ""
 
 
+class ApplyTemplateBody(BaseModel):
+    template_id: str
+
+
 class RequestCreate(BaseModel):
     text: str = ""
     mode: Optional[str] = None

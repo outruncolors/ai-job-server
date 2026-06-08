@@ -10,7 +10,7 @@ Use the tree on the left to navigate. Every page in the site has a matching doc;
 - **[Tools](tools/index.md)** — content building blocks: context items, wildcards, ticks (schedules), MCP tools, Prompt Pal, and [Packs](tools/packs.md) (curated bundles of the unified Cruddable envelope)
 - **[Memory](memory/index.md)** — app-agnostic, file-first memory subsystem (Markdown source of truth, plain + optional memsearch backends, `{{memory}}` chain token, Memory Lab test bench)
 - **[Management](management/index.md)** — server controls, the job list, this docs viewer, and [Cruddables](management/cruddables.md) (export/extend any CRUD type)
-- **[Apps](apps/index.md)** — consumer experiences behind the `/apps` landing (Blaboratory, Hoodat, Prattletale)
+- **[Apps](apps/index.md)** — consumer experiences behind the `/apps` landing (Blaboratory, Hoodat, Prattletale, Tomeberry)
 - **[Reference](reference/index.md)** — architecture, REST API, configuration, [HTTPS for LAN access](reference/https-localhost.md), design notes, UI standards
 - **[Multi-machine](multi-machine.md)** — primary/secondary deployment: bare repo, systemd, capability gating, cutover
 - **[Upgrading llama.cpp](llamacpp-upgrade.md)** — bumping the pinned `LLAMA_CPP_TAG` on the secondary
